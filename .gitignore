@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Jarvis user workspace (user data — never commit)
+Jarvis/
+
+# Environment variables
+.env
+.env.local
+
+# SQLite
+*.db
+*.db-journal
+
+# Logs
+*.log
