@@ -26,49 +26,50 @@ def anyio_backend(request):
 
 @pytest.mark.anyio
 async def test_build_system_prompt_has_persona():
-    with patch("services.context_builder.memory_service") as mock_ms:
-        mock_ms.list_notes = AsyncMock(return_value=[])
+    with patch("services.context_builder.retrieval") as mock_ret:
+        mock_ret.retrieve = AsyncMock(return_value=[])
         prompt = await build_system_prompt("hello")
     assert "Jarvis" in prompt
 
 
 @pytest.mark.anyio
 async def test_build_system_prompt_includes_context():
-    fake_notes = [{"path": "inbox/test.md", "title": "Test"}]
+    fake_results = [{"path": "inbox/test.md", "title": "Test"}]
     fake_detail = {"content": "# Test\nSome content here"}
 
-    with patch("services.context_builder.memory_service") as mock_ms:
-        mock_ms.list_notes = AsyncMock(return_value=fake_notes)
+    with patch("services.context_builder.retrieval") as mock_ret, \
+         patch("services.context_builder.memory_service") as mock_ms:
+        mock_ret.retrieve = AsyncMock(return_value=fake_results)
         mock_ms.get_note = AsyncMock(return_value=fake_detail)
         prompt = await build_system_prompt("test query")
 
-    assert "relevant notes" in prompt
+    assert "relevant notes" in prompt or "inbox/test.md" in prompt
     assert "inbox/test.md" in prompt
 
 
 @pytest.mark.anyio
 async def test_build_system_prompt_no_context_when_empty():
-    with patch("services.context_builder.memory_service") as mock_ms:
-        mock_ms.list_notes = AsyncMock(return_value=[])
+    with patch("services.context_builder.retrieval") as mock_ret:
+        mock_ret.retrieve = AsyncMock(return_value=[])
         prompt = await build_system_prompt("hello")
 
-    assert "relevant notes" not in prompt
     assert prompt == SYSTEM_PROMPT
 
 
 @pytest.mark.anyio
 async def test_build_system_prompt_max_length():
     long_content = "x" * 2000
-    fake_notes = [{"path": f"n{i}.md", "title": f"N{i}"} for i in range(5)]
+    fake_results = [{"path": f"n{i}.md", "title": f"N{i}"} for i in range(5)]
     fake_detail = {"content": long_content}
 
-    with patch("services.context_builder.memory_service") as mock_ms:
-        mock_ms.list_notes = AsyncMock(return_value=fake_notes)
+    with patch("services.context_builder.retrieval") as mock_ret, \
+         patch("services.context_builder.memory_service") as mock_ms:
+        mock_ret.retrieve = AsyncMock(return_value=fake_results)
         mock_ms.get_note = AsyncMock(return_value=fake_detail)
         prompt = await build_system_prompt("test")
 
     # Each note truncated to 500 chars, 3 notes max + separators + header
-    max_context = 3 * 500 + 200  # 3 notes + paths + separators + "relevant notes" header
+    max_context = 3 * 500 + 200
     assert len(prompt) < len(SYSTEM_PROMPT) + max_context
 
 

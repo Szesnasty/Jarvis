@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from services import memory_service, planning_service, preference_service
+from services import memory_service, planning_service, preference_service, graph_service
 
 
 TOOLS = [
@@ -149,8 +149,29 @@ TOOLS = [
             },
             "required": ["rule"],
         },
-    },
-]
+    },    {
+        "name": "query_graph",
+        "description": "Query the knowledge graph to find related notes, people, tags, or topics.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity": {
+                    "type": "string",
+                    "description": "Entity to search for (note title, person, tag, topic)",
+                },
+                "relation_type": {
+                    "type": "string",
+                    "description": "Optional: filter by relation type",
+                },
+                "depth": {
+                    "type": "integer",
+                    "description": "How many hops to traverse",
+                    "default": 1,
+                },
+            },
+            "required": ["entity"],
+        },
+    },]
 
 
 class ToolNotFoundError(Exception):
@@ -223,6 +244,15 @@ async def execute_tool(
             workspace_path=workspace_path,
         )
         return f"Preference saved: [{category}] {tool_input['rule']}"
+
+    if name == "query_graph":
+        results = graph_service.query_entity(
+            tool_input["entity"],
+            relation_type=tool_input.get("relation_type"),
+            depth=tool_input.get("depth", 1),
+            workspace_path=workspace_path,
+        )
+        return json.dumps(results)
 
     raise ToolNotFoundError(f"Unknown tool: {name}")
 

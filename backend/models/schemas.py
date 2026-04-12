@@ -94,3 +94,29 @@ class SessionDetailResponse(BaseModel):
 class PreferenceSetRequest(BaseModel):
     key: str
     value: str
+
+
+# --- Graph ---
+
+class GraphNodeResponse(BaseModel):
+    id: str
+    type: str
+    label: str
+    folder: str = ""
+
+
+class GraphEdgeResponse(BaseModel):
+    source: str
+    target: str
+    type: str
+
+
+class GraphResponse(BaseModel):
+    nodes: list
+    edges: list
+
+
+class GraphStatsResponse(BaseModel):
+    node_count: int
+    edge_count: int
+    top_connected: list = []

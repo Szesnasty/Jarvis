@@ -94,3 +94,29 @@ export interface SessionDetail extends SessionMetadata {
   messages: ChatMessage[]
   tools_used: string[]
 }
+
+// --- Graph ---
+
+export interface GraphNode {
+  id: string
+  type: string
+  label: string
+  folder: string
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+  type: string
+}
+
+export interface GraphData {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+}
+
+export interface GraphStats {
+  node_count: number
+  edge_count: number
+  top_connected: { id: string; degree: number }[]
+}

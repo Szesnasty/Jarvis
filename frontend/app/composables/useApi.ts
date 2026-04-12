@@ -1,4 +1,4 @@
-import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail } from '~/types'
+import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode } from '~/types'
 
 export class ApiError extends Error {
   status: number
@@ -157,5 +157,57 @@ export function useApi() {
     }
   }
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, fetchPreferences, setPreference }
+  async function fetchGraph(): Promise<GraphData> {
+    try {
+      return await $fetch<GraphData>('/api/graph')
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  async function fetchGraphStats(): Promise<GraphStats> {
+    try {
+      return await $fetch<GraphStats>('/api/graph/stats')
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  async function fetchGraphNeighbors(nodeId: string, depth = 1): Promise<GraphNode[]> {
+    try {
+      return await $fetch<GraphNode[]>('/api/graph/neighbors', { params: { node_id: nodeId, depth } })
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  async function rebuildGraph(): Promise<GraphStats> {
+    try {
+      return await $fetch<GraphStats>('/api/graph/rebuild', { method: 'POST' })
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph }
 }

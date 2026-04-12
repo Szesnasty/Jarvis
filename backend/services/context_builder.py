@@ -1,6 +1,6 @@
 from typing import Optional
 
-from services import memory_service, preference_service
+from services import memory_service, preference_service, retrieval
 
 
 async def build_context(
@@ -14,8 +14,8 @@ async def build_context(
     if prefs_text:
         parts.append(prefs_text)
 
-    results = await memory_service.list_notes(
-        search=user_message,
+    results = await retrieval.retrieve(
+        user_message,
         limit=5,
         workspace_path=workspace_path,
     )
@@ -23,12 +23,16 @@ async def build_context(
     if results:
         note_parts = []
         for result in results[:3]:
-            note = await memory_service.get_note(
-                result["path"],
-                workspace_path=workspace_path,
-            )
-            truncated = note["content"][:500]
-            note_parts.append(f"[{result['path']}]\n{truncated}")
-        parts.append("\n---\n".join(note_parts))
+            path = result.get("path", "")
+            if not path:
+                continue
+            try:
+                note = await memory_service.get_note(path, workspace_path=workspace_path)
+                truncated = note["content"][:500]
+                note_parts.append(f"[{path}]\n{truncated}")
+            except Exception:
+                continue
+        if note_parts:
+            parts.append("\n---\n".join(note_parts))
 
     return "\n\n".join(parts) if parts else None

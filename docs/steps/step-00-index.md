@@ -41,7 +41,7 @@
 
 | Step | Title | Status |
 |------|-------|--------|
-| [08](step-08-knowledge-graph.md) | Graph model + visualization + retrieval | ⬜ |
+| [08](step-08-knowledge-graph.md) | Graph model + visualization + retrieval | ✅ |
 
 ## Phase 7 — Specialists
 
