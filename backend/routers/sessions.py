@@ -26,3 +26,10 @@ async def resume_session(session_id: str):
         return {"session_id": sid, "status": "resumed"}
     except session_service.SessionNotFoundError:
         raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.delete("/{session_id}")
+async def delete_session(session_id: str):
+    session_service.delete_session(session_id)
+    session_service.delete_session_file(session_id)
+    return {"status": "deleted", "session_id": session_id}

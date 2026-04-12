@@ -12,11 +12,33 @@
         :class="{ 'session-history__item--active': s.session_id === activeSessionId }"
         @click="$emit('select', s.session_id)"
       >
-        <span class="session-history__item-title">{{ s.title || 'Untitled' }}</span>
+        <div class="session-history__item-row">
+          <span class="session-history__item-title">{{ s.title || 'Untitled' }}</span>
+          <button
+            class="session-history__delete"
+            title="Delete session"
+            @click.stop="confirmDelete(s)"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
         <span class="session-history__item-meta">{{ formatDate(s.created_at) }} · {{ s.message_count }} msgs</span>
       </li>
     </ul>
     <p v-else class="session-history__empty">No past sessions</p>
+
+    <ConfirmDialog
+      :visible="deleteTarget !== null"
+      title="Delete conversation?"
+      :message="`&quot;${deleteTarget?.title || 'Untitled'}&quot; will be permanently removed.`"
+      confirm-label="Delete"
+      @confirm="handleDelete"
+      @cancel="deleteTarget = null"
+    />
   </div>
 </template>
 
@@ -28,10 +50,24 @@ defineProps<{
   activeSessionId: string | null
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   select: [sessionId: string]
   'new-session': []
+  delete: [sessionId: string]
 }>()
+
+const deleteTarget = ref<SessionMetadata | null>(null)
+
+function confirmDelete(session: SessionMetadata) {
+  deleteTarget.value = session
+}
+
+function handleDelete() {
+  if (deleteTarget.value) {
+    emit('delete', deleteTarget.value.session_id)
+    deleteTarget.value = null
+  }
+}
 
 function formatDate(iso: string): string {
   if (!iso) return ''
@@ -116,6 +152,42 @@ function formatDate(iso: string): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.session-history__item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.session-history__item-row .session-history__item-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.session-history__delete {
+  flex-shrink: 0;
+  opacity: 0;
+  background: none;
+  border: none;
+  padding: 0.2rem;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.session-history__item:hover .session-history__delete {
+  opacity: 0.6;
+}
+
+.session-history__delete:hover {
+  opacity: 1 !important;
+  color: rgba(239, 68, 68, 0.9);
+  background: rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.15);
 }
 
 .session-history__item--active .session-history__item-title {

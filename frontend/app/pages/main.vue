@@ -6,6 +6,7 @@
         :active-session-id="activeSessionId"
         @select="handleSessionSelect"
         @new-session="handleNewSession"
+        @delete="handleSessionDelete"
       />
       <main class="main-page__content">
         <div class="main-page__orb-area" :class="{ 'main-page__orb-area--hero': !chatActive }">
@@ -89,6 +90,14 @@ function handleNewSession(): void {
   sessionsState.clearActive()
   messages.value = []
   init()
+}
+
+async function handleSessionDelete(sessionId: string): Promise<void> {
+  await sessionsState.removeSession(sessionId)
+  if (messages.value.length && !sessionsState.activeSessionId.value) {
+    messages.value = []
+    init()
+  }
 }
 
 watch(

@@ -39,11 +39,33 @@
         :class="{ 'note-list__item--active': selectedPath === note.path }"
         @click="$emit('select', note.path)"
       >
-        <span class="note-list__item-title">{{ note.title || note.path }}</span>
+        <div class="note-list__item-row">
+          <span class="note-list__item-title">{{ note.title || note.path }}</span>
+          <button
+            class="note-list__delete"
+            title="Delete note"
+            @click.stop="confirmDelete(note)"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>
         <span class="note-list__item-tags">{{ note.tags.join(', ') }}</span>
         <span class="note-list__item-date">{{ note.updated_at.slice(0, 10) }}</span>
       </li>
     </ul>
+
+    <ConfirmDialog
+      :visible="deleteTarget !== null"
+      title="Delete note?"
+      :message="`&quot;${deleteTarget?.title || deleteTarget?.path || ''}&quot; will be permanently removed from memory.`"
+      confirm-label="Delete"
+      @confirm="handleDelete"
+      @cancel="deleteTarget = null"
+    />
   </div>
 </template>
 
@@ -61,9 +83,22 @@ const emit = defineEmits<{
   select: [path: string]
   folder: [folder: string | null]
   search: [query: string]
+  delete: [path: string]
 }>()
 
 const searchQuery = ref('')
+const deleteTarget = ref<NoteMetadata | null>(null)
+
+function confirmDelete(note: NoteMetadata) {
+  deleteTarget.value = note
+}
+
+function handleDelete() {
+  if (deleteTarget.value) {
+    emit('delete', deleteTarget.value.path)
+    deleteTarget.value = null
+  }
+}
 
 function onFolderClick(folder: string) {
   if (props.activeFolder === folder) {
@@ -192,6 +227,42 @@ function onClearSearch() {
   font-weight: 500;
   font-size: 0.9rem;
   color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.note-list__item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.note-list__delete {
+  flex-shrink: 0;
+  opacity: 0;
+  background: none;
+  border: none;
+  padding: 0.2rem;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.note-list__item:hover .note-list__delete {
+  opacity: 0.6;
+}
+
+.note-list__delete:hover {
+  opacity: 1 !important;
+  color: rgba(239, 68, 68, 0.9);
+  background: rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.15);
 }
 
 .note-list__item-tags {

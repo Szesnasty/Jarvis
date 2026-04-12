@@ -131,6 +131,19 @@ export function useApi() {
     }
   }
 
+  async function deleteSession(sessionId: string): Promise<void> {
+    try {
+      await $fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' })
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
   async function fetchPreferences(): Promise<Record<string, string>> {
     try {
       return await $fetch<Record<string, string>>('/api/preferences')
@@ -331,5 +344,5 @@ export function useApi() {
     }
   }
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl }
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl }
 }

@@ -22,6 +22,7 @@
         @select="onSelectNote"
         @folder="onFolderChange"
         @search="onSearch"
+        @delete="onDeleteNote"
       />
     </aside>
     <section class="memory-page__viewer">
@@ -91,18 +92,18 @@ async function onUrlImported() {
   await loadNotes()
 }
 
-onMounted(() => {
-  loadNotes()
-})
-
-defineExpose({ deleteNote: async (path: string) => {
+async function onDeleteNote(path: string) {
   await deleteNote(path)
-  notes.value = notes.value.filter((n) => n.path !== path)
+  notes.value = notes.value.filter(n => n.path !== path)
   if (selectedPath.value === path) {
     selectedPath.value = null
     selectedNote.value = null
   }
-}})
+}
+
+onMounted(() => {
+  loadNotes()
+})
 </script>
 
 <style scoped>

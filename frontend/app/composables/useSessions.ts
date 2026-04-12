@@ -4,7 +4,7 @@ import { useApi } from '~/composables/useApi'
 export function useSessions() {
   const sessions = ref<SessionMetadata[]>([])
   const activeSessionId = ref<string | null>(null)
-  const { fetchSessions, fetchSession, resumeSession } = useApi()
+  const { fetchSessions, fetchSession, resumeSession, deleteSession: apiDeleteSession } = useApi()
 
   async function loadSessions(): Promise<void> {
     sessions.value = await fetchSessions()
@@ -21,9 +21,17 @@ export function useSessions() {
     activeSessionId.value = sessionId
   }
 
+  async function removeSession(sessionId: string): Promise<void> {
+    await apiDeleteSession(sessionId)
+    sessions.value = sessions.value.filter(s => s.session_id !== sessionId)
+    if (activeSessionId.value === sessionId) {
+      activeSessionId.value = null
+    }
+  }
+
   function clearActive(): void {
     activeSessionId.value = null
   }
 
-  return { sessions, activeSessionId, loadSessions, selectSession, resume, clearActive }
+  return { sessions, activeSessionId, loadSessions, selectSession, resume, removeSession, clearActive }
 }
