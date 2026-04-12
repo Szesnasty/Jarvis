@@ -1,4 +1,4 @@
-import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse } from '~/types'
+import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail } from '~/types'
 
 export class ApiError extends Error {
   status: number
@@ -92,5 +92,70 @@ export function useApi() {
     }
   }
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote }
+  async function fetchSessions(limit = 20): Promise<SessionMetadata[]> {
+    try {
+      return await $fetch<SessionMetadata[]>('/api/sessions', { params: { limit } })
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  async function fetchSession(sessionId: string): Promise<SessionDetail> {
+    try {
+      return await $fetch<SessionDetail>(`/api/sessions/${sessionId}`)
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  async function resumeSession(sessionId: string): Promise<{ session_id: string; status: string }> {
+    try {
+      return await $fetch<{ session_id: string; status: string }>(`/api/sessions/${sessionId}/resume`, { method: 'POST' })
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  async function fetchPreferences(): Promise<Record<string, string>> {
+    try {
+      return await $fetch<Record<string, string>>('/api/preferences')
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  async function setPreference(key: string, value: string): Promise<Record<string, string>> {
+    try {
+      return await $fetch<Record<string, string>>('/api/preferences', { method: 'PATCH', body: { key, value } })
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, fetchPreferences, setPreference }
 }

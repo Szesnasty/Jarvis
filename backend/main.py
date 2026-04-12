@@ -5,6 +5,8 @@ from config import get_settings
 from models.schemas import HealthResponse
 from routers.chat import router as chat_router
 from routers.memory import router as memory_router
+from routers.preferences import router as preferences_router
+from routers.sessions import router as sessions_router
 from routers.workspace import router as workspace_router
 
 APP_VERSION = "0.1.0"
@@ -30,6 +32,8 @@ def create_app() -> FastAPI:
     app.include_router(workspace_router)
     app.include_router(memory_router)
     app.include_router(chat_router)
+    app.include_router(sessions_router)
+    app.include_router(preferences_router)
 
     return app
 

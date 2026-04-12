@@ -35,7 +35,7 @@
 
 | Step | Title | Status |
 |------|-------|--------|
-| [07](step-07-planning-ops.md) | Planning tools + session persistence | ⬜ |
+| [07](step-07-planning-ops.md) | Planning tools + session persistence | ✅ |
 
 ## Phase 6 — Knowledge Graph
 

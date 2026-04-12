@@ -104,6 +104,7 @@ async def _handle_message(
 
         elif event.type == "tool_use":
             await _send_event(ws, "tool_use", name=event.name, input=event.tool_input)
+            session_service.record_tool_use(session_id, event.name)
             result = await _run_tool(event)
             await _send_event(ws, "tool_result", name=event.name, content=result)
 

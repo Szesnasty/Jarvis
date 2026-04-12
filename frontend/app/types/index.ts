@@ -79,3 +79,18 @@ export interface WsSessionStart {
 }
 
 export type WsEvent = WsTextDelta | WsToolUse | WsToolResult | WsDone | WsError | WsSessionStart
+
+// --- Sessions ---
+
+export interface SessionMetadata {
+  session_id: string
+  title: string
+  created_at: string
+  message_count: number
+}
+
+export interface SessionDetail extends SessionMetadata {
+  ended_at?: string
+  messages: ChatMessage[]
+  tools_used: string[]
+}

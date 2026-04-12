@@ -68,3 +68,29 @@ class ChatEvent(BaseModel):
     name: Optional[str] = None
     input: Optional[dict] = None
     session_id: Optional[str] = None
+
+
+# --- Sessions ---
+
+class SessionMetadataResponse(BaseModel):
+    session_id: str
+    title: str
+    created_at: str
+    message_count: int
+
+
+class SessionDetailResponse(BaseModel):
+    session_id: str
+    title: str
+    created_at: str
+    ended_at: Optional[str] = None
+    message_count: int
+    messages: list
+    tools_used: list = []
+
+
+# --- Preferences ---
+
+class PreferenceSetRequest(BaseModel):
+    key: str
+    value: str

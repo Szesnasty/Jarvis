@@ -1,24 +1,32 @@
 <template>
   <div class="main-page">
     <StatusBar />
-    <main class="main-page__content">
-      <Orb :state="orbState" />
-      <TranscriptBar :transcript="transcript" :visible="voiceState !== 'idle'" />
-      <ChatPanel
-        :messages="messages"
-        :current-response="currentResponse"
-        :is-loading="isLoading"
-        :tool-activity="toolActivity"
-        @send="handleSend"
+    <div class="main-page__layout">
+      <SessionHistory
+        :sessions="sessions"
+        :active-session-id="activeSessionId"
+        @select="handleSessionSelect"
+        @new-session="handleNewSession"
       />
-      <div class="main-page__voice-bar">
-        <VoiceButton
-          :state="voiceState"
-          :supported="isVoiceAvailable"
-          @toggle="handleVoiceToggle"
+      <main class="main-page__content">
+        <Orb :state="orbState" />
+        <TranscriptBar :transcript="transcript" :visible="voiceState !== 'idle'" />
+        <ChatPanel
+          :messages="messages"
+          :current-response="currentResponse"
+          :is-loading="isLoading"
+          :tool-activity="toolActivity"
+          @send="handleSend"
         />
-      </div>
-    </main>
+        <div class="main-page__voice-bar">
+          <VoiceButton
+            :state="voiceState"
+            :supported="isVoiceAvailable"
+            @toggle="handleVoiceToggle"
+          />
+        </div>
+      </main>
+    </div>
   </div>
 </template>
 
@@ -27,11 +35,15 @@ import type { OrbState } from '~/types'
 import { createWebSpeechSTT } from '~/composables/stt/webSpeechSTT'
 import { createWebSpeechTTS } from '~/composables/tts/webSpeechTTS'
 import { useChat } from '~/composables/useChat'
+import { useSessions } from '~/composables/useSessions'
 import { useVoice } from '~/composables/useVoice'
 
 const { checkHealth } = useAppState()
 const chat = useChat()
 const { messages, currentResponse, isLoading, toolActivity, init, sendMessage } = chat
+
+const sessionsState = useSessions()
+const { sessions, activeSessionId } = sessionsState
 
 const stt = createWebSpeechSTT()
 const tts = createWebSpeechTTS()
@@ -70,9 +82,21 @@ function handleVoiceToggle(): void {
   }
 }
 
-onMounted(() => {
+async function handleSessionSelect(sessionId: string): Promise<void> {
+  const detail = await sessionsState.selectSession(sessionId)
+  messages.value = detail.messages
+}
+
+function handleNewSession(): void {
+  sessionsState.clearActive()
+  messages.value = []
+  init()
+}
+
+onMounted(async () => {
   checkHealth()
   init()
+  await sessionsState.loadSessions()
 })
 </script>
 
@@ -81,6 +105,11 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+}
+
+.main-page__layout {
+  flex: 1;
+  display: flex;
 }
 
 .main-page__content {
