@@ -2,7 +2,7 @@
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
-> **Previous**: [Step 02 — Frontend Init](step-02-frontend-init.md) | **Next**: [Step 04 — Memory Service](step-04-memory-service.md) | **Index**: [step-00-index.md](step-00-index.md)
+> **Previous**: [Step 02 — Frontend Init](step-02-frontend-init.md) | **Next**: [Step 04 — Memory Service](step-04-memory-service.md) | **Index**: [index-spec.md](../index-spec.md)
 
 ---
 
@@ -175,3 +175,37 @@ After onboarding, show:
 - [ ] After creation → redirected to `/main` with Orb visible
 - [ ] Refreshing page with existing workspace → goes straight to `/main`
 - [ ] `GET /api/workspace/status` returns correct state
+
+---
+
+## Tests
+
+### Backend — `tests/test_onboarding.py`
+- `test_workspace_status_no_workspace` → returns `{"exists": false}`
+- `test_create_workspace` → creates folder tree at configured path
+- `test_create_workspace_stores_api_key` → key in keyring, not in config.json
+- `test_workspace_status_after_creation` → returns `{"exists": true}`
+- `test_create_workspace_already_exists` → returns 409 Conflict
+- `test_config_json_no_raw_key` → config.json has `api_key_set: true`, no key value
+
+### Frontend — `src/__tests__/views/OnboardingView.test.ts`
+- Renders onboarding form when no workspace
+- Submit calls API and redirects to `/main`
+- Shows error on API failure
+
+### Run
+```bash
+cd backend && python -m pytest tests/test_onboarding.py -v
+cd frontend && npx vitest run src/__tests__/views/OnboardingView.test.ts
+```
+
+---
+
+## Definition of Done
+
+- [ ] All files listed in this step are created
+- [ ] `python -m pytest tests/test_onboarding.py` — all pass
+- [ ] `npx vitest run` — all pass
+- [ ] Manual smoke: onboarding flow creates `~/Jarvis/` with correct structure
+- [ ] Committed with message `feat: step-03 onboarding + workspace`
+- [ ] [index-spec.md](../index-spec.md) updated with ✅

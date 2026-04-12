@@ -2,7 +2,7 @@
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
-> **Previous**: [Step 06 — Voice](step-06-voice.md) | **Next**: [Step 08 — Knowledge Graph](step-08-knowledge-graph.md) | **Index**: [step-00-index.md](step-00-index.md)
+> **Previous**: [Step 06 — Voice](step-06-voice.md) | **Next**: [Step 08 — Knowledge Graph](step-08-knowledge-graph.md) | **Index**: [index-spec.md](../index-spec.md)
 
 ---
 
@@ -218,3 +218,46 @@ Loads a past session's messages as context for a new chat.
 - [ ] Session history visible in UI
 - [ ] Can resume a past session
 - [ ] Preferences loaded into system prompt on every request
+
+---
+
+## Tests
+
+### Backend — `tests/test_planning_service.py`
+- `test_create_plan` → plan file created in `memory/plans/` with sections
+- `test_update_plan_task` → checkbox toggled in plan file
+- `test_list_plans` → returns plans sorted by date
+
+### Backend — `tests/test_preferences_service.py`
+- `test_save_preference` → preference persisted to `app/preferences.json`
+- `test_load_preferences` → returns all saved preferences
+- `test_preferences_in_system_prompt` → system prompt includes preferences
+
+### Backend — `tests/test_session_service.py`
+- `test_save_session` → session JSON saved to `app/sessions/`
+- `test_list_sessions` → returns session list with timestamps
+- `test_load_session` → returns full message history
+- `test_resume_session` → loaded history used in next Claude call
+
+### Frontend — `src/__tests__/views/SessionHistory.test.ts`
+- Renders list of sessions from API
+- Click session loads its messages
+- Active session highlighted
+
+### Run
+```bash
+cd backend && python -m pytest tests/test_planning_service.py tests/test_preferences_service.py tests/test_session_service.py -v
+cd frontend && npx vitest run src/__tests__/views/SessionHistory.test.ts
+```
+
+---
+
+## Definition of Done
+
+- [ ] All files listed in this step are created
+- [ ] `python -m pytest tests/test_planning_service.py tests/test_preferences_service.py tests/test_session_service.py` — all pass
+- [ ] `npx vitest run` — all pass
+- [ ] Manual: "plan my week" creates plan file; "keep responses shorter" persists preference
+- [ ] Sessions persist and can be resumed
+- [ ] Committed with message `feat: step-07 planning + sessions + preferences`
+- [ ] [index-spec.md](../index-spec.md) updated with ✅

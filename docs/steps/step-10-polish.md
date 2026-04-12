@@ -2,7 +2,7 @@
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
-> **Previous**: [Step 09 — Specialists](step-09-specialists.md) | **Next**: — (MVP complete) | **Index**: [step-00-index.md](step-00-index.md)
+> **Previous**: [Step 09 — Specialists](step-09-specialists.md) | **Next**: — (MVP complete) | **Index**: [index-spec.md](../index-spec.md)
 
 ---
 
@@ -203,6 +203,61 @@ Frontend:
 - [ ] Error messages are user-friendly, not stack traces
 - [ ] App handles Claude API rate limits gracefully
 - [ ] App reconnects WebSocket automatically after disconnect
+
+---
+
+## Tests
+
+### Backend — `tests/test_settings_api.py`
+- `test_get_settings` → 200 + current settings (no raw key)
+- `test_update_api_key` → key stored in keyring
+- `test_update_voice_prefs` → preferences persisted
+
+### Backend — `tests/test_ingest_service.py`
+- `test_import_markdown` → file copied + indexed
+- `test_import_txt` → converted to .md + indexed
+- `test_import_pdf` → text extracted + indexed
+- `test_enrich_note` → summary + tags added to frontmatter
+
+### Backend — `tests/test_token_tracking.py`
+- `test_log_token_usage` → usage recorded in log
+- `test_get_usage_summary` → returns totals by day
+- `test_budget_warning` → warning event when approaching limit
+
+### Frontend — `src/__tests__/composables/useKeyboard.test.ts`
+- Space key toggles voice
+- Escape cancels current action
+- Enter sends message
+- Shortcuts disabled when input focused (except Enter)
+
+### Frontend — `src/__tests__/views/SettingsView.test.ts`
+- Renders settings form
+- Submit updates settings via API
+- API key field masked
+
+### Frontend — `src/__tests__/composables/useWebSocket.test.ts`
+- Auto-reconnect after disconnect
+- Reconnect with exponential backoff
+- Events buffered during reconnect
+
+### Run
+```bash
+cd backend && python -m pytest tests/test_settings_api.py tests/test_ingest_service.py tests/test_token_tracking.py -v
+cd frontend && npx vitest run
+```
+
+---
+
+## Definition of Done
+
+- [ ] All files listed in this step are created
+- [ ] `python -m pytest` — full suite passes
+- [ ] `npx vitest run` — full suite passes
+- [ ] Manual: keyboard shortcuts, settings, import, Obsidian link
+- [ ] Error handling graceful (rate limits, disconnects)
+- [ ] Committed with message `feat: step-10 polish + ingest + settings`
+- [ ] [index-spec.md](../index-spec.md) updated with ✅
+- [ ] 🎉 MVP complete
 
 ---
 

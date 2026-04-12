@@ -1,0 +1,18 @@
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    workspace_path: Path = Path.home() / "Jarvis"
+    api_host: str = "127.0.0.1"
+    api_port: int = 8000
+    cors_origins: list[str] = ["http://localhost:5173"]
+
+    model_config = {"env_prefix": "JARVIS_"}
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

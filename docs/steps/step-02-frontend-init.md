@@ -2,7 +2,7 @@
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
-> **Previous**: [Step 01 — Backend Init](step-01-backend-init.md) | **Next**: [Step 03 — Onboarding](step-03-onboarding-workspace.md) | **Index**: [step-00-index.md](step-00-index.md)
+> **Previous**: [Step 01 — Backend Init](step-01-backend-init.md) | **Next**: [Step 03 — Onboarding](step-03-onboarding-workspace.md) | **Index**: [index-spec.md](../index-spec.md)
 
 ---
 
@@ -133,11 +133,55 @@ Placeholder layout:
 
 ---
 
-## Acceptance Criteria
+## Tests
 
-- [ ] `cd frontend && npm install && npm run dev` starts on `localhost:5173`
-- [ ] Opening `localhost:5173` shows the MainView placeholder
-- [ ] StatusBar shows backend status (calls `/api/health` on mount)
-- [ ] When backend is running: shows "online"; when not: shows "offline"
-- [ ] `npm run type-check` passes with no errors
+### Files to Create
+```
+frontend/
+├── vitest.config.ts
+└── src/
+    └── __tests__/
+        ├── App.test.ts              # App mounts correctly
+        ├── stores/app.test.ts       # App store + health check
+        └── services/api.test.ts     # API client tests
+```
+
+Add dev dependencies:
+```json
+"vitest": "^2.0",
+"@vue/test-utils": "^2.4",
+"jsdom": "^25.0"
+```
+
+### Test Cases
+
+**`App.test.ts`**
+- App component mounts without errors
+- RouterView is rendered
+
+**`stores/app.test.ts`**
+- Initial state: `isInitialized = false`, `backendStatus = 'unknown'`
+- `checkHealth()` sets `backendStatus = 'online'` on success
+- `checkHealth()` sets `backendStatus = 'offline'` on fetch error
+
+**`services/api.test.ts`**
+- `fetchHealth()` returns parsed HealthResponse on 200
+- `fetchHealth()` throws ApiError on non-200
+
+### Run
+```bash
+cd frontend && npx vitest run
+```
+
+---
+
+## Definition of Done
+
+- [ ] `npm install && npm run dev` starts on `localhost:5173`
+- [ ] MainView placeholder visible in browser
+- [ ] StatusBar shows backend status (online/offline)
+- [ ] `npm run type-check` passes
+- [ ] `npx vitest run` — all tests pass
 - [ ] All components use `<script setup lang="ts">`
+- [ ] Committed with message `feat: step-02 frontend init`
+- [ ] [index-spec.md](../index-spec.md) updated with ✅

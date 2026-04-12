@@ -2,7 +2,7 @@
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
-> **Previous**: [Step 04 — Memory Service](step-04-memory-service.md) | **Next**: [Step 06 — Voice](step-06-voice.md) | **Index**: [step-00-index.md](step-00-index.md)
+> **Previous**: [Step 04 — Memory Service](step-04-memory-service.md) | **Next**: [Step 06 — Voice](step-06-voice.md) | **Index**: [index-spec.md](../index-spec.md)
 
 ---
 
@@ -284,3 +284,46 @@ Message format (server → client):
 - [ ] Orb shows `thinking` state during response
 - [ ] Session history maintained across messages in same session
 - [ ] No API key exposed in any API response or WebSocket message
+
+---
+
+## Tests
+
+### Backend — `tests/test_claude_service.py`
+- `test_build_system_prompt` → includes persona + preferences + context
+- `test_build_messages` → correct message format for Anthropic API
+- `test_tool_definitions` → tools list includes search_notes, write_note
+- `test_execute_tool_search` → search_notes tool calls memory service
+- `test_execute_tool_write` → write_note tool creates note
+- `test_no_api_key_in_response` → response never contains API key string
+
+### Backend — `tests/test_chat_ws.py`
+- `test_ws_connect` → WebSocket connects successfully
+- `test_ws_send_message` → receives streaming chunks
+- `test_ws_tool_use` → receives tool_use + tool_result events
+- `test_ws_session_history` → second message includes first in history
+- `test_ws_invalid_message` → returns error event, no crash
+
+### Frontend — `src/__tests__/composables/useChat.test.ts`
+- `sendMessage()` opens WS and emits message
+- Streaming chunks update `currentResponse`
+- Tool use displays activity indicator
+- Session messages array grows after exchange
+
+### Run
+```bash
+cd backend && python -m pytest tests/test_claude_service.py tests/test_chat_ws.py -v
+cd frontend && npx vitest run src/__tests__/composables/useChat.test.ts
+```
+
+---
+
+## Definition of Done
+
+- [ ] All files listed in this step are created
+- [ ] `python -m pytest tests/test_claude_service.py tests/test_chat_ws.py` — all pass
+- [ ] `npx vitest run` — all pass
+- [ ] Manual: type message → streaming response visible
+- [ ] No API key in any WS message or REST response
+- [ ] Committed with message `feat: step-05 claude integration + streaming`
+- [ ] [index-spec.md](../index-spec.md) updated with ✅

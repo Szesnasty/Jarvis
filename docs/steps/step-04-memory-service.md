@@ -2,7 +2,7 @@
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
-> **Previous**: [Step 03 — Onboarding](step-03-onboarding-workspace.md) | **Next**: [Step 05 — Claude Integration](step-05-claude-integration.md) | **Index**: [step-00-index.md](step-00-index.md)
+> **Previous**: [Step 03 — Onboarding](step-03-onboarding-workspace.md) | **Next**: [Step 05 — Claude Integration](step-05-claude-integration.md) | **Index**: [index-spec.md](../index-spec.md)
 
 ---
 
@@ -208,3 +208,47 @@ Two-panel layout:
 - [ ] Clicking a note shows its content
 - [ ] Deleting a note moves it to `.trash/`, not permanent delete
 - [ ] Deleting SQLite and calling reindex restores the full index from disk
+
+---
+
+## Tests
+
+### Backend — `tests/test_memory_service.py`
+- `test_create_note` → file created on disk with YAML frontmatter
+- `test_create_note_indexed` → note appears in SQLite after creation
+- `test_list_notes` → returns list with title, path, created_at
+- `test_search_fts5` → FTS5 search returns matching notes
+- `test_search_no_results` → returns empty list
+- `test_get_note_content` → returns full markdown body
+- `test_delete_note_soft` → file moved to `.trash/`, removed from index
+- `test_reindex_from_disk` → delete SQLite, call reindex, index restored
+
+### Backend — `tests/test_memory_api.py`
+- `test_post_notes` → 201 + location header
+- `test_get_notes_list` → 200 + array
+- `test_get_notes_search` → 200 + filtered results
+- `test_get_note_by_path` → 200 + content
+- `test_delete_note` → 200 + moved to trash
+- `test_post_reindex` → 200 + count
+
+### Frontend — `src/__tests__/views/MemoryBrowser.test.ts`
+- Renders folder tree from API data
+- Clicking note shows content panel
+- Search input filters notes
+
+### Run
+```bash
+cd backend && python -m pytest tests/test_memory_service.py tests/test_memory_api.py -v
+cd frontend && npx vitest run src/__tests__/views/MemoryBrowser.test.ts
+```
+
+---
+
+## Definition of Done
+
+- [ ] All files listed in this step are created
+- [ ] `python -m pytest tests/test_memory_service.py tests/test_memory_api.py` — all pass
+- [ ] `npx vitest run` — all pass
+- [ ] Source-of-truth doctrine verified: delete SQLite → reindex → same results
+- [ ] Committed with message `feat: step-04 memory service + sqlite index`
+- [ ] [index-spec.md](../index-spec.md) updated with ✅

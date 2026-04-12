@@ -2,7 +2,7 @@
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
-> **Previous**: [Step 08 — Knowledge Graph](step-08-knowledge-graph.md) | **Next**: [Step 10 — Polish](step-10-polish.md) | **Index**: [step-00-index.md](step-00-index.md)
+> **Previous**: [Step 08 — Knowledge Graph](step-08-knowledge-graph.md) | **Next**: [Step 10 — Polish](step-10-polish.md) | **Index**: [index-spec.md](../index-spec.md)
 
 ---
 
@@ -262,3 +262,50 @@ Navigation: Back / Next buttons, step indicator, Save on final step.
 - [ ] Deactivating specialist returns to base Jarvis behavior
 - [ ] Editing specialist updates JSON file
 - [ ] Deleting specialist moves to `.trash/`
+
+---
+
+## Tests
+
+### Backend — `tests/test_specialist_service.py`
+- `test_create_specialist` → JSON saved to `agents/` with correct schema
+- `test_activate_specialist` → system prompt modified with specialist persona
+- `test_deactivate_specialist` → system prompt reverts to base
+- `test_specialist_scoped_search` → search limited to specialist source folders
+- `test_specialist_tool_filter` → only permitted tools available
+- `test_specialist_rules_enforced` → blocked actions return rule violation
+- `test_edit_specialist` → JSON file updated
+- `test_delete_specialist` → moved to `.trash/`, not permanent
+- `test_suggest_specialist` → returns matching specialist for topic
+
+### Backend — `tests/test_specialist_api.py`
+- `test_post_specialist` → 201 + created
+- `test_get_specialists` → 200 + list
+- `test_put_specialist` → 200 + updated
+- `test_delete_specialist` → 200 + trashed
+- `test_post_activate` → 200 + active
+- `test_post_deactivate` → 200 + base mode
+
+### Frontend — `src/__tests__/views/SpecialistWizard.test.ts`
+- Wizard renders 7 steps
+- Each step validates before advancing
+- Submit creates specialist via API
+- Specialist badge shows when active
+
+### Run
+```bash
+cd backend && python -m pytest tests/test_specialist_service.py tests/test_specialist_api.py -v
+cd frontend && npx vitest run src/__tests__/views/SpecialistWizard.test.ts
+```
+
+---
+
+## Definition of Done
+
+- [ ] All files listed in this step are created
+- [ ] `python -m pytest tests/test_specialist_service.py tests/test_specialist_api.py` — all pass
+- [ ] `npx vitest run` — all pass
+- [ ] Manual: create specialist → activate → verify scoped behavior
+- [ ] Delete specialist → verify in `.trash/`
+- [ ] Committed with message `feat: step-09 specialist system`
+- [ ] [index-spec.md](../index-spec.md) updated with ✅

@@ -2,7 +2,7 @@
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
-> **Previous**: [Step 07 — Planning & Ops](step-07-planning-ops.md) | **Next**: [Step 09 — Specialists](step-09-specialists.md) | **Index**: [step-00-index.md](step-00-index.md)
+> **Previous**: [Step 07 — Planning & Ops](step-07-planning-ops.md) | **Next**: [Step 09 — Specialists](step-09-specialists.md) | **Index**: [index-spec.md](../index-spec.md)
 
 ---
 
@@ -242,3 +242,46 @@ Update `context_builder.py` to use `retrieval.retrieve()` instead of direct `mem
 - [ ] Click node in graph → see note preview
 - [ ] Deleting `graph.json` and rebuilding restores the full graph
 - [ ] No AI API calls made during graph building
+
+---
+
+## Tests
+
+### Backend — `tests/test_graph_service.py`
+- `test_build_graph_empty` → empty graph when no notes
+- `test_build_graph_with_notes` → nodes + edges created from notes
+- `test_graph_folder_edges` → folder membership edges present
+- `test_graph_tag_edges` → shared tags create edges
+- `test_graph_wikilink_edges` → `[[link]]` creates edge between notes
+- `test_graph_frontmatter_relations` → frontmatter `related:` creates edges
+- `test_query_graph_neighbors` → returns immediate neighbors of a node
+- `test_graph_rebuild_idempotent` → delete + rebuild = same result
+- `test_no_ai_calls_during_build` → no Anthropic API calls made
+
+### Backend — `tests/test_graph_api.py`
+- `test_post_rebuild` → 200 + node/edge counts
+- `test_get_graph` → 200 + full graph JSON
+- `test_get_graph_query` → 200 + filtered neighbors
+
+### Frontend — `src/__tests__/views/GraphView.test.ts`
+- Renders SVG/canvas element
+- Nodes rendered from graph data
+- Click node emits select event
+
+### Run
+```bash
+cd backend && python -m pytest tests/test_graph_service.py tests/test_graph_api.py -v
+cd frontend && npx vitest run src/__tests__/views/GraphView.test.ts
+```
+
+---
+
+## Definition of Done
+
+- [ ] All files listed in this step are created
+- [ ] `python -m pytest tests/test_graph_service.py tests/test_graph_api.py` — all pass
+- [ ] `npx vitest run` — all pass
+- [ ] Source-of-truth verified: delete graph.json → rebuild → same graph
+- [ ] No AI API calls during graph operations
+- [ ] Committed with message `feat: step-08 knowledge graph`
+- [ ] [index-spec.md](../index-spec.md) updated with ✅

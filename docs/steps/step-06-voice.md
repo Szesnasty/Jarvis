@@ -2,7 +2,7 @@
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
-> **Previous**: [Step 05 — Claude Integration](step-05-claude-integration.md) | **Next**: [Step 07 — Planning & Ops](step-07-planning-ops.md) | **Index**: [step-00-index.md](step-00-index.md)
+> **Previous**: [Step 05 — Claude Integration](step-05-claude-integration.md) | **Next**: [Step 07 — Planning & Ops](step-07-planning-ops.md) | **Index**: [index-spec.md](../index-spec.md)
 
 ---
 
@@ -188,3 +188,45 @@ Use CSS animations/transitions. No canvas/WebGL — keep it lightweight.
 - [ ] If Web Speech API not supported: mic button disabled with tooltip
 - [ ] App remains fully functional via text input with voice disabled
 - [ ] No extra API keys required
+
+---
+
+## Tests
+
+### Frontend — `src/__tests__/composables/useSTT.test.ts`
+- `startListening()` calls `SpeechRecognition.start()`
+- `onresult` updates `transcript` ref in real-time
+- `onend` emits final transcript
+- Gracefully handles no SpeechRecognition API (returns `isSupported: false`)
+
+### Frontend — `src/__tests__/composables/useTTS.test.ts`
+- `speak(text)` calls `SpeechSynthesis.speak()`
+- `stop()` calls `SpeechSynthesis.cancel()`
+- Returns `isSupported: false` when SpeechSynthesis unavailable
+
+### Frontend — `src/__tests__/components/VoiceButton.test.ts`
+- Renders mic icon when idle
+- Shows recording state when listening
+- Disabled with tooltip when not supported
+- Click toggles listening state
+
+### Frontend — `src/__tests__/components/OrbAnimation.test.ts`
+- Renders with `idle` state by default
+- Applies correct CSS class for each state: idle, listening, thinking, speaking
+
+### Run
+```bash
+cd frontend && npx vitest run src/__tests__/composables/useSTT.test.ts src/__tests__/composables/useTTS.test.ts src/__tests__/components/VoiceButton.test.ts src/__tests__/components/OrbAnimation.test.ts
+```
+
+---
+
+## Definition of Done
+
+- [ ] All files listed in this step are created
+- [ ] `npx vitest run` — all pass
+- [ ] Manual: mic click → speech recognized → response spoken
+- [ ] Orb transitions through all 4 states correctly
+- [ ] App works fully in text-only mode when voice unavailable
+- [ ] Committed with message `feat: step-06 voice input/output`
+- [ ] [index-spec.md](../index-spec.md) updated with ✅

@@ -8,7 +8,7 @@
 ## Navigation
 
 - [JARVIS-PLAN.md](JARVIS-PLAN.md) — Full project plan
-- [step-00-index.md](steps/step-00-index.md) — Implementation steps index
+- [index-spec.md](index-spec.md) — Master implementation tracking
 
 ---
 
@@ -339,10 +339,56 @@ if len(context) > MAX_CONTEXT_TOKENS:
 - Comment *why* when the reason isn't obvious
 - Use docstrings only for public API functions that other modules call
 
-### 4.6 Testing (When Added)
-- Test files mirror source structure: `services/memory_service.py` → `tests/services/test_memory_service.py`
+### 4.6 Testing
+- Test files mirror source structure: `services/memory_service.py` → `tests/test_memory_service.py`
 - Test function names describe behavior: `test_search_notes_returns_empty_list_when_no_match`
 - No testing of implementation details — test behavior/output
+- **Every step must end with passing tests before commit**
+
+#### Backend (pytest)
+- Framework: `pytest` + `pytest-anyio` + `httpx` (for async FastAPI testing)
+- Config: `pytest.ini` at `backend/` root
+- Test client via `httpx.AsyncClient` with `ASGITransport`
+- Use fixtures in `conftest.py` for shared setup (app, client, tmp workspace)
+- Mark async tests with `@pytest.mark.anyio`
+- Naming: `test_<function>_<scenario>` e.g. `test_create_note_sets_frontmatter`
+- Run: `cd backend && python -m pytest -v`
+
+```python
+# tests/conftest.py pattern
+import pytest
+from httpx import ASGITransport, AsyncClient
+from main import create_app
+
+@pytest.fixture
+async def client(tmp_path):
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+```
+
+#### Frontend (vitest)
+- Framework: `vitest` + `@vue/test-utils` + `jsdom`
+- Config: `vitest.config.ts` at `frontend/` root
+- Test location: `src/__tests__/` mirroring `src/` structure
+- Use `mount()` for component tests from `@vue/test-utils`
+- Use `vi.fn()` / `vi.mock()` for mocking
+- Naming: `describe('ComponentName')` + `it('does X when Y')`
+- Run: `cd frontend && npx vitest run`
+
+```typescript
+// src/__tests__/components/Example.test.ts pattern
+import { mount } from '@vue/test-utils'
+import Example from '@/components/Example.vue'
+
+describe('Example', () => {
+  it('renders title', () => {
+    const wrapper = mount(Example, { props: { title: 'Hello' } })
+    expect(wrapper.text()).toContain('Hello')
+  })
+})
+```
 
 ---
 
@@ -362,8 +408,9 @@ These rules apply everywhere in this project:
 
 Every step file in `docs/steps/` must:
 
-1. Link to this guidelines file at the top
+1. Link to this guidelines file and [index-spec.md](index-spec.md) at the top
 2. Link to previous/next step
 3. List exact files to create or modify
-4. Include acceptance criteria (what "done" looks like)
-5. Not exceed one logical milestone per file
+4. Include **## Tests** section with specific test files + test cases
+5. Include **## Definition of Done** checklist (code, tests pass, committed, index updated)
+6. Not exceed one logical milestone per file
