@@ -95,16 +95,19 @@ async function handleSave(data: Record<string, unknown>) {
 .specialists-page__create-btn {
   margin-top: 1.5rem;
   padding: 0.75rem 1.5rem;
-  border: 1px dashed var(--color-border, #333);
+  border: 1px dashed var(--neon-cyan-30);
   border-radius: 8px;
   background: transparent;
-  color: inherit;
+  color: var(--neon-cyan);
   cursor: pointer;
   font-size: 1rem;
   width: 100%;
+  transition: all 0.2s;
 }
 .specialists-page__create-btn:hover {
   border-style: solid;
-  background: rgba(96, 165, 250, 0.08);
+  background: var(--neon-cyan-08);
+  box-shadow: 0 0 15px var(--neon-cyan-08);
+  text-shadow: 0 0 6px var(--neon-cyan-30);
 }
 </style>

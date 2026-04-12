@@ -128,6 +128,8 @@ async function rebuildGraphAction() {
   max-width: 700px;
   margin: 0 auto;
   padding: 2rem;
+  height: calc(100vh - 40px);
+  overflow-y: auto;
 }
 .settings-page__title {
   font-size: 1.5rem;
@@ -136,8 +138,9 @@ async function rebuildGraphAction() {
 .settings-page__section {
   margin-bottom: 1.5rem;
   padding: 1rem;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
+  background: var(--bg-surface);
 }
 .settings-page__section-title {
   font-size: 1rem;
@@ -155,24 +158,32 @@ async function rebuildGraphAction() {
 }
 .settings-page__input {
   padding: 0.4rem 0.75rem;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
-  background: transparent;
+  background: var(--bg-base);
   color: inherit;
   flex: 1;
   min-width: 200px;
 }
+.settings-page__input:focus {
+  outline: none;
+  border-color: var(--neon-cyan-60);
+  box-shadow: 0 0 10px var(--neon-cyan-08);
+}
 .settings-page__btn {
   padding: 0.4rem 1rem;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--neon-cyan-30);
   border-radius: 4px;
-  background: transparent;
-  color: inherit;
+  background: var(--neon-cyan-08);
+  color: var(--neon-cyan);
   cursor: pointer;
+  transition: all 0.2s;
 }
 .settings-page__btn:hover {
-  background: var(--color-primary, #60a5fa);
-  color: #fff;
+  background: rgba(2, 254, 255, 0.15);
+  border-color: var(--neon-cyan-60);
+  box-shadow: 0 0 12px var(--neon-cyan-08);
+  text-shadow: 0 0 6px var(--neon-cyan-30);
 }
 .settings-page__path {
   font-family: monospace;
@@ -196,8 +207,10 @@ async function rebuildGraphAction() {
 .settings-page__status {
   margin-top: 1rem;
   padding: 0.5rem 1rem;
-  background: rgba(96, 165, 250, 0.1);
+  background: var(--neon-cyan-08);
+  border: 1px solid var(--neon-cyan-30);
   border-radius: 4px;
   font-size: 0.9rem;
+  color: var(--neon-cyan);
 }
 </style>

@@ -47,7 +47,7 @@ const renderedHtml = computed(() => {
 
 <style scoped>
 .note-viewer {
-  padding: 1rem;
+  padding: 1.5rem;
   height: 100%;
   overflow-y: auto;
 }
@@ -57,41 +57,43 @@ const renderedHtml = computed(() => {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--color-muted, #888);
+  color: var(--text-muted);
 }
 
 .note-viewer__header {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .note-viewer__title {
   margin: 0;
   font-size: 1.5rem;
+  color: var(--text-primary);
 }
 
 .note-viewer__date {
   font-size: 0.85rem;
-  color: var(--color-muted, #888);
+  color: var(--text-muted);
 }
 
 .note-viewer__meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--color-border, #333);
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--border-default);
 }
 
 .note-viewer__meta-tag {
-  font-size: 0.8rem;
-  padding: 0.15rem 0.5rem;
-  background: var(--color-surface, #1a1a1a);
-  border-radius: 0.25rem;
-  color: var(--color-muted, #888);
+  font-size: 0.78rem;
+  padding: 0.2rem 0.6rem;
+  background: var(--neon-cyan-08);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
 }
 
 .note-viewer__body {
@@ -105,6 +107,7 @@ const renderedHtml = computed(() => {
 .note-viewer__body :deep(h3) {
   margin-top: 1.5em;
   margin-bottom: 0.5em;
+  color: var(--text-primary);
 }
 
 .note-viewer__body :deep(p) {
@@ -118,34 +121,42 @@ const renderedHtml = computed(() => {
 }
 
 .note-viewer__body :deep(code) {
-  background: var(--color-surface, #1a1a1a);
+  background: var(--bg-surface);
   padding: 0.15em 0.4em;
-  border-radius: 0.25rem;
+  border-radius: 4px;
   font-size: 0.9em;
+  color: var(--neon-cyan);
 }
 
 .note-viewer__body :deep(pre) {
-  background: var(--color-surface, #1a1a1a);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   padding: 1em;
-  border-radius: 0.5rem;
+  border-radius: 8px;
   overflow-x: auto;
 }
 
 .note-viewer__body :deep(pre code) {
   background: none;
   padding: 0;
+  color: var(--text-primary);
 }
 
 .note-viewer__body :deep(blockquote) {
-  border-left: 3px solid var(--color-muted, #888);
+  border-left: 3px solid var(--neon-cyan-30);
   padding-left: 1em;
   margin-left: 0;
-  color: var(--color-muted, #888);
+  color: var(--text-secondary);
 }
 
 .note-viewer__body :deep(a) {
-  color: var(--color-accent, #4a9eff);
+  color: var(--neon-cyan-60);
   text-decoration: none;
+}
+
+.note-viewer__body :deep(a:hover) {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 6px var(--neon-cyan-15);
 }
 
 .note-viewer__body :deep(a:hover) {

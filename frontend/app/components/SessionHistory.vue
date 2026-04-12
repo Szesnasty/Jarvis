@@ -43,32 +43,44 @@ function formatDate(iso: string): string {
 <style scoped>
 .session-history {
   width: 100%;
-  max-width: 300px;
-  border-right: 1px solid #333;
-  padding: 0.5rem;
+  max-width: 280px;
+  border-right: 1px solid var(--border-default);
+  padding: 0.75rem;
+  background: var(--bg-base);
+  overflow-y: auto;
 }
 
 .session-history__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .session-history__title {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   margin: 0;
-  color: #ccc;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .session-history__new {
-  background: none;
-  border: 1px solid #555;
-  color: #ccc;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
+  background: transparent;
+  border: 1px solid var(--neon-cyan-30);
+  color: var(--neon-cyan);
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 0.75rem;
+  transition: all 0.2s;
+}
+
+.session-history__new:hover {
+  background: var(--neon-cyan-08);
+  box-shadow: 0 0 10px var(--neon-cyan-08);
 }
 
 .session-history__list {
@@ -78,39 +90,47 @@ function formatDate(iso: string): string {
 }
 
 .session-history__item {
-  padding: 0.4rem 0.5rem;
-  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
+  transition: all 0.15s;
+  border: 1px solid transparent;
 }
 
 .session-history__item:hover {
-  background: #2a2a2a;
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
 }
 
 .session-history__item--active {
-  background: #333;
+  background: var(--neon-cyan-08);
+  border-color: var(--neon-cyan-15);
 }
 
 .session-history__item-title {
   font-size: 0.8rem;
-  color: #eee;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.session-history__item--active .session-history__item-title {
+  color: var(--neon-cyan);
+}
+
 .session-history__item-meta {
   font-size: 0.7rem;
-  color: #888;
+  color: var(--text-muted);
 }
 
 .session-history__empty {
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-muted);
   text-align: center;
-  padding: 1rem 0;
+  padding: 1.5rem 0;
 }
-</style>
+</style>      

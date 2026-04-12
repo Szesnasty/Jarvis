@@ -38,13 +38,20 @@ defineEmits<{
   align-items: center;
   gap: 1rem;
   padding: 1rem;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   cursor: pointer;
+  background: var(--bg-surface);
+  transition: all 0.2s;
+}
+.specialist-card:hover {
+  border-color: var(--border-subtle);
+  box-shadow: 0 0 12px var(--neon-cyan-08);
 }
 .specialist-card--active {
-  border-color: var(--color-primary, #60a5fa);
-  background: rgba(96, 165, 250, 0.08);
+  border-color: var(--neon-cyan-30);
+  background: var(--neon-cyan-08);
+  box-shadow: 0 0 15px var(--neon-cyan-08);
 }
 .specialist-card__icon {
   font-size: 2rem;
@@ -68,16 +75,18 @@ defineEmits<{
 .specialist-card__activate-btn,
 .specialist-card__delete-btn {
   padding: 0.25rem 0.75rem;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--neon-cyan-30);
   border-radius: 4px;
-  background: transparent;
-  color: inherit;
+  background: var(--neon-cyan-08);
+  color: var(--neon-cyan);
   cursor: pointer;
   font-size: 0.85rem;
+  transition: all 0.2s;
 }
 .specialist-card__activate-btn:hover {
-  background: var(--color-primary, #60a5fa);
-  color: #fff;
+  background: rgba(2, 254, 255, 0.15);
+  border-color: var(--neon-cyan-60);
+  box-shadow: 0 0 10px var(--neon-cyan-08);
 }
 .specialist-card__delete-btn:hover {
   background: #ef4444;

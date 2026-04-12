@@ -82,11 +82,15 @@ def save_session(session_id: str, workspace_path: Optional[Path] = None) -> None
     if not session:
         return
 
+    messages = session["messages"]
+    # Don't persist sessions with no messages
+    if not messages:
+        return
+
     ws = _get_workspace_path(workspace_path)
     sessions_dir = ws / "app" / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
 
-    messages = session["messages"]
     title = ""
     for msg in messages:
         if msg["role"] == "user":

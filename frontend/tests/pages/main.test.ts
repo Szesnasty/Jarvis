@@ -23,22 +23,22 @@ describe('pages/main.vue', () => {
     expect(wrapper.find('.chat-panel').exists()).toBe(true)
   })
 
-  it('renders text input element', async () => {
+  it('renders textarea input element', async () => {
     registerDefaults()
     const wrapper = await mountSuspended(MainPage)
-    expect(wrapper.find('input[type="text"]').exists()).toBe(true)
+    expect(wrapper.find('textarea.chat-panel__input').exists()).toBe(true)
   })
 
   it('has a send button', async () => {
     registerDefaults()
     const wrapper = await mountSuspended(MainPage)
-    expect(wrapper.find('.chat-panel__send').exists()).toBe(true)
+    expect(wrapper.find('.chat-panel__icon-btn--send').exists()).toBe(true)
   })
 
   it('renders Orb component', async () => {
     registerDefaults()
     const wrapper = await mountSuspended(MainPage)
-    expect(wrapper.find('.orb').exists()).toBe(true)
+    expect(wrapper.find('.orb-svg').exists()).toBe(true)
   })
 
   it('renders SessionHistory component', async () => {

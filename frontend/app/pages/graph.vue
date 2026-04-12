@@ -69,40 +69,51 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  background: var(--bg-deep);
 }
 
 .graph-view__toolbar {
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid #333;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-base);
 }
 
 .graph-view__title {
-  font-size: 1rem;
+  font-size: 0.95rem;
   margin: 0;
-  color: #eee;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
 }
 
 .graph-view__controls {
   display: flex;
-  gap: 0.3rem;
+  gap: 0.35rem;
 }
 
 .graph-view__btn {
-  background: #2a2a2a;
-  border: 1px solid #555;
-  color: #ccc;
-  padding: 0.2rem 0.6rem;
-  border-radius: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  padding: 0.25rem 0.65rem;
+  border-radius: 6px;
   cursor: pointer;
   font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.graph-view__btn:hover {
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan-30);
+  background: var(--bg-elevated);
+  box-shadow: 0 0 8px var(--neon-cyan-08);
 }
 
 .graph-view__stats {
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-muted);
   margin-left: auto;
 }
 
@@ -119,25 +130,27 @@ onMounted(() => {
 }
 
 .graph-view__preview {
-  width: 250px;
-  border-left: 1px solid #333;
-  padding: 1rem;
+  width: 260px;
+  border-left: 1px solid var(--border-default);
+  padding: 1.25rem;
+  background: var(--bg-base);
 }
 
 .graph-view__preview-title {
-  font-size: 0.9rem;
-  margin: 0 0 0.3rem;
-  color: #eee;
+  font-size: 0.95rem;
+  margin: 0 0 0.4rem;
+  color: var(--neon-cyan);
 }
 
 .graph-view__preview-type {
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-secondary);
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .graph-view__preview-folder {
   font-size: 0.75rem;
-  color: #666;
+  color: var(--text-muted);
 }
 </style>

@@ -8,22 +8,20 @@
         @new-session="handleNewSession"
       />
       <main class="main-page__content">
-        <Orb :state="orbState" />
+        <div class="main-page__orb-area" :class="{ 'main-page__orb-area--hero': messages.length === 0 }">
+          <Orb :state="orbState" />
+        </div>
         <TranscriptBar :transcript="transcript" :visible="voiceState !== 'idle'" />
         <ChatPanel
           :messages="messages"
           :current-response="currentResponse"
           :is-loading="isLoading"
           :tool-activity="toolActivity"
+          :voice-state="voiceState"
+          :voice-supported="isVoiceAvailable"
           @send="handleSend"
+          @toggle-voice="handleVoiceToggle"
         />
-        <div class="main-page__voice-bar">
-          <VoiceButton
-            :state="voiceState"
-            :supported="isVoiceAvailable"
-            @toggle="handleVoiceToggle"
-          />
-        </div>
       </main>
     </div>
   </div>
@@ -103,12 +101,14 @@ onMounted(async () => {
 .main-page {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .main-page__layout {
   flex: 1;
   display: flex;
+  min-height: 0;
 }
 
 .main-page__content {
@@ -116,13 +116,20 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
-  padding-top: 2rem;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.main-page__voice-bar {
-  padding: 0.5rem;
+.main-page__orb-area {
+  padding: 1rem 0;
+  transition: all 0.5s ease;
+  flex-shrink: 0;
+}
+
+.main-page__orb-area--hero {
+  flex: 1;
   display: flex;
+  align-items: center;
   justify-content: center;
 }
 </style>

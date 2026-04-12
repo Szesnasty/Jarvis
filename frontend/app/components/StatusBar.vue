@@ -23,7 +23,7 @@ const { backendStatus } = useAppState()
 const statusText = computed(() => {
   switch (backendStatus.value) {
     case 'online':
-      return 'Online'
+      return 'Alive'
     case 'offline':
       return 'Offline'
     default:
@@ -37,62 +37,76 @@ const statusText = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 1rem;
-  background-color: #111122;
-  border-bottom: 1px solid #222;
+  padding: 0.6rem 1.25rem;
+  background-color: var(--bg-base);
+  border-bottom: 1px solid var(--border-default);
+  backdrop-filter: blur(12px);
 }
 
 .status-bar__label {
-  font-weight: 600;
-  font-size: 0.875rem;
+  font-weight: 700;
+  font-size: 0.9rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.12em;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 10px var(--neon-cyan-30);
 }
 
 .status-bar__nav {
   display: flex;
-  gap: 1rem;
+  gap: 0.25rem;
   flex: 1;
   justify-content: center;
 }
 
 .status-bar__link {
-  color: #9ca3af;
+  color: var(--text-secondary);
   text-decoration: none;
   font-size: 0.85rem;
-  padding: 0.25rem 0.5rem;
+  padding: 0.3rem 0.75rem;
   border-radius: 6px;
-  transition: color 0.15s, background-color 0.15s;
+  transition: all 0.2s;
+  border: 1px solid transparent;
 }
 
 .status-bar__link:hover {
-  color: #e5e7eb;
-  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+  background-color: var(--neon-cyan-08);
+  border-color: var(--border-subtle);
+  text-shadow: 0 0 6px var(--neon-cyan-15);
 }
 
 .status-bar__link.router-link-active {
-  color: #60a5fa;
-  background-color: rgba(96, 165, 250, 0.1);
+  color: var(--neon-cyan);
+  background-color: var(--neon-cyan-08);
+  border-color: var(--neon-cyan-30);
+  text-shadow: 0 0 8px var(--neon-cyan-30);
+  box-shadow: 0 0 12px var(--neon-cyan-08);
 }
 
 .status-bar__indicator {
   font-size: 0.75rem;
-  padding: 0.125rem 0.5rem;
+  padding: 0.15rem 0.6rem;
   border-radius: 9999px;
+  border: 1px solid transparent;
 }
 
 .status-bar__indicator.online {
-  color: #22c55e;
-  background-color: rgba(34, 197, 94, 0.1);
+  color: var(--neon-green);
+  background-color: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.2);
+  text-shadow: 0 0 6px rgba(34, 197, 94, 0.3);
 }
 
 .status-bar__indicator.offline {
-  color: #ef4444;
-  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--neon-red);
+  background-color: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
 }
 
 .status-bar__indicator.unknown {
-  color: #eab308;
-  background-color: rgba(234, 179, 8, 0.1);
+  color: var(--neon-yellow);
+  background-color: rgba(234, 179, 8, 0.08);
+  border-color: rgba(234, 179, 8, 0.2);
 }
 </style>

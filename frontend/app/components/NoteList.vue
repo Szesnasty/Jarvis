@@ -88,7 +88,7 @@ function onClearSearch() {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 1rem;
+  padding: 1rem 1.25rem;
   height: 100%;
   overflow-y: auto;
 }
@@ -100,45 +100,59 @@ function onClearSearch() {
 
 .note-list__search-input {
   flex: 1;
-  padding: 0.5rem;
-  border: 1px solid var(--color-border, #333);
-  border-radius: 0.25rem;
-  background: var(--color-surface, #1a1a1a);
-  color: var(--color-text, #e0e0e0);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }
 
 .note-list__clear {
   padding: 0.5rem 0.75rem;
   background: transparent;
-  border: 1px solid var(--color-border, #333);
-  border-radius: 0.25rem;
-  color: var(--color-text, #e0e0e0);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-secondary);
   cursor: pointer;
+  transition: all 0.2s;
+}
+
+.note-list__clear:hover {
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan-30);
 }
 
 .note-list__folders {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: 0.35rem;
 }
 
 .note-list__folder-btn {
-  padding: 0.25rem 0.5rem;
-  background: var(--color-surface, #1a1a1a);
-  border: 1px solid var(--color-border, #333);
-  border-radius: 0.25rem;
-  color: var(--color-text, #e0e0e0);
+  padding: 0.3rem 0.65rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-secondary);
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.note-list__folder-btn:hover {
+  border-color: var(--neon-cyan-30);
+  color: var(--neon-cyan);
 }
 
 .note-list__folder-btn--active {
-  background: var(--color-accent, #4a9eff);
-  color: #fff;
+  background: var(--neon-cyan-08);
+  border-color: var(--neon-cyan-30);
+  color: var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan-08);
 }
 
 .note-list__empty {
-  color: var(--color-muted, #888);
+  color: var(--text-muted);
   text-align: center;
   padding: 2rem 0;
 }
@@ -152,28 +166,41 @@ function onClearSearch() {
 .note-list__item {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: 0.5rem;
-  border-radius: 0.25rem;
+  gap: 0.2rem;
+  padding: 0.6rem 0.65rem;
+  border-radius: 8px;
   cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
 }
 
-.note-list__item:hover,
+.note-list__item:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+}
+
 .note-list__item--active {
-  background: var(--color-surface, #1a1a1a);
+  background: var(--neon-cyan-08);
+  border-color: var(--neon-cyan-15);
+}
+
+.note-list__item--active .note-list__item-title {
+  color: var(--neon-cyan);
 }
 
 .note-list__item-title {
   font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-primary);
 }
 
 .note-list__item-tags {
-  font-size: 0.8rem;
-  color: var(--color-muted, #888);
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 
 .note-list__item-date {
-  font-size: 0.75rem;
-  color: var(--color-muted, #888);
+  font-size: 0.7rem;
+  color: var(--text-muted);
 }
 </style>

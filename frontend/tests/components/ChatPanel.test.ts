@@ -76,30 +76,30 @@ describe('ChatPanel', () => {
     expect(wrapper.find('.chat-panel__activity').text()).toBe('Searching notes...')
   })
 
-  it('has text input and send button', async () => {
+  it('has textarea input and send button', async () => {
     const wrapper = await mountSuspended(ChatPanel, { props: baseProps })
     expect(wrapper.find('.chat-panel__input').exists()).toBe(true)
-    expect(wrapper.find('.chat-panel__send').exists()).toBe(true)
+    expect(wrapper.find('.chat-panel__icon-btn--send').exists()).toBe(true)
   })
 
   it('send button disabled while loading', async () => {
     const wrapper = await mountSuspended(ChatPanel, {
       props: { ...baseProps, isLoading: true },
     })
-    const btn = wrapper.find('.chat-panel__send')
+    const btn = wrapper.find('.chat-panel__icon-btn--send')
     expect(btn.attributes('disabled')).toBeDefined()
   })
 
   it('shows URL action bar when input contains URL', async () => {
     const wrapper = await mountSuspended(ChatPanel, { props: baseProps })
-    await wrapper.find('.chat-panel__input').setValue('check this https://example.com')
+    await wrapper.find('textarea.chat-panel__input').setValue('check this https://example.com')
     expect(wrapper.find('.chat-panel__url-bar').exists()).toBe(true)
     expect(wrapper.find('.chat-panel__url-action').text()).toContain('Save to memory')
   })
 
   it('does not show URL action bar for regular text', async () => {
     const wrapper = await mountSuspended(ChatPanel, { props: baseProps })
-    await wrapper.find('.chat-panel__input').setValue('hello world only')
+    await wrapper.find('textarea.chat-panel__input').setValue('hello world only')
     expect(wrapper.find('.chat-panel__url-bar').exists()).toBe(false)
   })
 })

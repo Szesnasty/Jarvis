@@ -12,7 +12,7 @@
       <span class="graph-canvas__tooltip-degree" v-if="hoveredDegree > 0">{{ hoveredDegree }} connections</span>
     </div>
     <div class="graph-canvas__legend">
-      <span class="graph-canvas__legend-item"><i style="background:#60a5fa"></i> note</span>
+      <span class="graph-canvas__legend-item"><i style="background:rgba(2,254,255,1)"></i> note</span>
       <span class="graph-canvas__legend-item"><i style="background:#34d399"></i> tag</span>
       <span class="graph-canvas__legend-item"><i style="background:#c084fc"></i> person</span>
       <span class="graph-canvas__legend-item"><i style="background:#fb923c"></i> area</span>
@@ -44,26 +44,33 @@ let resizeObserver: ResizeObserver | null = null
 
 // --- Color palette ---
 const NODE_COLOR: Record<string, string> = {
-  note: '#60a5fa',
+  note: 'rgba(2, 254, 255, 1)',
   tag: '#34d399',
   person: '#c084fc',
   area: '#fb923c',
 }
 
+const NODE_GLOW: Record<string, string> = {
+  note: 'rgba(2, 254, 255, 0.5)',
+  tag: 'rgba(52, 211, 153, 0.5)',
+  person: 'rgba(192, 132, 252, 0.5)',
+  area: 'rgba(251, 146, 60, 0.5)',
+}
+
 const EDGE_COLOR: Record<string, string> = {
-  tagged:   'rgba(52, 211, 153, 0.35)',   // green — tag links
-  part_of:  'rgba(251, 146, 60, 0.25)',   // orange — folder membership
-  linked:   'rgba(167, 139, 250, 0.45)',  // purple — wiki links
-  mentions: 'rgba(192, 132, 252, 0.4)',   // purple — people
-  related:  'rgba(96, 165, 250, 0.4)',    // blue — explicit related
+  tagged:   'rgba(52, 211, 153, 0.4)',
+  part_of:  'rgba(251, 146, 60, 0.25)',
+  linked:   'rgba(2, 254, 255, 0.4)',
+  mentions: 'rgba(192, 132, 252, 0.4)',
+  related:  'rgba(2, 254, 255, 0.35)',
 }
 
 const EDGE_PARTICLE_COLOR: Record<string, string> = {
-  tagged:   'rgba(52, 211, 153, 0.6)',
-  part_of:  'rgba(251, 146, 60, 0.4)',
-  linked:   'rgba(167, 139, 250, 0.7)',
-  mentions: 'rgba(192, 132, 252, 0.6)',
-  related:  'rgba(96, 165, 250, 0.6)',
+  tagged:   'rgba(52, 211, 153, 0.7)',
+  part_of:  'rgba(251, 146, 60, 0.5)',
+  linked:   'rgba(2, 254, 255, 0.8)',
+  mentions: 'rgba(192, 132, 252, 0.7)',
+  related:  'rgba(2, 254, 255, 0.7)',
 }
 
 // --- Compute degree per node (for sizing) ---
@@ -97,7 +104,7 @@ async function buildGraph() {
   const degrees = computeDegrees()
 
   graph = new ForceGraph(el)
-    .backgroundColor('#0f172a')
+    .backgroundColor('#06080d')
     .width(el.clientWidth)
     .height(el.clientHeight)
     .nodeId('id')
@@ -107,18 +114,29 @@ async function buildGraph() {
       const deg = degrees[node.id] || 0
       const r = nodeRadius(node.type, deg)
       const color = NODE_COLOR[node.type] ?? '#9ca3af'
+      const glow = NODE_GLOW[node.type] ?? 'rgba(156, 163, 175, 0.3)'
       const isHighlighted = props.highlightedNode === node.id
       const isHovered = hoveredNode.value?.id === node.id
 
-      // Outer glow for highlighted / hovered
-      if (isHighlighted || isHovered) {
-        ctx.beginPath()
-        ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI)
-        ctx.fillStyle = color.replace(')', ', 0.15)').replace('rgb', 'rgba')
-        ctx.fill()
+      // Outer soft aura — big diffuse glow
+      ctx.beginPath()
+      ctx.arc(node.x, node.y, r + 10, 0, 2 * Math.PI)
+      ctx.fillStyle = glow.replace(/[\d.]+\)$/, '0.06)')
+      ctx.fill()
 
+      // Neon glow aura — always visible
+      ctx.beginPath()
+      ctx.arc(node.x, node.y, r + 5, 0, 2 * Math.PI)
+      ctx.fillStyle = glow.replace(/[\d.]+\)$/, '0.18)')
+      ctx.fill()
+
+      // Enhanced glow for highlighted / hovered
+      if (isHighlighted || isHovered) {
         ctx.shadowColor = color
-        ctx.shadowBlur = isHighlighted ? 20 : 12
+        ctx.shadowBlur = isHighlighted ? 35 : 22
+      } else {
+        ctx.shadowColor = glow
+        ctx.shadowBlur = 15
       }
 
       // Node body
@@ -127,12 +145,10 @@ async function buildGraph() {
       ctx.fillStyle = color
       ctx.fill()
 
-      // Subtle border for areas
-      if (node.type === 'area') {
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)'
-        ctx.lineWidth = 0.5
-        ctx.stroke()
-      }
+      // Bright edge ring
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)'
+      ctx.lineWidth = 0.4
+      ctx.stroke()
 
       ctx.shadowBlur = 0
 
@@ -299,8 +315,9 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   position: relative;
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
+  border: 1px solid var(--border-default);
 }
 
 .graph-canvas__container {
@@ -326,47 +343,50 @@ onBeforeUnmount(() => {
 
 .graph-canvas__btn {
   padding: 0.4rem 0.7rem;
-  background: rgba(30, 41, 59, 0.85);
-  backdrop-filter: blur(6px);
-  color: #94a3b8;
-  border: 1px solid rgba(100, 116, 139, 0.3);
+  background: var(--bg-surface);
+  backdrop-filter: blur(8px);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.8rem;
-  transition: all 0.15s;
+  transition: all 0.2s;
 }
 
 .graph-canvas__btn:hover {
-  background: rgba(51, 65, 85, 0.9);
-  color: #e2e8f0;
+  background: var(--bg-elevated);
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan-30);
+  box-shadow: 0 0 10px var(--neon-cyan-08);
 }
 
 .graph-canvas__tooltip {
   position: absolute;
   pointer-events: none;
   z-index: 20;
-  background: rgba(15, 23, 42, 0.92);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(100, 160, 220, 0.3);
-  border-radius: 6px;
-  padding: 0.4rem 0.6rem;
+  background: rgba(6, 8, 13, 0.94);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--neon-cyan-30);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
   font-size: 0.75rem;
-  color: #e2e8f0;
+  color: var(--text-primary);
+  box-shadow: 0 0 20px var(--neon-cyan-08);
 }
 
 .graph-canvas__tooltip-type {
   font-size: 0.65rem;
-  color: #64748b;
+  color: var(--neon-cyan-60);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .graph-canvas__tooltip-degree {
   font-size: 0.6rem;
-  color: #475569;
+  color: var(--text-muted);
 }
 
 .graph-canvas__legend {
@@ -377,7 +397,7 @@ onBeforeUnmount(() => {
   gap: 0.6rem;
   z-index: 10;
   font-size: 0.65rem;
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 .graph-canvas__legend-item {
@@ -391,6 +411,7 @@ onBeforeUnmount(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
 }
 </style>
 

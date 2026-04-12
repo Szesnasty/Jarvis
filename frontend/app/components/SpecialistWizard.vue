@@ -17,7 +17,7 @@
         <label class="specialist-wizard__label">Name</label>
         <input v-model="form.name" class="specialist-wizard__input" placeholder="e.g. Health Guide" />
         <label class="specialist-wizard__label">Icon (emoji)</label>
-        <input v-model="form.icon" class="specialist-wizard__input" placeholder="🤖" />
+        <input v-model="form.icon" class="specialist-wizard__input" placeholder="�" />
       </div>
 
       <!-- Step 2: Role -->
@@ -92,7 +92,7 @@ const step = ref(1)
 
 const form = reactive({
   name: '',
-  icon: '🤖',
+  icon: '�',
   role: '',
   sources: [] as string[],
   style: { tone: '', format: '', length: '' },
@@ -169,8 +169,9 @@ function submit() {
 }
 .specialist-wizard__step--active {
   opacity: 1;
-  background: var(--color-primary, #60a5fa);
-  color: #fff;
+  background: var(--neon-cyan-30);
+  color: var(--neon-cyan);
+  text-shadow: 0 0 6px var(--neon-cyan-30);
 }
 .specialist-wizard__section {
   display: flex;
@@ -183,17 +184,22 @@ function submit() {
 }
 .specialist-wizard__input {
   padding: 0.5rem;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
-  background: transparent;
+  background: var(--bg-base);
   color: inherit;
   font-size: 1rem;
 }
+.specialist-wizard__input:focus {
+  outline: none;
+  border-color: var(--neon-cyan-60);
+  box-shadow: 0 0 10px var(--neon-cyan-08);
+}
 .specialist-wizard__textarea {
   padding: 0.5rem;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--border-default);
   border-radius: 4px;
-  background: transparent;
+  background: var(--bg-base);
   color: inherit;
   font-size: 1rem;
   min-height: 120px;
@@ -213,21 +219,24 @@ function submit() {
 .specialist-wizard__next-btn,
 .specialist-wizard__submit-btn {
   padding: 0.5rem 1.5rem;
-  border: 1px solid var(--color-border, #333);
+  border: 1px solid var(--neon-cyan-30);
   border-radius: 4px;
-  background: transparent;
-  color: inherit;
+  background: var(--neon-cyan-08);
+  color: var(--neon-cyan);
   cursor: pointer;
   font-size: 0.9rem;
+  transition: all 0.2s;
 }
 .specialist-wizard__next-btn:hover,
 .specialist-wizard__submit-btn:hover {
-  background: var(--color-primary, #60a5fa);
-  color: #fff;
+  background: rgba(2, 254, 255, 0.15);
+  border-color: var(--neon-cyan-60);
+  box-shadow: 0 0 12px var(--neon-cyan-08);
+  text-shadow: 0 0 6px var(--neon-cyan-30);
 }
 .specialist-wizard__submit-btn {
-  background: var(--color-primary, #60a5fa);
-  color: #fff;
+  background: var(--neon-cyan-30);
+  color: var(--neon-cyan);
 }
 .specialist-wizard__review p {
   margin: 0.25rem 0;

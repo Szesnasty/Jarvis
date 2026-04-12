@@ -37,8 +37,8 @@ const label = computed(() => {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  border: 2px solid #444;
-  background: #1e293b;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -53,16 +53,17 @@ const label = computed(() => {
 }
 
 .voice-button.listening {
-  border-color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
   animation: pulse-ring 1.2s ease-in-out infinite;
 }
 
 .voice-button.thinking {
-  border-color: #eab308;
+  border-color: var(--neon-yellow);
 }
 
 .voice-button.speaking {
-  border-color: #6ab0f3;
+  border-color: var(--neon-cyan-30);
 }
 
 .voice-button__icon {
