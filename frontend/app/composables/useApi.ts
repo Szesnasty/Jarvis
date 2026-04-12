@@ -1,4 +1,4 @@
-import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse } from '~/types'
+import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse } from '~/types'
 
 export class ApiError extends Error {
   status: number
@@ -53,5 +53,44 @@ export function useApi() {
     }
   }
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace }
+  async function fetchNotes(params?: { folder?: string; search?: string; limit?: number }): Promise<NoteMetadata[]> {
+    try {
+      return await $fetch<NoteMetadata[]>('/api/memory/notes', { params })
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  async function fetchNote(path: string): Promise<NoteDetail> {
+    try {
+      return await $fetch<NoteDetail>(`/api/memory/notes/${path}`)
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  async function deleteNote(path: string): Promise<void> {
+    try {
+      await $fetch(`/api/memory/notes/${path}`, { method: 'DELETE' })
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote }
 }

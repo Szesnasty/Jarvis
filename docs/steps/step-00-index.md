@@ -17,7 +17,7 @@
 
 | Step | Title | Status |
 |------|-------|--------|
-| [04](step-04-memory-service.md) | Memory service + SQLite index | ⬜ |
+| [04](step-04-memory-service.md) | Memory service + SQLite index | ✅ |
 
 ## Phase 3 — Claude API
 

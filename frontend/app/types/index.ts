@@ -17,3 +17,24 @@ export interface WorkspaceInitResponse {
 }
 
 export type OrbState = 'idle' | 'listening' | 'thinking' | 'speaking'
+
+export interface NoteMetadata {
+  path: string
+  title: string
+  folder: string
+  tags: string[]
+  updated_at: string
+  word_count: number
+}
+
+export interface NoteDetail {
+  path: string
+  title: string
+  content: string
+  frontmatter: Record<string, unknown>
+  updated_at: string
+}
+
+export interface ReindexResponse {
+  indexed: number
+}

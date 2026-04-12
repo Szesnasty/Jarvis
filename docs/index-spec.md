@@ -32,7 +32,7 @@ Every step is considered **done** only when ALL of the following are true:
 
 ## Phase 2 — Local Memory
 
-- [ ] [Step 04 — Memory Service + SQLite Index](steps/step-04-memory-service.md)
+- [x] [Step 04 — Memory Service + SQLite Index](steps/step-04-memory-service.md)
 
 ## Phase 3 — Claude API
 
@@ -67,3 +67,4 @@ Every step is considered **done** only when ALL of the following are true:
 | 2026-04-12 | Step 01 | ✅ Done | `feat: step-01 backend init` |
 | 2025-07-15 | Step 02 | ✅ Done | `feat: step-02 frontend init (nuxt)` |
 | 2025-07-15 | Step 03 | ✅ Done | `feat: step-03 onboarding + workspace` |
+| 2025-07-15 | Step 04 | ✅ Done | `feat: step-04 memory service + sqlite index` |

@@ -21,3 +21,34 @@ class WorkspaceStatusResponse(BaseModel):
     initialized: bool
     workspace_path: Optional[str] = None
     api_key_set: Optional[bool] = None
+
+
+# --- Memory ---
+
+class NoteContentRequest(BaseModel):
+    content: str
+
+
+class NoteAppendRequest(BaseModel):
+    append: str
+
+
+class NoteMetadataResponse(BaseModel):
+    path: str
+    title: str
+    folder: str
+    tags: list
+    updated_at: str
+    word_count: int
+
+
+class NoteDetailResponse(BaseModel):
+    path: str
+    title: str
+    content: str
+    frontmatter: dict
+    updated_at: str
+
+
+class ReindexResponse(BaseModel):
+    indexed: int
