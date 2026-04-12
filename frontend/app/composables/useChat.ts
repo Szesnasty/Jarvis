@@ -1,4 +1,5 @@
 import type { ChatMessage, WsEvent } from '~/types'
+import { useWebSocket } from '~/composables/useWebSocket'
 
 export function useChat() {
   const messages = ref<ChatMessage[]>([])

@@ -110,13 +110,13 @@ describe('useChat', () => {
 
     sendMessage('Hi')
     expect(messages.value).toHaveLength(1)
-    expect(messages.value[0].role).toBe('user')
+    expect(messages.value[0]!.role).toBe('user')
 
     simulateEvent({ type: 'text_delta', content: 'Hello' })
     simulateEvent({ type: 'done', session_id: 'abc' })
 
     expect(messages.value).toHaveLength(2)
-    expect(messages.value[1].role).toBe('assistant')
+    expect(messages.value[1]!.role).toBe('assistant')
   })
 
   it('error event sets error ref', () => {

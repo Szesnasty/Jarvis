@@ -29,7 +29,7 @@
 
 | Step | Title | Status |
 |------|-------|--------|
-| [06](step-06-voice.md) | Voice input/output + states | ⬜ |
+| [06](step-06-voice.md) | Voice input/output + states | ✅ |
 
 ## Phase 5 — Planning & Operational Memory
 
