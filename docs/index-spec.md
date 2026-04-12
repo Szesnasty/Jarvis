@@ -26,7 +26,7 @@ Every step is considered **done** only when ALL of the following are true:
 
 ## Phase 1 — System Skeleton
 
-- [ ] [Step 01 — Backend Init (FastAPI)](steps/step-01-backend-init.md)
+- [x] [Step 01 — Backend Init (FastAPI)](steps/step-01-backend-init.md)
 - [ ] [Step 02 — Frontend Init (Vue + Vite)](steps/step-02-frontend-init.md)
 - [ ] [Step 03 — Onboarding + Workspace Creation](steps/step-03-onboarding-workspace.md)
 
@@ -64,4 +64,4 @@ Every step is considered **done** only when ALL of the following are true:
 
 | Date | Step | Status | Commit |
 |------|------|--------|--------|
-| | | | |
+| 2026-04-12 | Step 01 | ✅ Done | `feat: step-01 backend init` |
