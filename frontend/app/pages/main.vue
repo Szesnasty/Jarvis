@@ -8,7 +8,7 @@
         @new-session="handleNewSession"
       />
       <main class="main-page__content">
-        <div class="main-page__orb-area" :class="{ 'main-page__orb-area--hero': messages.length === 0 }">
+        <div class="main-page__orb-area" :class="{ 'main-page__orb-area--hero': !chatActive }">
           <Orb :state="orbState" />
         </div>
         <TranscriptBar :transcript="transcript" :visible="voiceState !== 'idle'" />
@@ -17,6 +17,7 @@
           :current-response="currentResponse"
           :is-loading="isLoading"
           :tool-activity="toolActivity"
+          :error="error"
           :voice-state="voiceState"
           :voice-supported="isVoiceAvailable"
           @send="handleSend"
@@ -35,9 +36,9 @@ import { useChat } from '~/composables/useChat'
 import { useSessions } from '~/composables/useSessions'
 import { useVoice } from '~/composables/useVoice'
 
-const { checkHealth } = useAppState()
+const { checkHealth, chatActive } = useAppState()
 const chat = useChat()
-const { messages, currentResponse, isLoading, toolActivity, init, sendMessage } = chat
+const { messages, currentResponse, isLoading, toolActivity, error, init, sendMessage } = chat
 
 const sessionsState = useSessions()
 const { sessions, activeSessionId } = sessionsState
@@ -90,6 +91,12 @@ function handleNewSession(): void {
   init()
 }
 
+watch(
+  () => messages.value.length,
+  (len) => { chatActive.value = len > 0 },
+  { immediate: true },
+)
+
 onMounted(async () => {
   checkHealth()
   init()
@@ -120,16 +127,29 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+/*
+  Orb is position:fixed so it can escape all containers and fly to the navbar.
+  Hero  → centered inside main content area (sidebar ≈ 280px, navbar ≈ 40px)
+  Mini  → overlaid on the "JARVIS" logo text in the top-left of the status bar
+*/
 .main-page__orb-area {
-  padding: 1rem 0;
-  transition: all 0.5s ease;
-  flex-shrink: 0;
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  /* Mini: center of the JARVIS label (navbar padding 20px, text ≈ 56px wide → center ≈ 48px; navbar height ≈ 40px → center ≈ 20px) */
+  top: 20px;
+  left: 48px;
+  transform: translate(-50%, -50%) scale(0.13);
+  transition:
+    top 0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    left 0.85s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.85s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Hero: centered in the content area (viewport minus sidebar 280px and navbar 40px) */
 .main-page__orb-area--hero {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  top: calc(20px + 50vh);
+  left: calc(140px + 50vw);
+  transform: translate(-50%, -50%) scale(1);
 }
 </style>

@@ -1,11 +1,21 @@
 <script setup lang="ts">
 import type { ChatMessage, OrbState, UrlIngestResult } from '~/types'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+
+marked.setOptions({ breaks: true, gfm: true })
+
+function renderMarkdown(text: string): string {
+  const html = marked.parse(text) as string
+  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
+}
 
 const props = defineProps<{
   messages: ChatMessage[]
   currentResponse: string
   isLoading: boolean
   toolActivity: string
+  error?: string
   voiceState?: OrbState
   voiceSupported?: boolean
 }>()
@@ -92,20 +102,22 @@ watch(
         class="chat-panel__message"
         :class="msg.role"
       >
-        <div class="chat-panel__bubble">
-          {{ msg.content }}
-        </div>
+        <div
+          class="chat-panel__bubble"
+          :class="{ 'chat-panel__bubble--md': msg.role === 'assistant' }"
+          v-html="msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content"
+        />
       </div>
 
       <div v-if="currentResponse" class="chat-panel__message assistant">
-        <div class="chat-panel__bubble">
-          {{ currentResponse }}
-          <span class="chat-panel__cursor">▊</span>
-        </div>
+        <div class="chat-panel__bubble chat-panel__bubble--md" v-html="renderMarkdown(currentResponse) + '<span class=chat-panel__cursor>▊</span>'" />
       </div>
 
       <div v-if="toolActivity" class="chat-panel__activity">
         {{ toolActivity }}
+      </div>
+      <div v-if="error" class="chat-panel__conn-error">
+        {{ error }}
       </div>
     </div>
 
@@ -205,6 +217,86 @@ watch(
   word-break: break-word;
   line-height: 1.55;
   font-size: 0.95rem;
+}
+
+/* Markdown content styles */
+.chat-panel__bubble--md {
+  white-space: normal;
+}
+.chat-panel__bubble--md :deep(p) {
+  margin: 0 0 0.5em;
+}
+.chat-panel__bubble--md :deep(p:last-child) {
+  margin-bottom: 0;
+}
+.chat-panel__bubble--md :deep(strong) {
+  color: var(--neon-cyan);
+  font-weight: 600;
+}
+.chat-panel__bubble--md :deep(em) {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.chat-panel__bubble--md :deep(code) {
+  background: rgba(2, 254, 255, 0.08);
+  border: 1px solid var(--neon-cyan-15);
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.88em;
+  color: var(--neon-cyan);
+}
+.chat-panel__bubble--md :deep(pre) {
+  background: var(--bg-deep);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.chat-panel__bubble--md :deep(pre code) {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.85em;
+  color: var(--text-primary);
+}
+.chat-panel__bubble--md :deep(ul),
+.chat-panel__bubble--md :deep(ol) {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+.chat-panel__bubble--md :deep(li) {
+  margin: 0.2em 0;
+}
+.chat-panel__bubble--md :deep(h1),
+.chat-panel__bubble--md :deep(h2),
+.chat-panel__bubble--md :deep(h3) {
+  color: var(--neon-cyan);
+  margin: 0.6em 0 0.3em;
+  font-size: 1em;
+  font-weight: 700;
+}
+.chat-panel__bubble--md :deep(blockquote) {
+  border-left: 3px solid var(--neon-cyan-30);
+  margin: 0.5em 0;
+  padding-left: 0.75em;
+  opacity: 0.8;
+}
+.chat-panel__bubble--md :deep(a) {
+  color: var(--neon-cyan);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.chat-panel__conn-error {
+  margin: 0.5rem 1.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: rgba(239, 68, 68, 0.9);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 6px;
 }
 
 .chat-panel__message.user .chat-panel__bubble {

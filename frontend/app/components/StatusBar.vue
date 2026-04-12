@@ -1,6 +1,6 @@
 <template>
   <header class="status-bar">
-    <span class="status-bar__label">Jarvis</span>
+    <span class="status-bar__label" :class="{ 'status-bar__label--hidden': chatActive }">Jarvis</span>
     <nav class="status-bar__nav">
       <NuxtLink to="/main" class="status-bar__link">Chat</NuxtLink>
       <NuxtLink to="/memory" class="status-bar__link">Memory</NuxtLink>
@@ -18,7 +18,7 @@
 </template>
 
 <script setup lang="ts">
-const { backendStatus } = useAppState()
+const { backendStatus, chatActive } = useAppState()
 
 const statusText = computed(() => {
   switch (backendStatus.value) {
@@ -50,6 +50,13 @@ const statusText = computed(() => {
   letter-spacing: 0.12em;
   color: var(--neon-cyan);
   text-shadow: 0 0 10px var(--neon-cyan-30);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+  min-width: 56px; /* keep space so navbar doesn't reflow */
+}
+
+.status-bar__label--hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .status-bar__nav {

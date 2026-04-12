@@ -9,7 +9,7 @@ export function useChat() {
   const error = ref('')
   const sessionId = ref('')
 
-  const { isConnected, connect, send, onMessage, close } = useWebSocket()
+  const { isConnected, connect, send, onMessage, close, onReconnect } = useWebSocket()
 
   function _handleEvent(event: WsEvent): void {
     if (event.type === 'session_start') {
@@ -49,6 +49,20 @@ export function useChat() {
       toolActivity.value = ''
       return
     }
+
+    // WebSocket disconnected mid-response — reset loading state
+    if ((event as any).type === 'disconnected') {
+      if (isLoading.value) {
+        if (currentResponse.value) {
+          messages.value.push({ role: 'assistant', content: currentResponse.value + ' *(connection lost)*' })
+          currentResponse.value = ''
+        }
+        isLoading.value = false
+        toolActivity.value = ''
+        error.value = 'Connection lost — reconnecting...'
+        setTimeout(() => { error.value = '' }, 3000)
+      }
+    }
   }
 
   function _toolLabel(name: string): string {
@@ -64,6 +78,11 @@ export function useChat() {
   function init(): void {
     connect()
     onMessage(_handleEvent)
+    // When WS reconnects, session_start fires automatically from backend
+    onReconnect(() => {
+      sessionId.value = ''
+      error.value = ''
+    })
   }
 
   function sendMessage(content: string): void {
@@ -74,7 +93,13 @@ export function useChat() {
     error.value = ''
     isLoading.value = true
 
-    send({ type: 'message', content: content.trim(), session_id: sessionId.value })
+    const sent = send({ type: 'message', content: content.trim(), session_id: sessionId.value })
+    if (!sent) {
+      // WS not ready — reset and show error
+      isLoading.value = false
+      error.value = 'Not connected — reconnecting, try again in a moment.'
+      setTimeout(() => { error.value = '' }, 4000)
+    }
   }
 
   function disconnect(): void {

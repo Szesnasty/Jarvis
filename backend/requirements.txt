@@ -10,6 +10,7 @@ youtube-transcript-api==1.2.4
 trafilatura==2.0.0
 markdownify==1.2.2
 lxml_html_clean==0.4.4
+pdfplumber==0.11.8
 
 # testing
 pytest==8.4.2

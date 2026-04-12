@@ -3,6 +3,7 @@ import type { BackendStatus } from '~/types'
 export function useAppState() {
   const isInitialized = useState<boolean>('isInitialized', () => false)
   const backendStatus = useState<BackendStatus>('backendStatus', () => 'unknown')
+  const chatActive = useState<boolean>('chatActive', () => false)
 
   async function checkHealth() {
     const { fetchHealth } = useApi()
@@ -27,6 +28,7 @@ export function useAppState() {
   return {
     isInitialized,
     backendStatus,
+    chatActive,
     checkHealth,
     checkWorkspaceStatus,
   }

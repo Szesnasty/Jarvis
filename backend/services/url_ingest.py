@@ -92,6 +92,25 @@ def _build_frontmatter(meta: dict) -> str:
     return fm
 
 
+async def _fetch_yt_metadata(video_id: str, url: str) -> Dict:
+    """Fetch video title and description via YouTube oEmbed API."""
+    import httpx
+
+    oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(oembed_url)
+            resp.raise_for_status()
+            data = resp.json()
+            return {
+                "title": data.get("title") or f"YouTube: {video_id}",
+                "author": data.get("author_name") or "",
+            }
+    except Exception as exc:
+        logger.warning("Could not fetch YouTube oEmbed metadata for %s: %s", video_id, exc)
+        return {"title": f"YouTube: {video_id}", "author": ""}
+
+
 async def _ingest_youtube(
     video_id: str,
     url: str,
@@ -101,23 +120,34 @@ async def _ingest_youtube(
     from youtube_transcript_api import YouTubeTranscriptApi
 
     ytt = YouTubeTranscriptApi()
+    transcript_text: Optional[str] = None
 
     # Try fetching transcript: pl first, then en, then any available
     try:
         transcript = ytt.fetch(video_id, languages=["pl", "en"])
+        segments = [snippet.text for snippet in transcript]
+        transcript_text = "\n\n".join(segments)
     except Exception:
         try:
             transcript = ytt.fetch(video_id)
+            segments = [snippet.text for snippet in transcript]
+            transcript_text = "\n\n".join(segments)
         except Exception as exc:
-            raise IngestError(f"No transcript available for video {video_id}: {exc}")
+            logger.warning("No transcript for video %s: %s — saving metadata only", video_id, exc)
 
-    # Build text from snippets
-    segments = [snippet.text for snippet in transcript]
-    text = "\n\n".join(segments)
-    if len(text) > MAX_TRANSCRIPT_CHARS:
-        text = text[:MAX_TRANSCRIPT_CHARS] + "\n\n[...transcript truncated]"
+    if transcript_text and len(transcript_text) > MAX_TRANSCRIPT_CHARS:
+        transcript_text = transcript_text[:MAX_TRANSCRIPT_CHARS] + "\n\n[...transcript truncated]"
 
-    title = f"YouTube: {video_id}"
+    # Fetch title from oEmbed
+    metadata = await _fetch_yt_metadata(video_id, url)
+    title = metadata["title"]
+    author = metadata["author"]
+
+    tags = ["youtube", "video"]
+    if transcript_text:
+        tags.append("transcript")
+    else:
+        tags.append("no-transcript")
 
     frontmatter = {
         "title": title,
@@ -126,8 +156,18 @@ async def _ingest_youtube(
         "video_id": video_id,
         "created_at": _now_iso(),
         "updated_at": _now_iso(),
-        "tags": ["youtube", "video", "transcript"],
+        "tags": tags,
     }
+
+    body_lines = [f"# {title}\n"]
+    if author:
+        body_lines.append(f"**Channel:** {author}\n")
+    body_lines.append(f"**URL:** {url}\n")
+    if transcript_text:
+        body_lines.append("\n## Transcript\n")
+        body_lines.append(transcript_text)
+    else:
+        body_lines.append("\n*No transcript available for this video.*\n")
 
     mem = _memory_dir(workspace_path)
     folder_path = mem / folder
@@ -135,7 +175,7 @@ async def _ingest_youtube(
 
     filename = f"yt-{video_id}.md"
     target = _unique_path(folder_path / filename)
-    content = _build_frontmatter(frontmatter) + f"# {title}\n\n{text}\n"
+    content = _build_frontmatter(frontmatter) + "\n".join(body_lines) + "\n"
     target.write_text(content, encoding="utf-8")
 
     rel_path = target.relative_to(mem).as_posix()
@@ -155,7 +195,7 @@ async def _ingest_youtube(
     except Exception as exc:
         logger.warning("Graph rebuild after YT ingest failed: %s", exc)
 
-    word_count = len(text.split())
+    word_count = len(transcript_text.split()) if transcript_text else 0
     return {
         "path": rel_path,
         "title": title,

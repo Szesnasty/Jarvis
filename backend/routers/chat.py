@@ -190,11 +190,17 @@ async def _handle_message(
 
 
 def _parse_message(raw: str) -> tuple:
-    """Parse raw WS text. Returns (data, error_message)."""
+    """Parse raw WS text. Returns (data, error_message).
+    Returns (None, None) for control messages like ping that should be silently ignored.
+    """
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
         return None, "Invalid JSON"
+
+    # Silently ignore heartbeat pings
+    if data.get("type") == "ping":
+        return None, None
 
     content = data.get("content", "").strip()
     if not content:
@@ -214,6 +220,10 @@ async def chat_ws(websocket: WebSocket) -> None:
         while True:
             raw = await websocket.receive_text()
             data, error = _parse_message(raw)
+
+            # Silently ignore pings (data=None, error=None)
+            if data is None and error is None:
+                continue
 
             if error:
                 await _send_event(websocket, "error", content=error)
