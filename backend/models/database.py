@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS notes (
     title TEXT NOT NULL DEFAULT '',
     folder TEXT NOT NULL DEFAULT '',
     content_preview TEXT DEFAULT '',
+    body TEXT DEFAULT '',
     tags TEXT DEFAULT '[]',
     frontmatter TEXT DEFAULT '{}',
     created_at TEXT NOT NULL,
@@ -22,7 +23,7 @@ CREATE INDEX IF NOT EXISTS idx_notes_updated ON notes(updated_at);
 
 FTS_SQL = """
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-    title, content_preview, tags,
+    title, body, tags,
     content='notes',
     content_rowid='id'
 );
@@ -30,35 +31,62 @@ CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
 
 TRIGGER_SQL = """
 CREATE TRIGGER IF NOT EXISTS notes_ai AFTER INSERT ON notes BEGIN
-    INSERT INTO notes_fts(rowid, title, content_preview, tags)
-    VALUES (new.id, new.title, new.content_preview, new.tags);
+    INSERT INTO notes_fts(rowid, title, body, tags)
+    VALUES (new.id, new.title, new.body, new.tags);
 END;
 
 CREATE TRIGGER IF NOT EXISTS notes_ad AFTER DELETE ON notes BEGIN
-    INSERT INTO notes_fts(notes_fts, rowid, title, content_preview, tags)
-    VALUES ('delete', old.id, old.title, old.content_preview, old.tags);
+    INSERT INTO notes_fts(notes_fts, rowid, title, body, tags)
+    VALUES ('delete', old.id, old.title, old.body, old.tags);
 END;
 
 CREATE TRIGGER IF NOT EXISTS notes_au AFTER UPDATE ON notes BEGIN
-    INSERT INTO notes_fts(notes_fts, rowid, title, content_preview, tags)
-    VALUES ('delete', old.id, old.title, old.content_preview, old.tags);
-    INSERT INTO notes_fts(rowid, title, content_preview, tags)
-    VALUES (new.id, new.title, new.content_preview, new.tags);
+    INSERT INTO notes_fts(notes_fts, rowid, title, body, tags)
+    VALUES ('delete', old.id, old.title, old.body, old.tags);
+    INSERT INTO notes_fts(rowid, title, body, tags)
+    VALUES (new.id, new.title, new.body, new.tags);
 END;
 """
+
+
+async def _column_exists(db, table: str, column: str) -> bool:
+    cursor = await db.execute(f"PRAGMA table_info({table})")
+    rows = await cursor.fetchall()
+    return any(row[1] == column for row in rows)
+
+
+async def _fts_indexes_body(db) -> bool:
+    cursor = await db.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'"
+    )
+    row = await cursor.fetchone()
+    if not row or not row[0]:
+        return False
+    return " body" in row[0] or "(body" in row[0] or ",body" in row[0]
 
 
 async def init_database(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(str(db_path)) as db:
         await db.executescript(SCHEMA_SQL)
-        # FTS and triggers must be created separately — executescript may not handle them in one batch
+
+        if not await _column_exists(db, "notes", "body"):
+            await db.execute("ALTER TABLE notes ADD COLUMN body TEXT DEFAULT ''")
+
+        if not await _fts_indexes_body(db):
+            await db.executescript(
+                "DROP TRIGGER IF EXISTS notes_ai;"
+                "DROP TRIGGER IF EXISTS notes_au;"
+                "DROP TRIGGER IF EXISTS notes_ad;"
+                "DROP TABLE IF EXISTS notes_fts;"
+            )
+
         try:
             await db.executescript(FTS_SQL)
         except Exception:
-            pass  # Already exists
+            pass
         try:
             await db.executescript(TRIGGER_SQL)
         except Exception:
-            pass  # Already exists
+            pass
         await db.commit()

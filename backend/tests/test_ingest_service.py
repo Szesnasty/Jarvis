@@ -144,7 +144,7 @@ async def test_import_large_file_handled(ws_db, large_file):
 @pytest.mark.anyio
 async def test_enrich_adds_summary(ws_db, md_file):
     """Smart enrich requires Claude API. Mock test."""
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import AsyncMock, MagicMock, patch
     from services.ingest import smart_enrich
 
     result = await fast_ingest(md_file, "knowledge", workspace_path=ws_db)
@@ -152,9 +152,9 @@ async def test_enrich_adds_summary(ws_db, md_file):
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text='{"summary": "A test note.", "tags": ["test", "example"]}')]
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = mock_response
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
 
-    with patch("services._anthropic_client.create_client", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         enrich_result = await smart_enrich(result["path"], "sk-fake", workspace_path=ws_db)
         assert enrich_result["summary"] == "A test note."
         assert enrich_result["enriched"] is True
@@ -162,7 +162,7 @@ async def test_enrich_adds_summary(ws_db, md_file):
 
 @pytest.mark.anyio
 async def test_enrich_adds_tags(ws_db, md_file):
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import AsyncMock, MagicMock, patch
     from services.ingest import smart_enrich
 
     result = await fast_ingest(md_file, "knowledge", workspace_path=ws_db)
@@ -170,16 +170,16 @@ async def test_enrich_adds_tags(ws_db, md_file):
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text='{"summary": "Test", "tags": ["newtag"]}')]
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = mock_response
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
 
-    with patch("services._anthropic_client.create_client", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         enrich_result = await smart_enrich(result["path"], "sk-fake", workspace_path=ws_db)
         assert "newtag" in enrich_result["tags"]
 
 
 @pytest.mark.anyio
 async def test_enrich_preserves_existing_frontmatter(ws_db, md_file):
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import AsyncMock, MagicMock, patch
     from services.ingest import smart_enrich
 
     result = await fast_ingest(md_file, "knowledge", workspace_path=ws_db)
@@ -187,9 +187,9 @@ async def test_enrich_preserves_existing_frontmatter(ws_db, md_file):
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text='{"summary": "Sum", "tags": ["extra"]}')]
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = mock_response
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
 
-    with patch("services._anthropic_client.create_client", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         await smart_enrich(result["path"], "sk-fake", workspace_path=ws_db)
 
     target = ws_db / "memory" / result["path"]
@@ -199,7 +199,7 @@ async def test_enrich_preserves_existing_frontmatter(ws_db, md_file):
 
 @pytest.mark.anyio
 async def test_enrich_uses_claude(ws_db, md_file):
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import AsyncMock, MagicMock, patch
     from services.ingest import smart_enrich
 
     result = await fast_ingest(md_file, "knowledge", workspace_path=ws_db)
@@ -207,8 +207,8 @@ async def test_enrich_uses_claude(ws_db, md_file):
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text='{"summary": "x", "tags": []}')]
     mock_client = MagicMock()
-    mock_client.messages.create.return_value = mock_response
+    mock_client.messages.create = AsyncMock(return_value=mock_response)
 
-    with patch("services._anthropic_client.create_client", return_value=mock_client):
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
         await smart_enrich(result["path"], "sk-fake", workspace_path=ws_db)
         mock_client.messages.create.assert_called_once()

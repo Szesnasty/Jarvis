@@ -201,6 +201,23 @@ async def delete_note(
             await db.commit()
 
 
+async def index_note_file(
+    note_path: str,
+    workspace_path: Optional[Path] = None,
+) -> None:
+    _validate_path(note_path)
+    mem = _memory_path(workspace_path)
+    db_p = _db_path(workspace_path)
+    file_path = mem / note_path
+
+    if not file_path.exists():
+        raise NoteNotFoundError(f"Note not found: {note_path}")
+
+    content = file_path.read_text(encoding="utf-8")
+    fm, body = parse_frontmatter(content)
+    await _index_note(note_path, content, fm, body, db_p)
+
+
 async def reindex_all(workspace_path: Optional[Path] = None) -> int:
     mem = _memory_path(workspace_path)
     db_p = _db_path(workspace_path)
@@ -232,7 +249,7 @@ async def _index_note(
 ) -> None:
     now = datetime.now(timezone.utc).isoformat()
     folder = str(Path(note_path).parent) if "/" in note_path else ""
-    tags = json.dumps(fm.get("tags", []))
+    tags = json.dumps(fm.get("tags", []), default=str)
     preview = body[:200].strip()
     word_count = len(body.split())
 
@@ -241,13 +258,14 @@ async def _index_note(
     async with aiosqlite.connect(str(db_path)) as db:
         await db.execute(
             """
-            INSERT INTO notes (path, title, folder, content_preview, tags, frontmatter,
+            INSERT INTO notes (path, title, folder, content_preview, body, tags, frontmatter,
                               created_at, updated_at, word_count, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(path) DO UPDATE SET
                 title=excluded.title,
                 folder=excluded.folder,
                 content_preview=excluded.content_preview,
+                body=excluded.body,
                 tags=excluded.tags,
                 frontmatter=excluded.frontmatter,
                 updated_at=excluded.updated_at,
@@ -259,8 +277,9 @@ async def _index_note(
                 fm.get("title", Path(note_path).stem),
                 folder,
                 preview,
+                body,
                 tags,
-                json.dumps(fm),
+                json.dumps(fm, default=str),
                 fm.get("created_at", now),
                 fm.get("updated_at", now),
                 word_count,

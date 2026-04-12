@@ -96,10 +96,32 @@ async def ingest_file(
         tmp_path = Path(tmp.name)
 
     try:
-        result = await fast_ingest(tmp_path, target_folder=folder)
+        result = await fast_ingest(
+            tmp_path,
+            target_folder=folder,
+            original_name=file.filename,
+        )
     except IngestError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     finally:
         tmp_path.unlink(missing_ok=True)
+
+    return result
+
+
+@router.post("/enrich/{note_path:path}")
+async def enrich_note(note_path: str):
+    """Use AI to auto-generate summary and tags for a note."""
+    from services.ingest import IngestError, smart_enrich
+    from services.workspace_service import get_api_key
+
+    api_key = get_api_key()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API key not configured")
+
+    try:
+        result = await smart_enrich(note_path, api_key)
+    except IngestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     return result

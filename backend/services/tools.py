@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from services import memory_service, planning_service, preference_service, graph_service
+from services import memory_service, planning_service, preference_service, graph_service, session_service
 
 
 TOOLS = [
@@ -182,6 +182,7 @@ async def execute_tool(
     name: str,
     tool_input: dict[str, Any],
     workspace_path: Optional[Path] = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """Execute a tool by name and return string result."""
     if name == "search_notes":
@@ -191,6 +192,9 @@ async def execute_tool(
             limit=tool_input.get("limit", 10),
             workspace_path=workspace_path,
         )
+        if session_id:
+            for r in results:
+                session_service.record_note_access(session_id, r.get("path", ""))
         return json.dumps(results)
 
     if name == "read_note":
@@ -198,6 +202,8 @@ async def execute_tool(
             tool_input["path"],
             workspace_path=workspace_path,
         )
+        if session_id:
+            session_service.record_note_access(session_id, tool_input["path"])
         return note["content"]
 
     if name == "write_note":
@@ -206,6 +212,8 @@ async def execute_tool(
             tool_input["content"],
             workspace_path=workspace_path,
         )
+        if session_id:
+            session_service.record_note_access(session_id, tool_input["path"])
         return f"Note saved: {tool_input['path']}"
 
     if name == "append_note":
@@ -214,6 +222,8 @@ async def execute_tool(
             tool_input["content"],
             workspace_path=workspace_path,
         )
+        if session_id:
+            session_service.record_note_access(session_id, tool_input["path"])
         return f"Content appended to: {tool_input['path']}"
 
     if name == "create_plan":

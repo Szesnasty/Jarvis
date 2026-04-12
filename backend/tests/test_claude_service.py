@@ -49,8 +49,10 @@ async def test_build_system_prompt_includes_context():
 
 @pytest.mark.anyio
 async def test_build_system_prompt_no_context_when_empty():
-    with patch("services.context_builder.retrieval") as mock_ret:
+    with patch("services.context_builder.retrieval") as mock_ret, \
+         patch("services.context_builder.preference_service") as mock_prefs:
         mock_ret.retrieve = AsyncMock(return_value=[])
+        mock_prefs.format_for_prompt.return_value = ""
         prompt = await build_system_prompt("hello")
 
     assert prompt == SYSTEM_PROMPT

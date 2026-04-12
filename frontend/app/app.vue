@@ -1,5 +1,7 @@
 <template>
   <div id="jarvis-app">
-    <NuxtPage />
+    <NuxtLayout>
+      <NuxtPage />
+    </NuxtLayout>
   </div>
 </template>

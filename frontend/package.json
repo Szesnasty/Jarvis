@@ -12,6 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "dompurify": "^3.3.3",
+    "marked": "^18.0.0",
     "nuxt": "4.4.2",
     "vue": "3.5.32",
     "vue-router": "5.0.4"

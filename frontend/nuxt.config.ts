@@ -4,8 +4,25 @@ export default defineNuxtConfig({
   ssr: false,
   devtools: { enabled: false },
   css: ['~/assets/css/main.css'],
-  routeRules: {
-    '/api/**': { proxy: 'http://127.0.0.1:8000/api/**' },
+  runtimeConfig: {
+    public: {
+      backendWsUrl: 'ws://127.0.0.1:8000/api/chat/ws',
+    },
+  },
+  nitro: {
+    devProxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8000/api',
+        changeOrigin: true,
+      },
+    },
+  },
+  vite: {
+    server: {
+      hmr: {
+        clientPort: 3000,
+      },
+    },
   },
   typescript: {
     strict: true,

@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -99,6 +100,10 @@ def _store_api_key(api_key: str, workspace_path: Path) -> None:
 
 
 def get_api_key(workspace_path: Optional[Path] = None) -> Optional[str]:
+    env_key = os.environ.get("ANTHROPIC_API_KEY")
+    if env_key:
+        return env_key
+
     try:
         key = keyring.get_password("jarvis", "anthropic_api_key")
         if key:

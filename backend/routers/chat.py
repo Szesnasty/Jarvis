@@ -7,6 +7,7 @@ from services import session_service
 from services import specialist_service
 from services.claude import ClaudeService, StreamEvent, build_system_prompt
 from services.tools import TOOLS, ToolNotFoundError, execute_tool
+from services.token_tracking import log_usage
 from services.workspace_service import get_api_key
 
 logger = logging.getLogger(__name__)
@@ -18,9 +19,9 @@ async def _send_event(ws: WebSocket, event_type: str, **fields) -> None:
     await ws.send_json({"type": event_type, **fields})
 
 
-async def _run_tool(event: StreamEvent) -> str:
+async def _run_tool(event: StreamEvent, session_id: str = "") -> str:
     try:
-        return await execute_tool(event.name, event.tool_input or {})
+        return await execute_tool(event.name, event.tool_input or {}, session_id=session_id)
     except ToolNotFoundError:
         return f"Unknown tool: {event.name}"
     except Exception as exc:
@@ -57,15 +58,27 @@ def _build_tool_messages(
     ]
 
 
+MAX_TOOL_ROUNDS = 5
+
+
 async def _stream_follow_up(
     ws: WebSocket,
     claude: ClaudeService,
     tool_messages: list[dict],
     system_prompt: str,
     tools: list[dict],
+    session_id: str,
+    usage_acc: list[int],
+    depth: int = 1,
 ) -> str:
-    """Stream Claude's follow-up after tool execution. Returns accumulated text."""
+    """Stream Claude's follow-up after tool execution.
+
+    Supports recursive tool calls up to MAX_TOOL_ROUNDS total.
+    Returns accumulated text.
+    """
     text = ""
+    pending_tool: StreamEvent | None = None
+
     async for event in claude.stream_response(
         messages=tool_messages,
         system_prompt=system_prompt,
@@ -74,8 +87,27 @@ async def _stream_follow_up(
         if event.type == "text_delta":
             text += event.content
             await _send_event(ws, "text_delta", content=event.content)
+        elif event.type == "tool_use":
+            pending_tool = event
+        elif event.type == "usage":
+            usage_acc[0] += event.input_tokens
+            usage_acc[1] += event.output_tokens
         elif event.type == "error":
             await _send_event(ws, "error", content=event.content)
+
+    # If Claude wants another tool call, execute it and recurse
+    if pending_tool is not None and depth < MAX_TOOL_ROUNDS:
+        await _send_event(ws, "tool_use", name=pending_tool.name, input=pending_tool.tool_input)
+        session_service.record_tool_use(session_id, pending_tool.name)
+        result = await _run_tool(pending_tool, session_id=session_id)
+        await _send_event(ws, "tool_result", name=pending_tool.name, content=result)
+
+        next_messages = _build_tool_messages(tool_messages, pending_tool, result)
+        text += await _stream_follow_up(
+            ws, claude, next_messages, system_prompt, tools,
+            session_id, usage_acc, depth + 1,
+        )
+
     return text
 
 
@@ -96,6 +128,9 @@ async def _handle_message(
     tools = specialist_service.filter_tools(TOOLS, active_spec)
     claude = ClaudeService(api_key=api_key)
     assistant_text = ""
+    # [input_tokens, output_tokens] accumulated across all rounds
+    usage_acc = [0, 0]
+    pending_tool: StreamEvent | None = None
 
     async for event in claude.stream_response(
         messages=messages,
@@ -107,21 +142,43 @@ async def _handle_message(
             await _send_event(ws, "text_delta", content=event.content)
 
         elif event.type == "tool_use":
-            await _send_event(ws, "tool_use", name=event.name, input=event.tool_input)
-            session_service.record_tool_use(session_id, event.name)
-            result = await _run_tool(event)
-            await _send_event(ws, "tool_result", name=event.name, content=result)
+            pending_tool = event
 
-            tool_messages = _build_tool_messages(messages, event, result)
-            assistant_text += await _stream_follow_up(
-                ws, claude, tool_messages, system_prompt, tools,
-            )
+        elif event.type == "usage":
+            usage_acc[0] += event.input_tokens
+            usage_acc[1] += event.output_tokens
 
         elif event.type == "error":
             await _send_event(ws, "error", content=event.content)
 
+    # Handle tool call chain (up to MAX_TOOL_ROUNDS)
+    if pending_tool is not None:
+        await _send_event(ws, "tool_use", name=pending_tool.name, input=pending_tool.tool_input)
+        session_service.record_tool_use(session_id, pending_tool.name)
+        result = await _run_tool(pending_tool, session_id=session_id)
+        await _send_event(ws, "tool_result", name=pending_tool.name, content=result)
+
+        tool_messages = _build_tool_messages(messages, pending_tool, result)
+        assistant_text += await _stream_follow_up(
+            ws, claude, tool_messages, system_prompt, tools,
+            session_id, usage_acc,
+        )
+
     if assistant_text:
         session_service.add_message(session_id, "assistant", assistant_text)
+
+    # Log token usage if we got any
+    if usage_acc[0] > 0 or usage_acc[1] > 0:
+        try:
+            log_usage(usage_acc[0], usage_acc[1])
+        except Exception:
+            logger.warning("Failed to log token usage")
+
+    # Auto-save session after each exchange for crash protection
+    try:
+        session_service.save_session(session_id)
+    except Exception:
+        pass
 
     await _send_event(ws, "done", session_id=session_id)
 
@@ -167,4 +224,8 @@ async def chat_ws(websocket: WebSocket) -> None:
 
     except WebSocketDisconnect:
         session_service.save_session(session_id)
+        try:
+            await session_service.save_session_to_memory(session_id)
+        except Exception:
+            logger.exception("Failed to save session %s to memory", session_id)
         session_service.delete_session(session_id)

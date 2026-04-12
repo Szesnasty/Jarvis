@@ -7,6 +7,8 @@ export function useWebSocket() {
   let _heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
   function _getWsUrl(): string {
+    const configured = useRuntimeConfig().public.backendWsUrl as string | undefined
+    if (configured) return configured
     const loc = window.location
     const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:'
     return `${protocol}//${loc.host}/api/chat/ws`

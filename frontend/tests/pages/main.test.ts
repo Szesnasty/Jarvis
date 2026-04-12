@@ -17,12 +17,6 @@ describe('pages/main.vue', () => {
     expect(wrapper.exists()).toBe(true)
   })
 
-  it('renders StatusBar component', async () => {
-    registerDefaults()
-    const wrapper = await mountSuspended(MainPage)
-    expect(wrapper.find('.status-bar').exists()).toBe(true)
-  })
-
   it('renders ChatPanel component', async () => {
     registerDefaults()
     const wrapper = await mountSuspended(MainPage)

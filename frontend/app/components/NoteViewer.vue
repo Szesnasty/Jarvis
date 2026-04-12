@@ -17,17 +17,32 @@
           {{ key }}: {{ Array.isArray(value) ? value.join(', ') : value }}
         </span>
       </div>
-      <pre class="note-viewer__body">{{ note.content }}</pre>
+      <div class="note-viewer__body prose" v-html="renderedHtml"></div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import type { NoteDetail } from '~/types'
 
-defineProps<{
+const props = defineProps<{
   note: NoteDetail | null
 }>()
+
+function stripFrontmatter(content: string): string {
+  const match = content.match(/^---\s*\n[\s\S]*?\n---\s*\n?/)
+  return match ? content.slice(match[0].length) : content
+}
+
+const renderedHtml = computed(() => {
+  if (!props.note?.content) return ''
+  const body = stripFrontmatter(props.note.content)
+  const raw = marked.parse(body, { async: false }) as string
+  return DOMPurify.sanitize(raw)
+})
 </script>
 
 <style scoped>
@@ -80,11 +95,77 @@ defineProps<{
 }
 
 .note-viewer__body {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-family: inherit;
   font-size: 0.95rem;
-  line-height: 1.6;
+  line-height: 1.7;
   margin: 0;
+}
+
+.note-viewer__body :deep(h1),
+.note-viewer__body :deep(h2),
+.note-viewer__body :deep(h3) {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.note-viewer__body :deep(p) {
+  margin: 0.75em 0;
+}
+
+.note-viewer__body :deep(ul),
+.note-viewer__body :deep(ol) {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+
+.note-viewer__body :deep(code) {
+  background: var(--color-surface, #1a1a1a);
+  padding: 0.15em 0.4em;
+  border-radius: 0.25rem;
+  font-size: 0.9em;
+}
+
+.note-viewer__body :deep(pre) {
+  background: var(--color-surface, #1a1a1a);
+  padding: 1em;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+}
+
+.note-viewer__body :deep(pre code) {
+  background: none;
+  padding: 0;
+}
+
+.note-viewer__body :deep(blockquote) {
+  border-left: 3px solid var(--color-muted, #888);
+  padding-left: 1em;
+  margin-left: 0;
+  color: var(--color-muted, #888);
+}
+
+.note-viewer__body :deep(a) {
+  color: var(--color-accent, #4a9eff);
+  text-decoration: none;
+}
+
+.note-viewer__body :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.note-viewer__body :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75em 0;
+}
+
+.note-viewer__body :deep(th),
+.note-viewer__body :deep(td) {
+  border: 1px solid var(--color-border, #333);
+  padding: 0.5em 0.75em;
+  text-align: left;
+}
+
+.note-viewer__body :deep(input[type="checkbox"]) {
+  margin-right: 0.5em;
 }
 </style>

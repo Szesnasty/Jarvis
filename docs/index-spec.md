@@ -36,27 +36,27 @@ Every step is considered **done** only when ALL of the following are true:
 
 ## Phase 3 — Claude API
 
-- [ ] [Step 05 — Claude API + Streaming + Tools](steps/step-05-claude-integration.md)
+- [x] [Step 05 — Claude API + Streaming + Tools](steps/step-05-claude-integration.md)
 
 ## Phase 4 — Voice
 
-- [ ] [Step 06 — Voice Input/Output + States](steps/step-06-voice.md)
+- [x] [Step 06 — Voice Input/Output + States](steps/step-06-voice.md)
 
 ## Phase 5 — Planning & Operational Memory
 
-- [ ] [Step 07 — Planning Tools + Session Persistence](steps/step-07-planning-ops.md)
+- [x] [Step 07 — Planning Tools + Session Persistence](steps/step-07-planning-ops.md)
 
 ## Phase 6 — Knowledge Graph
 
-- [ ] [Step 08 — Knowledge Graph + Retrieval](steps/step-08-knowledge-graph.md)
+- [x] [Step 08 — Knowledge Graph + Retrieval](steps/step-08-knowledge-graph.md)
 
 ## Phase 7 — Specialists
 
-- [ ] [Step 09 — Specialist System + UI Wizard](steps/step-09-specialists.md)
+- [x] [Step 09 — Specialist System + UI Wizard](steps/step-09-specialists.md)
 
 ## Phase 8 — Polish
 
-- [ ] [Step 10 — Polish, Obsidian, Caching, Ingest](steps/step-10-polish.md)
+- [x] [Step 10 — Polish, Obsidian, Caching, Ingest](steps/step-10-polish.md)
 
 ---
 
@@ -68,3 +68,9 @@ Every step is considered **done** only when ALL of the following are true:
 | 2025-07-15 | Step 02 | ✅ Done | `feat: step-02 frontend init (nuxt)` |
 | 2025-07-15 | Step 03 | ✅ Done | `feat: step-03 onboarding + workspace` |
 | 2025-07-15 | Step 04 | ✅ Done | `feat: step-04 memory service + sqlite index` |
+| 2026-04-12 | Step 05 | ✅ Done | `feat: step-05 claude api + streaming + tools` |
+| 2026-04-12 | Step 06 | ✅ Done | `feat: step-06 voice input/output` |
+| 2026-04-12 | Step 07 | ✅ Done | `feat: step-07 planning tools + session persistence` |
+| 2026-04-12 | Step 08 | ✅ Done | `feat: step-08 knowledge graph` |
+| 2026-04-12 | Step 09 | ✅ Done | `feat: step-09 specialist system` |
+| 2026-04-12 | Step 10 | ✅ Done | `feat: step-10 polish + ingest + settings` |

@@ -1,6 +1,5 @@
 <template>
   <div class="main-page">
-    <StatusBar />
     <div class="main-page__layout">
       <SessionHistory
         :sessions="sessions"

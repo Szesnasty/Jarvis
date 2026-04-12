@@ -25,6 +25,21 @@ def _fake_stream(*events: StreamEvent):
     return _gen
 
 
+def _fake_tool_then_text(tool_event: StreamEvent, follow_up_text: str = ""):
+    """First call yields tool_use, subsequent calls yield text (for follow-up)."""
+    call_count = 0
+
+    async def _gen(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            yield tool_event
+        elif follow_up_text:
+            yield StreamEvent(type="text_delta", content=follow_up_text)
+
+    return _gen
+
+
 @pytest.fixture
 def mock_api_key():
     with patch("routers.chat.get_api_key", return_value="sk-ant-test-key"):
@@ -116,7 +131,7 @@ async def test_ws_chunks_form_complete_response(mock_api_key, mock_claude_stream
 
 @pytest.mark.anyio
 async def test_ws_tool_use_event(mock_api_key, mock_claude_stream):
-    mock_claude_stream.stream_response = _fake_stream(
+    mock_claude_stream.stream_response = _fake_tool_then_text(
         StreamEvent(
             type="tool_use",
             name="search_notes",
@@ -149,7 +164,7 @@ async def test_ws_tool_use_event(mock_api_key, mock_claude_stream):
 
 @pytest.mark.anyio
 async def test_ws_tool_result_event(mock_api_key, mock_claude_stream):
-    mock_claude_stream.stream_response = _fake_stream(
+    mock_claude_stream.stream_response = _fake_tool_then_text(
         StreamEvent(
             type="tool_use",
             name="search_notes",

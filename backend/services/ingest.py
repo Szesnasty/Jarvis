@@ -64,26 +64,27 @@ async def fast_ingest(
     file_path: Path,
     target_folder: str = "knowledge",
     workspace_path: Optional[Path] = None,
+    original_name: Optional[str] = None,
 ) -> Dict:
     """Import a file into memory without AI."""
     if not file_path.exists():
         raise IngestError(f"File not found: {file_path}")
 
-    ext = file_path.suffix.lower()
+    display_name = original_name or file_path.name
+    ext = Path(display_name).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise IngestError(f"Unsupported file type: {ext}")
 
-    title = file_path.stem
+    title = Path(display_name).stem
     mem = _memory_dir(workspace_path)
     folder = mem / target_folder
     folder.mkdir(parents=True, exist_ok=True)
 
     if ext == ".md":
         content = file_path.read_text(encoding="utf-8")
-        # Check if it already has frontmatter
         if not content.strip().startswith("---"):
             content = _make_frontmatter(title, str(file_path)) + content
-        target = _unique_path(folder / file_path.name)
+        target = _unique_path(folder / display_name)
         target.write_text(content, encoding="utf-8")
 
     elif ext == ".txt":
@@ -103,14 +104,21 @@ async def fast_ingest(
     else:
         raise IngestError(f"Unsupported: {ext}")
 
-    # Update index
-    try:
-        from services.memory_service import reindex_all
-        await reindex_all(workspace_path=workspace_path)
-    except Exception as exc:
-        logger.warning("Reindex after ingest failed: %s", exc)
+    rel_path = target.relative_to(mem).as_posix()
 
-    rel_path = str(target.relative_to(mem))
+    from services.memory_service import index_note_file
+    try:
+        await index_note_file(rel_path, workspace_path=workspace_path)
+    except Exception as exc:
+        target.unlink(missing_ok=True)
+        raise IngestError(f"Failed to index note: {exc}") from exc
+
+    try:
+        from services.graph_service import rebuild_graph
+        rebuild_graph(workspace_path=workspace_path)
+    except Exception as exc:
+        logger.warning("Graph rebuild after ingest failed: %s", exc)
+
     return {
         "path": rel_path,
         "title": title,
@@ -126,7 +134,7 @@ async def smart_enrich(
     workspace_path: Optional[Path] = None,
 ) -> Dict:
     """Use Claude to enhance a note with summary and tags."""
-    from services._anthropic_client import create_client
+    import anthropic
 
     mem = _memory_dir(workspace_path)
     full_path = mem / note_path
@@ -136,8 +144,8 @@ async def smart_enrich(
     content = full_path.read_text(encoding="utf-8")
     truncated = content[:3000]
 
-    client = create_client(api_key)
-    response = client.messages.create(
+    client = anthropic.AsyncAnthropic(api_key=api_key)
+    response = await client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=500,
         messages=[{

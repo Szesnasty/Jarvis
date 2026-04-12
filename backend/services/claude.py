@@ -30,11 +30,13 @@ You have access to the following tools to work with the user's memory."""
 
 @dataclass
 class StreamEvent:
-    type: str  # "text_delta" | "tool_use" | "tool_result" | "done" | "error"
+    type: str  # "text_delta" | "tool_use" | "tool_result" | "done" | "error" | "usage"
     content: str = ""
     name: str = ""
     tool_input: Optional[dict[str, Any]] = None
     tool_use_id: str = ""
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 @dataclass
@@ -140,6 +142,25 @@ class ClaudeService:
             return _handle_block_delta(event, tool)
         if event.type == "content_block_stop":
             return _handle_block_stop(tool)
+        if event.type == "message_delta":
+            # Capture usage from the final message event
+            usage = getattr(event, "usage", None)
+            if usage:
+                return StreamEvent(
+                    type="usage",
+                    input_tokens=getattr(usage, "input_tokens", 0),
+                    output_tokens=getattr(usage, "output_tokens", 0),
+                )
+        if event.type == "message_start":
+            msg = getattr(event, "message", None)
+            if msg:
+                usage = getattr(msg, "usage", None)
+                if usage:
+                    return StreamEvent(
+                        type="usage",
+                        input_tokens=getattr(usage, "input_tokens", 0),
+                        output_tokens=getattr(usage, "output_tokens", 0),
+                    )
         return None
 
 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from services import specialist_service
 
@@ -14,6 +14,15 @@ async def list_specialists():
 async def get_active():
     active = specialist_service.get_active_specialist()
     return active if active else {"active": None}
+
+
+@router.get("/suggest")
+async def suggest_specialist(message: str = Query(...)):
+    """Suggest a specialist based on the user's message content."""
+    suggestion = specialist_service.suggest_specialist(message)
+    if suggestion:
+        return {"suggested": suggestion}
+    return {"suggested": None}
 
 
 @router.get("/{spec_id}")
