@@ -47,13 +47,20 @@
 
 | Step | Title | Status |
 |------|-------|--------|
-| [09](step-09-specialists.md) | Specialist system + UI wizard | ⬜ |
+| [09](step-09-specialists.md) | Specialist system + UI wizard | ✅ |
 
 ## Phase 8 — Polish
 
 | Step | Title | Status |
 |------|-------|--------|
-| [10](step-10-polish.md) | UI polish, Obsidian, caching, ingest | ⬜ |
+| [10](step-10-polish.md) | UI polish, Obsidian, caching, ingest | ✅ |
+
+## Phase 9 — URL Ingest
+
+| Step | Title | Status |
+|------|-------|--------|
+| [11](step-11-url-ingest.md) | URL ingest pipeline (YouTube + Web) | ✅ |
+| [11b](step-11b-url-ingest-frontend.md) | URL ingest frontend (dialog + chat) | ✅ |
 
 ---
 

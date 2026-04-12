@@ -133,3 +133,40 @@ async def test_post_reindex_200(client, patch_settings):
 async def test_path_traversal_blocked(client, patch_settings):
     r = await client.post("/api/memory/notes/inbox/..%2F..%2Fetc%2Fpasswd", json={"content": "hack"})
     assert r.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_post_ingest_url_200(client, patch_settings, monkeypatch):
+    async def _fake_ingest_url(url: str, folder: str = "knowledge", summarize: bool = False, api_key=None):
+        return {
+            "path": f"{folder}/yt-dQw4w9WgXcQ.md",
+            "title": "YouTube: dQw4w9WgXcQ",
+            "type": "youtube",
+            "source": url,
+            "word_count": 123,
+        }
+
+    monkeypatch.setattr("services.url_ingest.ingest_url", _fake_ingest_url)
+
+    r = await client.post(
+        "/api/memory/ingest-url",
+        json={"url": "https://youtu.be/dQw4w9WgXcQ", "folder": "knowledge", "summarize": False},
+    )
+    assert r.status_code == 200
+    assert r.json()["type"] == "youtube"
+
+
+@pytest.mark.anyio
+async def test_post_ingest_url_400(client, patch_settings, monkeypatch):
+    from services.ingest import IngestError
+
+    async def _fake_ingest_url(url: str, folder: str = "knowledge", summarize: bool = False, api_key=None):
+        raise IngestError("boom")
+
+    monkeypatch.setattr("services.url_ingest.ingest_url", _fake_ingest_url)
+
+    r = await client.post(
+        "/api/memory/ingest-url",
+        json={"url": "https://example.com", "folder": "knowledge", "summarize": False},
+    )
+    assert r.status_code == 400

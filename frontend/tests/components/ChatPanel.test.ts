@@ -1,6 +1,18 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mountSuspended } from '@nuxt/test-utils/runtime'
 import ChatPanel from '~/components/ChatPanel.vue'
+
+vi.mock('~/composables/useApi', () => ({
+  useApi: () => ({
+    ingestUrl: vi.fn().mockResolvedValue({
+      path: 'knowledge/article.md',
+      title: 'Example',
+      type: 'article',
+      source: 'https://example.com',
+      word_count: 42,
+    }),
+  }),
+}))
 
 const baseProps = {
   messages: [],
@@ -76,5 +88,18 @@ describe('ChatPanel', () => {
     })
     const btn = wrapper.find('.chat-panel__send')
     expect(btn.attributes('disabled')).toBeDefined()
+  })
+
+  it('shows URL action bar when input contains URL', async () => {
+    const wrapper = await mountSuspended(ChatPanel, { props: baseProps })
+    await wrapper.find('.chat-panel__input').setValue('check this https://example.com')
+    expect(wrapper.find('.chat-panel__url-bar').exists()).toBe(true)
+    expect(wrapper.find('.chat-panel__url-action').text()).toContain('Save to memory')
+  })
+
+  it('does not show URL action bar for regular text', async () => {
+    const wrapper = await mountSuspended(ChatPanel, { props: baseProps })
+    await wrapper.find('.chat-panel__input').setValue('hello world only')
+    expect(wrapper.find('.chat-panel__url-bar').exists()).toBe(false)
   })
 })

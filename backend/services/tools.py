@@ -171,7 +171,32 @@ TOOLS = [
             },
             "required": ["entity"],
         },
-    },]
+    },
+    {
+        "name": "ingest_url",
+        "description": "Save a YouTube video transcript or web article to memory. Use when the user shares a URL and wants to remember or analyze its content.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "The URL to ingest (YouTube or web page)",
+                },
+                "folder": {
+                    "type": "string",
+                    "description": "Target folder in memory (default: knowledge)",
+                    "default": "knowledge",
+                },
+                "summarize": {
+                    "type": "boolean",
+                    "description": "Whether to generate an AI summary",
+                    "default": False,
+                },
+            },
+            "required": ["url"],
+        },
+    },
+]
 
 
 class ToolNotFoundError(Exception):
@@ -183,6 +208,7 @@ async def execute_tool(
     tool_input: dict[str, Any],
     workspace_path: Optional[Path] = None,
     session_id: Optional[str] = None,
+    api_key: Optional[str] = None,
 ) -> str:
     """Execute a tool by name and return string result."""
     if name == "search_notes":
@@ -263,6 +289,19 @@ async def execute_tool(
             workspace_path=workspace_path,
         )
         return json.dumps(results)
+
+    if name == "ingest_url":
+        from services.url_ingest import ingest_url
+        result = await ingest_url(
+            tool_input["url"],
+            folder=tool_input.get("folder", "knowledge"),
+            summarize=tool_input.get("summarize", False),
+            api_key=api_key,
+            workspace_path=workspace_path,
+        )
+        if session_id:
+            session_service.record_note_access(session_id, result["path"])
+        return json.dumps(result)
 
     raise ToolNotFoundError(f"Unknown tool: {name}")
 

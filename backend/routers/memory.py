@@ -10,6 +10,7 @@ from models.schemas import (
     NoteDetailResponse,
     NoteMetadataResponse,
     ReindexResponse,
+    UrlIngestRequest,
 )
 from services.memory_service import (
     NoteExistsError,
@@ -105,6 +106,30 @@ async def ingest_file(
         raise HTTPException(status_code=400, detail=str(exc))
     finally:
         tmp_path.unlink(missing_ok=True)
+
+    return result
+
+
+@router.post("/ingest-url")
+async def ingest_url_endpoint(body: UrlIngestRequest):
+    """Ingest a YouTube video or web article into memory."""
+    from services.ingest import IngestError
+    from services.url_ingest import ingest_url
+    from services.workspace_service import get_api_key
+
+    api_key = get_api_key() if body.summarize else None
+    if body.summarize and not api_key:
+        raise HTTPException(status_code=400, detail="API key not configured")
+
+    try:
+        result = await ingest_url(
+            url=body.url,
+            folder=body.folder,
+            summarize=body.summarize,
+            api_key=api_key,
+        )
+    except IngestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     return result
 

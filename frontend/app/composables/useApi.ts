@@ -1,4 +1,4 @@
-import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, SpecialistSummary, SpecialistDetail } from '~/types'
+import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, SpecialistSummary, SpecialistDetail, UrlIngestResult } from '~/types'
 
 export class ApiError extends Error {
   status: number
@@ -315,5 +315,21 @@ export function useApi() {
     }
   }
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist }
+  async function ingestUrl(url: string, folder = 'knowledge', summarize = false): Promise<UrlIngestResult> {
+    try {
+      return await $fetch<UrlIngestResult>('/api/memory/ingest-url', {
+        method: 'POST',
+        body: { url, folder, summarize },
+      })
+    } catch (error: unknown) {
+      if (error && typeof error === 'object' && 'status' in error) {
+        const status = (error as { status: number }).status
+        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+        throw new ApiError(status, message)
+      }
+      throw new ApiError(0, 'Network error')
+    }
+  }
+
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl }
 }

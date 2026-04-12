@@ -6,6 +6,10 @@ anthropic==0.94.0
 keyring==25.7.0
 pyyaml==6.0.3
 python-multipart==0.0.20
+youtube-transcript-api==1.2.4
+trafilatura==2.0.0
+markdownify==1.2.2
+lxml_html_clean==0.4.4
 
 # testing
 pytest==8.4.2

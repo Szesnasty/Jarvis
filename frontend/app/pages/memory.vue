@@ -3,9 +3,14 @@
     <aside class="memory-page__sidebar">
       <div class="memory-page__toolbar">
         <h2 class="memory-page__title">Memory</h2>
-        <button class="memory-page__import-btn" @click="showImport = true">
-          + Import file
-        </button>
+        <div class="memory-page__toolbar-actions">
+          <button class="memory-page__import-btn" @click="showImport = true">
+            📁 Import file
+          </button>
+          <button class="memory-page__import-btn" @click="showUrlImport = true">
+            🔗 Import URL
+          </button>
+        </div>
       </div>
       <NoteList
         :notes="notes"
@@ -25,6 +30,10 @@
       @close="showImport = false"
       @imported="onImported"
     />
+    <LinkIngestDialog
+      v-model="showUrlImport"
+      @imported="onUrlImported"
+    />
   </div>
 </template>
 
@@ -39,6 +48,7 @@ const selectedNote = ref<NoteDetail | null>(null)
 const activeFolder = ref<string | null>(null)
 const searchQuery = ref('')
 const showImport = ref(false)
+const showUrlImport = ref(false)
 
 const folders = computed(() => {
   const set = new Set(notes.value.map((n) => n.folder))
@@ -71,6 +81,11 @@ async function onSearch(query: string) {
 
 async function onImported() {
   showImport.value = false
+  await loadNotes()
+}
+
+async function onUrlImported() {
+  showUrlImport.value = false
   await loadNotes()
 }
 
@@ -107,6 +122,11 @@ defineExpose({ deleteNote: async (path: string) => {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1rem 0.5rem;
+  gap: 0.5rem;
+}
+
+.memory-page__toolbar-actions {
+  display: flex;
   gap: 0.5rem;
 }
 

@@ -19,9 +19,14 @@ async def _send_event(ws: WebSocket, event_type: str, **fields) -> None:
     await ws.send_json({"type": event_type, **fields})
 
 
-async def _run_tool(event: StreamEvent, session_id: str = "") -> str:
+async def _run_tool(event: StreamEvent, session_id: str = "", api_key: str = "") -> str:
     try:
-        return await execute_tool(event.name, event.tool_input or {}, session_id=session_id)
+        return await execute_tool(
+            event.name,
+            event.tool_input or {},
+            session_id=session_id,
+            api_key=api_key or None,
+        )
     except ToolNotFoundError:
         return f"Unknown tool: {event.name}"
     except Exception as exc:
@@ -68,6 +73,7 @@ async def _stream_follow_up(
     system_prompt: str,
     tools: list[dict],
     session_id: str,
+    api_key: str,
     usage_acc: list[int],
     depth: int = 1,
 ) -> str:
@@ -99,13 +105,13 @@ async def _stream_follow_up(
     if pending_tool is not None and depth < MAX_TOOL_ROUNDS:
         await _send_event(ws, "tool_use", name=pending_tool.name, input=pending_tool.tool_input)
         session_service.record_tool_use(session_id, pending_tool.name)
-        result = await _run_tool(pending_tool, session_id=session_id)
+        result = await _run_tool(pending_tool, session_id=session_id, api_key=api_key)
         await _send_event(ws, "tool_result", name=pending_tool.name, content=result)
 
         next_messages = _build_tool_messages(tool_messages, pending_tool, result)
         text += await _stream_follow_up(
             ws, claude, next_messages, system_prompt, tools,
-            session_id, usage_acc, depth + 1,
+            session_id, api_key, usage_acc, depth + 1,
         )
 
     return text
@@ -155,13 +161,13 @@ async def _handle_message(
     if pending_tool is not None:
         await _send_event(ws, "tool_use", name=pending_tool.name, input=pending_tool.tool_input)
         session_service.record_tool_use(session_id, pending_tool.name)
-        result = await _run_tool(pending_tool, session_id=session_id)
+        result = await _run_tool(pending_tool, session_id=session_id, api_key=api_key)
         await _send_event(ws, "tool_result", name=pending_tool.name, content=result)
 
         tool_messages = _build_tool_messages(messages, pending_tool, result)
         assistant_text += await _stream_follow_up(
             ws, claude, tool_messages, system_prompt, tools,
-            session_id, usage_acc,
+            session_id, api_key, usage_acc,
         )
 
     if assistant_text:

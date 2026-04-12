@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class HealthResponse(BaseModel):
@@ -128,6 +128,21 @@ class SpecialistCreateRequest(BaseModel):
     name: str
     role: str = ""
     sources: list = []
+
+
+# --- URL Ingest ---
+
+class UrlIngestRequest(BaseModel):
+    url: str
+    folder: str = Field(default="knowledge", pattern=r"^[a-zA-Z0-9-]+$")
+    summarize: bool = False
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("url must start with http:// or https://")
+        return value
     style: dict = {}
     rules: list = []
     tools: list = []

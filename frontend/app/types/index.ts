@@ -144,3 +144,14 @@ export interface SpecialistDetail {
   created_at: string
   updated_at: string
 }
+
+// --- URL Ingest ---
+
+export interface UrlIngestResult {
+  path: string
+  title: string
+  type: 'youtube' | 'article'
+  source: string
+  word_count: number
+  summary?: string
+}
