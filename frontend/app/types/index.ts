@@ -38,3 +38,44 @@ export interface NoteDetail {
 export interface ReindexResponse {
   indexed: number
 }
+
+// --- Chat ---
+
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface WsTextDelta {
+  type: 'text_delta'
+  content: string
+}
+
+export interface WsToolUse {
+  type: 'tool_use'
+  name: string
+  input: Record<string, unknown>
+}
+
+export interface WsToolResult {
+  type: 'tool_result'
+  name: string
+  content: string
+}
+
+export interface WsDone {
+  type: 'done'
+  session_id: string
+}
+
+export interface WsError {
+  type: 'error'
+  content: string
+}
+
+export interface WsSessionStart {
+  type: 'session_start'
+  session_id: string
+}
+
+export type WsEvent = WsTextDelta | WsToolUse | WsToolResult | WsDone | WsError | WsSessionStart

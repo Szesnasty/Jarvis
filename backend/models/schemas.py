@@ -52,3 +52,19 @@ class NoteDetailResponse(BaseModel):
 
 class ReindexResponse(BaseModel):
     indexed: int
+
+
+# --- Chat ---
+
+class ChatMessage(BaseModel):
+    type: str = "message"
+    content: str
+    session_id: Optional[str] = None
+
+
+class ChatEvent(BaseModel):
+    type: str
+    content: Optional[str] = None
+    name: Optional[str] = None
+    input: Optional[dict] = None
+    session_id: Optional[str] = None

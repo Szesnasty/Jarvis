@@ -23,7 +23,7 @@
 
 | Step | Title | Status |
 |------|-------|--------|
-| [05](step-05-claude-integration.md) | Claude API + streaming + tools | ⬜ |
+| [05](step-05-claude-integration.md) | Claude API + streaming + tools | ✅ |
 
 ## Phase 4 — Voice
 
