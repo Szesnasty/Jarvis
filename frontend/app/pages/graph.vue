@@ -11,13 +11,15 @@
       <span class="graph-view__stats">{{ stats.node_count }} nodes · {{ stats.edge_count }} edges</span>
     </div>
     <div class="graph-view__main">
-      <GraphCanvas
-        ref="canvasRef"
-        :nodes="graph.nodes"
-        :edges="graph.edges"
-        :highlighted-node="selectedNode?.id ?? null"
-        @node-click="handleNodeClick"
-      />
+      <div class="graph-view__canvas">
+        <GraphCanvas
+          ref="canvasRef"
+          :nodes="graph.nodes"
+          :edges="graph.edges"
+          :highlighted-node="selectedNode?.id ?? null"
+          @node-click="handleNodeClick"
+        />
+      </div>
       <aside v-if="selectedNode" class="graph-view__preview">
         <h3 class="graph-view__preview-title">{{ selectedNode.label }}</h3>
         <p class="graph-view__preview-type">{{ selectedNode.type }}</p>
@@ -28,12 +30,14 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import type { GraphNode } from '~/types'
 import { useGraph } from '~/composables/useGraph'
+import GraphCanvas from '~/components/GraphCanvas.vue'
 
 const { graph, stats, selectedNode, loadGraph, rebuildGraph, selectNode } = useGraph()
 
-const canvasRef = ref<InstanceType<typeof import('~/components/GraphCanvas.vue').default> | null>(null)
+const canvasRef = ref<InstanceType<typeof GraphCanvas> | null>(null)
 
 function handleNodeClick(node: GraphNode): void {
   selectNode(node)
@@ -52,7 +56,7 @@ function handleZoomOut(): void {
 }
 
 function handleFit(): void {
-  canvasRef.value?.fitToView()
+  canvasRef.value?.zoomToFit()
 }
 
 onMounted(() => {
@@ -105,6 +109,12 @@ onMounted(() => {
 .graph-view__main {
   flex: 1;
   display: flex;
+  overflow: hidden;
+}
+
+.graph-view__canvas {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
 

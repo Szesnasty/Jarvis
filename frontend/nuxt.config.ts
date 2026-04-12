@@ -23,6 +23,9 @@ export default defineNuxtConfig({
         clientPort: 3000,
       },
     },
+    ssr: {
+      noExternal: ['force-graph', 'three'],
+    },
   },
   typescript: {
     strict: true,

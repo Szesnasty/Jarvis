@@ -90,13 +90,20 @@ async def get_note(
 
     content = file_path.read_text(encoding="utf-8")
     fm, body = parse_frontmatter(content)
+    
+    # Convert any non-JSON-serializable objects in frontmatter
+    for key, value in fm.items():
+        if hasattr(value, 'isoformat'):  # datetime objects
+            fm[key] = value.isoformat()
+        elif isinstance(value, list):
+            fm[key] = [str(v) if hasattr(v, 'isoformat') else v for v in value]
 
     return {
         "path": note_path,
         "title": fm.get("title", Path(note_path).stem),
         "content": content,
         "frontmatter": fm,
-        "updated_at": fm.get("updated_at", ""),
+        "updated_at": str(fm.get("updated_at", "")),
     }
 
 
