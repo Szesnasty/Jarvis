@@ -14,9 +14,20 @@ export function useAppState() {
     }
   }
 
+  async function checkWorkspaceStatus() {
+    const { fetchWorkspaceStatus } = useApi()
+    try {
+      const data = await fetchWorkspaceStatus()
+      isInitialized.value = data.initialized
+    } catch {
+      isInitialized.value = false
+    }
+  }
+
   return {
     isInitialized,
     backendStatus,
     checkHealth,
+    checkWorkspaceStatus,
   }
 }

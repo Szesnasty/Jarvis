@@ -9,9 +9,9 @@
 
 | Step | Title | Status |
 |------|-------|--------|
-| [01](step-01-backend-init.md) | Backend initialization (FastAPI) | ⬜ |
-| [02](step-02-frontend-init.md) | Frontend initialization (Nuxt 3) | ⬜ |
-| [03](step-03-onboarding-workspace.md) | Onboarding + workspace creation | ⬜ |
+| [01](step-01-backend-init.md) | Backend initialization (FastAPI) | ✅ |
+| [02](step-02-frontend-init.md) | Frontend initialization (Nuxt 3) | ✅ |
+| [03](step-03-onboarding-workspace.md) | Onboarding + workspace creation | ✅ |
 
 ## Phase 2 — Local Memory
 

@@ -1,5 +1,13 @@
 <script setup lang="ts">
-navigateTo('/main', { replace: true })
+const { isInitialized, checkWorkspaceStatus } = useAppState()
+
+await checkWorkspaceStatus()
+
+if (isInitialized.value) {
+  await navigateTo('/main', { replace: true })
+} else {
+  await navigateTo('/onboarding', { replace: true })
+}
 </script>
 
 <template>

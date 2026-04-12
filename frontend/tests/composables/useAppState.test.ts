@@ -80,4 +80,38 @@ describe('useAppState', () => {
     await state.checkHealth()
     expect(state.backendStatus.value).toBe('offline')
   })
+
+  it('isInitialized becomes true after workspace init succeeds', async () => {
+    registerEndpoint('/api/workspace/status', () => ({
+      initialized: true,
+      workspace_path: '/tmp/Jarvis',
+      api_key_set: true,
+    }))
+
+    const state = useAppState()
+    await state.checkWorkspaceStatus()
+    expect(state.isInitialized.value).toBe(true)
+  })
+
+  it('checkWorkspaceStatus() calls GET /api/workspace/status', async () => {
+    let called = false
+    registerEndpoint('/api/workspace/status', () => {
+      called = true
+      return { initialized: false }
+    })
+
+    const state = useAppState()
+    await state.checkWorkspaceStatus()
+    expect(called).toBe(true)
+  })
+
+  it('initial load: if workspace not exists → isInitialized false', async () => {
+    registerEndpoint('/api/workspace/status', () => ({
+      initialized: false,
+    }))
+
+    const state = useAppState()
+    await state.checkWorkspaceStatus()
+    expect(state.isInitialized.value).toBe(false)
+  })
 })

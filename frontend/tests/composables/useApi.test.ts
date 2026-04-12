@@ -55,4 +55,57 @@ describe('useApi', () => {
       expect(error.name).toBe('ApiError')
     })
   })
+
+  describe('fetchWorkspaceStatus()', () => {
+    it('returns workspace status on 200', async () => {
+      registerEndpoint('/api/workspace/status', () => ({
+        initialized: true,
+        workspace_path: '/tmp/Jarvis',
+        api_key_set: true,
+      }))
+
+      const { fetchWorkspaceStatus } = useApi()
+      const result = await fetchWorkspaceStatus()
+      expect(result.initialized).toBe(true)
+    })
+
+    it('returns not initialized when workspace absent', async () => {
+      registerEndpoint('/api/workspace/status', () => ({
+        initialized: false,
+      }))
+
+      const { fetchWorkspaceStatus } = useApi()
+      const result = await fetchWorkspaceStatus()
+      expect(result.initialized).toBe(false)
+    })
+  })
+
+  describe('initWorkspace()', () => {
+    it('sends POST and returns response', async () => {
+      registerEndpoint('/api/workspace/init', {
+        method: 'POST',
+        handler: () => ({
+          status: 'ok',
+          workspace_path: '/tmp/Jarvis',
+        }),
+      })
+
+      const { initWorkspace } = useApi()
+      const result = await initWorkspace('sk-ant-test-key')
+      expect(result.status).toBe('ok')
+      expect(result.workspace_path).toBe('/tmp/Jarvis')
+    })
+
+    it('throws on 409 conflict', async () => {
+      registerEndpoint('/api/workspace/init', {
+        method: 'POST',
+        handler: () => {
+          throw createError({ statusCode: 409, statusMessage: 'Workspace already exists' })
+        },
+      })
+
+      const { initWorkspace } = useApi()
+      await expect(initWorkspace('sk-ant-test-key')).rejects.toThrow()
+    })
+  })
 })

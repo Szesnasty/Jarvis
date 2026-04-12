@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from models.schemas import HealthResponse
+from routers.workspace import router as workspace_router
 
 APP_VERSION = "0.1.0"
 
@@ -23,6 +24,8 @@ def create_app() -> FastAPI:
     @app.get("/api/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         return HealthResponse(status="ok", version=APP_VERSION)
+
+    app.include_router(workspace_router)
 
     return app
 

@@ -48,4 +48,13 @@ describe('pages/main.vue', () => {
     const input = wrapper.find('input[type="text"]')
     expect(input.attributes('disabled')).toBeDefined()
   })
+
+  it('renders Orb component', async () => {
+    registerEndpoint('/api/health', () => ({
+      status: 'ok',
+      version: '0.1.0',
+    }))
+    const wrapper = await mountSuspended(MainPage)
+    expect(wrapper.find('.orb').exists()).toBe(true)
+  })
 })

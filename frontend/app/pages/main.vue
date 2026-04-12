@@ -2,6 +2,7 @@
   <div class="main-page">
     <StatusBar />
     <main class="main-page__content">
+      <Orb state="idle" />
       <h1 class="main-page__title">Jarvis</h1>
       <p class="main-page__status">
         Backend: {{ backendStatus }}
@@ -11,7 +12,7 @@
       <input
         type="text"
         class="main-page__input"
-        placeholder="Type a message..."
+        placeholder="Talk to Jarvis..."
         disabled
       />
     </footer>
