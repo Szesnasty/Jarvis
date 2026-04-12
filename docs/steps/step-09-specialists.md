@@ -267,45 +267,94 @@ Navigation: Back / Next buttons, step indicator, Save on final step.
 
 ## Tests
 
-### Backend — `tests/test_specialist_service.py`
-- `test_create_specialist` → JSON saved to `agents/` with correct schema
-- `test_activate_specialist` → system prompt modified with specialist persona
-- `test_deactivate_specialist` → system prompt reverts to base
-- `test_specialist_scoped_search` → search limited to specialist source folders
-- `test_specialist_tool_filter` → only permitted tools available
-- `test_specialist_rules_enforced` → blocked actions return rule violation
-- `test_edit_specialist` → JSON file updated
-- `test_delete_specialist` → moved to `.trash/`, not permanent
-- `test_suggest_specialist` → returns matching specialist for topic
+### Backend — `tests/test_specialist_service.py` (~16 tests)
+- `test_create_specialist_saves_json` → JSON file in `agents/`
+- `test_create_specialist_schema` → has name, persona, sources, tools, rules
+- `test_create_specialist_validates_name` → empty name rejected
+- `test_list_specialists` → returns all created specialists
+- `test_list_specialists_empty` → `[]` when none exist
+- `test_get_specialist` → returns full JSON by id
+- `test_get_specialist_not_found` → SpecialistNotFoundError
+- `test_activate_specialist_modifies_prompt` → system prompt includes specialist persona
+- `test_activate_specialist_sets_active` → `active_specialist` state updated
+- `test_deactivate_returns_to_base` → system prompt reverts to default Jarvis
+- `test_scoped_search` → search limited to specialist's `sources` folders
+- `test_scoped_search_no_leakage` → notes outside scope NOT returned
+- `test_tool_filter_whitelist` → only permitted tools in Claude call
+- `test_tool_filter_blocks_restricted` → restricted tool not callable
+- `test_rules_enforced` → rule violation returns error, not Claude response
+- `test_suggest_specialist` → topic match returns specialist suggestion
 
-### Backend — `tests/test_specialist_api.py`
-- `test_post_specialist` → 201 + created
-- `test_get_specialists` → 200 + list
-- `test_put_specialist` → 200 + updated
-- `test_delete_specialist` → 200 + trashed
-- `test_post_activate` → 200 + active
-- `test_post_deactivate` → 200 + base mode
+### Backend — `tests/test_specialist_lifecycle.py` (~8 tests)
+- `test_edit_specialist_updates_file` → JSON file changed on disk
+- `test_edit_specialist_preserves_id` → id unchanged after edit
+- `test_delete_specialist_moves_to_trash` → file in `.trash/`, not deleted
+- `test_delete_specialist_removes_from_list` → not in `list_specialists()`
+- `test_delete_active_specialist_deactivates` → auto-deactivates first
+- `test_activate_nonexistent_raises` → SpecialistNotFoundError
+- `test_activate_while_another_active` → previous deactivated first
+- `test_specialist_survives_restart` → new service instance loads from disk
 
-### Frontend — `src/__tests__/views/SpecialistWizard.test.ts`
-- Wizard renders 7 steps
-- Each step validates before advancing
-- Submit creates specialist via API
-- Specialist badge shows when active
+### Backend — `tests/test_specialist_api.py` (~10 tests)
+- `test_post_specialist_201` → 201 + id
+- `test_post_specialist_invalid` → 422 for missing required fields
+- `test_get_specialists_200` → 200 + list
+- `test_get_specialist_by_id_200` → 200 + full data
+- `test_get_specialist_404` → 404
+- `test_put_specialist_200` → 200 + updated
+- `test_delete_specialist_200` → 200
+- `test_post_activate_200` → 200 + active
+- `test_post_deactivate_200` → 200 + deactivated
+- `test_get_active_specialist` → 200 + currently active (or null)
+
+### Frontend — `tests/pages/specialists.test.ts` (~6 tests)
+- Renders list of specialists from API
+- Each card shows name, description, active badge
+- Click card opens detail/edit view
+- Delete button calls API and removes card
+- Active specialist highlighted
+- Empty state shows "Create your first specialist"
+
+### Frontend — `tests/components/SpecialistWizard.test.ts` (~10 tests)
+- Wizard renders step 1 (name + description)
+- Step 2: persona textarea
+- Step 3: source folder picker
+- Step 4: tool permissions checkboxes
+- Step 5: rules textarea
+- Step 6: review summary
+- Step 7: submit confirmation
+- Back button returns to previous step
+- Validation prevents skip with empty required fields
+- Submit sends POST and closes wizard
+
+### Frontend — `tests/components/SpecialistBadge.test.ts` (~3 tests)
+- Hidden when no specialist active
+- Shows specialist name when active
+- Click opens specialist detail
+
+### Regression suite
+```bash
+cd backend && python -m pytest tests/ -v
+cd frontend && npx vitest run
+```
 
 ### Run
 ```bash
-cd backend && python -m pytest tests/test_specialist_service.py tests/test_specialist_api.py -v
-cd frontend && npx vitest run src/__tests__/views/SpecialistWizard.test.ts
+cd backend && python -m pytest tests/ -v           # ~206 backend tests
+cd frontend && npx vitest run                      # ~143 frontend tests
 ```
+
+**Expected total: ~349 tests**
 
 ---
 
 ## Definition of Done
 
 - [ ] All files listed in this step are created
-- [ ] `python -m pytest tests/test_specialist_service.py tests/test_specialist_api.py` — all pass
-- [ ] `npx vitest run` — all pass
+- [ ] `python -m pytest tests/ -v` — all ~206 backend tests pass (including regression)
+- [ ] `npx vitest run` — all ~143 frontend tests pass (including regression)
 - [ ] Manual: create specialist → activate → verify scoped behavior
 - [ ] Delete specialist → verify in `.trash/`
+- [ ] Scoped search verified (no leakage outside specialist sources)
 - [ ] Committed with message `feat: step-09 specialist system`
 - [ ] [index-spec.md](../index-spec.md) updated with ✅

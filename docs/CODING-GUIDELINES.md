@@ -164,17 +164,18 @@ async def get_note(path: str):
 
 ---
 
-## 3. Vue 3 / TypeScript Rules
+## 3. Nuxt 3 / TypeScript Rules
 
 ### 3.1 Component Style
 - Always use `<script setup lang="ts">` (Composition API)
 - Never use Options API
 - Order in `.vue` file: `<script setup>` → `<template>` → `<style>`
+- **No manual imports** for Vue APIs, Nuxt composables, or auto-imported components
 
 ```vue
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import type { Note } from '@/types'
+// No need to import ref, computed — Nuxt auto-imports them
+import type { Note } from '~/types'
 
 const props = defineProps<{
   note: Note
@@ -233,16 +234,17 @@ export function useVoice() {
 - API responses must have TypeScript interfaces
 - No `any` except at system boundaries (external API responses that are genuinely unknown)
 
-### 3.5 State Management (Pinia)
-- One store per domain: `app`, `chat`, `voice`, `memory`
-- Stores hold only shared state — local component state stays in the component
-- Actions handle async logic, getters are computed derivations
+### 3.5 State Management (useState composable)
+- Use Nuxt's `useState()` for shared reactive state — no Pinia needed in SPA mode
+- One composable per domain: `useAppState`, `useChatState`, `useVoiceState`
+- Composables hold only shared state — local component state stays in the component
+- Actions handle async logic, computed properties for derivations
 
 ```typescript
-// stores/chat.ts
-export const useChatStore = defineStore('chat', () => {
-  const messages = ref<ChatMessage[]>([])
-  const isLoading = ref(false)
+// composables/useChatState.ts
+export function useChatState() {
+  const messages = useState<ChatMessage[]>('chat-messages', () => [])
+  const isLoading = useState<boolean>('chat-loading', () => false)
 
   async function sendMessage(content: string) {
     isLoading.value = true
@@ -254,31 +256,32 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   return { messages, isLoading, sendMessage }
-})
+}
 ```
 
 ### 3.6 API Calls
-- All API calls go through `services/api.ts` — components never call `fetch` directly
+- All API calls go through `composables/useApi.ts` — components never call `$fetch` directly
+- Use Nuxt's `$fetch` (not browser `fetch`) — it handles serialization and proxy automatically
 - Use typed request/response interfaces
-- Handle errors at the call site, not inside the API service
+- Handle errors at the call site, not inside the API composable
 
 ```typescript
-// services/api.ts
-const BASE_URL = '/api'
-
-export async function fetchNotes(folder: string): Promise<Note[]> {
-  const response = await fetch(`${BASE_URL}/memory/notes?folder=${folder}`)
-  if (!response.ok) {
-    throw new ApiError(response.status, await response.text())
+// composables/useApi.ts
+export function useApi() {
+  async function fetchNotes(folder: string): Promise<Note[]> {
+    return $fetch<Note[]>(`/api/memory/notes`, {
+      params: { folder },
+    })
   }
-  return response.json()
+
+  return { fetchNotes }
 }
 ```
 
 ### 3.7 Naming Conventions
-- Components: `PascalCase.vue` (`ChatPanel.vue`, `VoiceButton.vue`)
-- Composables: `camelCase.ts` with `use` prefix (`useVoice.ts`)
-- Stores: `camelCase.ts` (`chat.ts`)
+- Pages: `kebab-case.vue` (`main.vue`, `onboarding.vue`) — Nuxt file-based routing
+- Components: `PascalCase.vue` (`ChatPanel.vue`, `VoiceButton.vue`) — auto-imported
+- Composables: `camelCase.ts` with `use` prefix (`useVoice.ts`) — auto-imported
 - Types/interfaces: `PascalCase` (`NoteMetadata`, `ChatMessage`)
 - Variables, functions: `camelCase`
 - CSS classes: `kebab-case`
@@ -368,24 +371,25 @@ async def client(tmp_path):
         yield c
 ```
 
-#### Frontend (vitest)
-- Framework: `vitest` + `@vue/test-utils` + `jsdom`
-- Config: `vitest.config.ts` at `frontend/` root
-- Test location: `src/__tests__/` mirroring `src/` structure
-- Use `mount()` for component tests from `@vue/test-utils`
+#### Frontend (vitest + @nuxt/test-utils)
+- Framework: `vitest` + `@nuxt/test-utils` + `@vue/test-utils` + `happy-dom`
+- Config: via `nuxt.config.ts` — use `defineVitestConfig` from `@nuxt/test-utils/config`
+- Test location: `tests/` at `frontend/` root, mirroring `app/` structure
+- Use `mountSuspended()` for component tests (handles Nuxt context + async setup)
+- Use `renderSuspended()` for render-only tests
 - Use `vi.fn()` / `vi.mock()` for mocking
 - Naming: `describe('ComponentName')` + `it('does X when Y')`
 - Run: `cd frontend && npx vitest run`
 
 ```typescript
-// src/__tests__/components/Example.test.ts pattern
-import { mount } from '@vue/test-utils'
-import Example from '@/components/Example.vue'
+// tests/components/StatusBar.test.ts pattern
+import { mountSuspended } from '@nuxt/test-utils/runtime'
+import StatusBar from '~/components/StatusBar.vue'
 
-describe('Example', () => {
-  it('renders title', () => {
-    const wrapper = mount(Example, { props: { title: 'Hello' } })
-    expect(wrapper.text()).toContain('Hello')
+describe('StatusBar', () => {
+  it('renders connection status', async () => {
+    const wrapper = await mountSuspended(StatusBar)
+    expect(wrapper.text()).toContain('Status')
   })
 })
 ```

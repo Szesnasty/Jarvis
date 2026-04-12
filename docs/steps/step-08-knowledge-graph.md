@@ -247,41 +247,85 @@ Update `context_builder.py` to use `retrieval.retrieve()` instead of direct `mem
 
 ## Tests
 
-### Backend — `tests/test_graph_service.py`
-- `test_build_graph_empty` → empty graph when no notes
-- `test_build_graph_with_notes` → nodes + edges created from notes
-- `test_graph_folder_edges` → folder membership edges present
-- `test_graph_tag_edges` → shared tags create edges
-- `test_graph_wikilink_edges` → `[[link]]` creates edge between notes
-- `test_graph_frontmatter_relations` → frontmatter `related:` creates edges
-- `test_query_graph_neighbors` → returns immediate neighbors of a node
-- `test_graph_rebuild_idempotent` → delete + rebuild = same result
-- `test_no_ai_calls_during_build` → no Anthropic API calls made
+### Backend — `tests/test_graph_service.py` (~18 tests)
+- `test_build_graph_empty` → 0 nodes, 0 edges when no notes
+- `test_build_graph_single_note` → 1 node, 0 edges
+- `test_build_graph_multiple_notes` → N nodes for N notes
+- `test_graph_folder_membership_edge` → note → folder edge exists
+- `test_graph_shared_tag_edge` → two notes with same tag → edge between them
+- `test_graph_no_edge_different_tags` → different tags → no edge
+- `test_graph_wikilink_edge` → `[[note-b]]` in note-a → edge a→b
+- `test_graph_wikilink_bidirectional` → backlink also traversable
+- `test_graph_frontmatter_related` → `related: [note-b]` → edge
+- `test_graph_node_has_metadata` → node has id, title, folder, tags
+- `test_graph_edge_has_type` → edge has type (tag, folder, link, related)
+- `test_query_neighbors` → returns 1-hop neighbors of node
+- `test_query_neighbors_depth_2` → returns 2-hop neighbors
+- `test_query_neighbors_empty` → isolated node returns `[]`
+- `test_graph_rebuild_idempotent` → build twice = same graph
+- `test_graph_rebuild_after_delete` → delete graph.json → rebuild = same result
+- `test_graph_update_incremental` → adding note updates graph without full rebuild
+- `test_no_anthropic_calls` → mock Anthropic client, assert 0 calls
 
-### Backend — `tests/test_graph_api.py`
-- `test_post_rebuild` → 200 + node/edge counts
-- `test_get_graph` → 200 + full graph JSON
-- `test_get_graph_query` → 200 + filtered neighbors
+### Backend — `tests/test_graph_retrieval.py` (~8 tests)
+- `test_retrieval_search_only` → FTS5 results without graph expansion
+- `test_retrieval_with_graph_expansion` → FTS5 + neighbors included
+- `test_retrieval_deduplication` → same note from search + graph appears once
+- `test_retrieval_ranking` → direct match ranked above graph neighbor
+- `test_retrieval_max_results` → respects limit parameter
+- `test_retrieval_empty_query` → returns `[]`
+- `test_retrieval_no_graph` → works even if graph.json missing (fallback to search-only)
+- `test_retrieval_via_tool` → Claude `query_knowledge` tool uses retrieval pipeline
 
-### Frontend — `src/__tests__/views/GraphView.test.ts`
-- Renders SVG/canvas element
-- Nodes rendered from graph data
-- Click node emits select event
+### Backend — `tests/test_graph_api.py` (~8 tests)
+- `test_post_rebuild_200` → 200 + `{nodes: N, edges: M}`
+- `test_get_graph_200` → 200 + full graph JSON
+- `test_get_graph_empty` → 200 + empty graph structure
+- `test_get_graph_query_200` → 200 + filtered neighbors
+- `test_get_graph_query_unknown_node` → 200 + `[]`
+- `test_get_graph_stats` → 200 + node/edge/component counts
+- `test_graph_not_built_yet` → 404 or empty graph
+- `test_rebuild_after_note_change` → graph reflects updated note
+
+### Frontend — `tests/pages/graph.test.ts` (~8 tests)
+- Renders visualization container (SVG or canvas)
+- Nodes count matches API response
+- Clicking node emits `select` event with node id
+- Selected node shows preview panel
+- Preview panel shows note title + excerpt
+- Zoom controls work (zoom in, zoom out, fit)
+- Node colors differ by type/folder
+- Empty state shows "No graph — create notes first"
+
+### Frontend — `tests/composables/useGraph.test.ts` (~5 tests)
+- `loadGraph()` fetches from API
+- `rebuildGraph()` calls POST rebuild
+- `selectedNode` reactive ref updates on click
+- `queryNeighbors(nodeId)` returns filtered data
+- Loading state during fetch
+
+### Regression suite
+```bash
+cd backend && python -m pytest tests/ -v
+cd frontend && npx vitest run
+```
 
 ### Run
 ```bash
-cd backend && python -m pytest tests/test_graph_service.py tests/test_graph_api.py -v
-cd frontend && npx vitest run src/__tests__/views/GraphView.test.ts
+cd backend && python -m pytest tests/ -v           # ~172 backend tests
+cd frontend && npx vitest run                      # ~124 frontend tests
 ```
+
+**Expected total: ~296 tests**
 
 ---
 
 ## Definition of Done
 
 - [ ] All files listed in this step are created
-- [ ] `python -m pytest tests/test_graph_service.py tests/test_graph_api.py` — all pass
-- [ ] `npx vitest run` — all pass
+- [ ] `python -m pytest tests/ -v` — all ~172 backend tests pass (including regression)
+- [ ] `npx vitest run` — all ~124 frontend tests pass (including regression)
 - [ ] Source-of-truth verified: delete graph.json → rebuild → same graph
-- [ ] No AI API calls during graph operations
+- [ ] No AI API calls during graph operations (verified by mock test)
 - [ ] Committed with message `feat: step-08 knowledge graph`
 - [ ] [index-spec.md](../index-spec.md) updated with ✅

@@ -193,38 +193,82 @@ Use CSS animations/transitions. No canvas/WebGL — keep it lightweight.
 
 ## Tests
 
-### Frontend — `src/__tests__/composables/useSTT.test.ts`
+### Frontend — `tests/composables/useSTT.test.ts` (~10 tests)
 - `startListening()` calls `SpeechRecognition.start()`
-- `onresult` updates `transcript` ref in real-time
-- `onend` emits final transcript
-- Gracefully handles no SpeechRecognition API (returns `isSupported: false`)
+- `stopListening()` calls `SpeechRecognition.stop()`
+- `onresult` event updates `transcript` ref in real-time
+- `onresult` with `isFinal` emits final transcript
+- `onend` sets `isListening = false`
+- `onerror` sets `error` ref with message
+- `onerror` sets `isListening = false`
+- `isSupported` is `false` when no SpeechRecognition API
+- `startListening()` is no-op when not supported
+- `startListening()` while already listening is no-op
 
-### Frontend — `src/__tests__/composables/useTTS.test.ts`
-- `speak(text)` calls `SpeechSynthesis.speak()`
+### Frontend — `tests/composables/useTTS.test.ts` (~8 tests)
+- `speak(text)` calls `SpeechSynthesis.speak()` with `SpeechSynthesisUtterance`
+- `speak(text)` sets `isSpeaking = true`
+- `onend` event sets `isSpeaking = false`
 - `stop()` calls `SpeechSynthesis.cancel()`
-- Returns `isSupported: false` when SpeechSynthesis unavailable
+- `stop()` sets `isSpeaking = false`
+- `isSupported` is `false` when no SpeechSynthesis API
+- `speak()` is no-op when not supported
+- `speak()` while already speaking stops previous and starts new
 
-### Frontend — `src/__tests__/components/VoiceButton.test.ts`
+### Frontend — `tests/composables/useVoiceFlow.test.ts` (~8 tests)
+- Full flow: start listening → transcript → send to chat → receive response → speak
+- `state` transitions: idle → listening → thinking → speaking → idle
+- Cancel during listening returns to idle
+- Cancel during speaking stops TTS and returns to idle
+- Error during STT → state returns to idle + error set
+- Text input works when voice disabled (state stays idle)
+- `isVoiceAvailable` computed from STT + TTS support
+- Concurrent voice request queued, not dropped
+
+### Frontend — `tests/components/VoiceButton.test.ts` (~7 tests)
 - Renders mic icon when idle
-- Shows recording state when listening
-- Disabled with tooltip when not supported
-- Click toggles listening state
+- Renders stop icon when listening
+- Applies `.recording` CSS class when listening
+- Click calls `startListening()` when idle
+- Click calls `stopListening()` when listening
+- Disabled with tooltip when voice not supported
+- Accessible: has `aria-label` for screen readers
 
-### Frontend — `src/__tests__/components/OrbAnimation.test.ts`
+### Frontend — `tests/components/Orb.test.ts` (~6 tests)
 - Renders with `idle` state by default
-- Applies correct CSS class for each state: idle, listening, thinking, speaking
+- Applies `.orb--idle` class for idle
+- Applies `.orb--listening` class for listening
+- Applies `.orb--thinking` class for thinking
+- Applies `.orb--speaking` class for speaking
+- Transition between states updates class immediately
+
+### Frontend — `tests/components/TranscriptBar.test.ts` (~4 tests)
+- Hidden when no transcript
+- Shows interim transcript while listening
+- Shows final transcript briefly after recognition ends
+- Clears after timeout
+
+### Regression suite
+```bash
+cd backend && python -m pytest tests/ -v           # ALL backend tests
+cd frontend && npx vitest run                       # ALL frontend tests
+```
 
 ### Run
 ```bash
-cd frontend && npx vitest run src/__tests__/composables/useSTT.test.ts src/__tests__/composables/useTTS.test.ts src/__tests__/components/VoiceButton.test.ts src/__tests__/components/OrbAnimation.test.ts
+cd backend && python -m pytest tests/ -v           # ~96 backend tests (regression)
+cd frontend && npx vitest run                      # ~103 frontend tests
 ```
+
+**Expected total: ~199 tests**
 
 ---
 
 ## Definition of Done
 
 - [ ] All files listed in this step are created
-- [ ] `npx vitest run` — all pass
+- [ ] `python -m pytest tests/ -v` — all backend tests still pass (regression)
+- [ ] `npx vitest run` — all ~103 frontend tests pass (including regression)
 - [ ] Manual: mic click → speech recognized → response spoken
 - [ ] Orb transitions through all 4 states correctly
 - [ ] App works fully in text-only mode when voice unavailable

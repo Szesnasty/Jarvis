@@ -223,41 +223,90 @@ Loads a past session's messages as context for a new chat.
 
 ## Tests
 
-### Backend — `tests/test_planning_service.py`
-- `test_create_plan` → plan file created in `memory/plans/` with sections
-- `test_update_plan_task` → checkbox toggled in plan file
-- `test_list_plans` → returns plans sorted by date
+### Backend — `tests/test_planning_service.py` (~12 tests)
+- `test_create_plan_creates_file` → plan file in `memory/plans/`
+- `test_plan_has_date_in_filename` → `2026-04-12-weekly.md` format
+- `test_plan_has_sections` → contains Today, This Week, Later headings
+- `test_plan_has_checkboxes` → tasks as `- [ ]` items
+- `test_plan_indexed_in_sqlite` → plan appears in note index
+- `test_update_plan_toggles_checkbox` → `- [ ]` → `- [x]` in file
+- `test_update_plan_preserves_other_tasks` → untouched tasks unchanged
+- `test_list_plans_sorted_by_date` → newest first
+- `test_list_plans_empty` → `[]` when no plans
+- `test_get_plan_content` → returns full markdown
+- `test_create_plan_via_tool` → Claude tool `create_plan` works
+- `test_update_plan_via_tool` → Claude tool `update_plan` works
 
-### Backend — `tests/test_preferences_service.py`
-- `test_save_preference` → preference persisted to `app/preferences.json`
-- `test_load_preferences` → returns all saved preferences
-- `test_preferences_in_system_prompt` → system prompt includes preferences
+### Backend — `tests/test_preferences_service.py` (~10 tests)
+- `test_save_preference` → written to `app/preferences.json`
+- `test_save_preference_key_value` → stored as `{key: value}` pair
+- `test_load_preferences_empty` → `{}` when no prefs set
+- `test_load_preferences_returns_all` → all saved prefs returned
+- `test_overwrite_preference` → same key updates value
+- `test_delete_preference` → removes key from JSON
+- `test_preferences_in_system_prompt` → system prompt includes pref text
+- `test_preferences_survive_restart` → load after fresh service init
+- `test_preference_via_tool` → Claude tool `set_preference` works
+- `test_invalid_preference_key_rejected` → empty/null key → error
 
-### Backend — `tests/test_session_service.py`
-- `test_save_session` → session JSON saved to `app/sessions/`
-- `test_list_sessions` → returns session list with timestamps
-- `test_load_session` → returns full message history
-- `test_resume_session` → loaded history used in next Claude call
+### Backend — `tests/test_session_service.py` (~14 tests)
+- `test_save_session_creates_file` → JSON in `app/sessions/`
+- `test_save_session_has_metadata` → id, created_at, message_count, title
+- `test_save_session_has_messages` → full message history persisted
+- `test_save_session_auto_title` → first user message as title
+- `test_list_sessions_sorted` → newest first
+- `test_list_sessions_metadata_only` → no messages in list response
+- `test_list_sessions_empty` → `[]`
+- `test_load_session_full` → returns all messages
+- `test_load_session_not_found` → SessionNotFoundError
+- `test_resume_session_restores_history` → loaded messages used in next Claude call
+- `test_resume_session_appends_new` → new messages added after loaded ones
+- `test_delete_session` → file removed
+- `test_session_file_valid_json` → file parseable as JSON
+- `test_concurrent_sessions_isolated` → two sessions don't share state
 
-### Frontend — `src/__tests__/views/SessionHistory.test.ts`
-- Renders list of sessions from API
-- Click session loads its messages
-- Active session highlighted
+### Backend — `tests/test_planning_api.py` (~6 tests)
+- `test_get_plans_200` → 200 + list
+- `test_post_plan_201` → 201 + plan path
+- `test_patch_plan_task_200` → 200 + updated
+- `test_get_sessions_200` → 200 + list
+- `test_get_session_by_id_200` → 200 + full session
+- `test_get_session_404` → 404 for nonexistent
+
+### Frontend — `tests/pages/main.test.ts` additions (~4 tests)
+- Session list sidebar renders
+- Click session loads its messages into chat
+- Active session highlighted in sidebar
+- New session button clears chat
+
+### Frontend — `tests/composables/usePreferences.test.ts` (~4 tests)
+- `loadPreferences()` fetches from API
+- `setPreference(key, value)` sends PATCH
+- Preferences available as reactive state
+- Optimistic update: UI updates before API confirms
+
+### Regression suite
+```bash
+cd backend && python -m pytest tests/ -v           # ALL backend
+cd frontend && npx vitest run                       # ALL frontend
+```
 
 ### Run
 ```bash
-cd backend && python -m pytest tests/test_planning_service.py tests/test_preferences_service.py tests/test_session_service.py -v
-cd frontend && npx vitest run src/__tests__/views/SessionHistory.test.ts
+cd backend && python -m pytest tests/ -v           # ~138 backend tests
+cd frontend && npx vitest run                      # ~111 frontend tests
 ```
+
+**Expected total: ~249 tests**
 
 ---
 
 ## Definition of Done
 
 - [ ] All files listed in this step are created
-- [ ] `python -m pytest tests/test_planning_service.py tests/test_preferences_service.py tests/test_session_service.py` — all pass
-- [ ] `npx vitest run` — all pass
-- [ ] Manual: "plan my week" creates plan file; "keep responses shorter" persists preference
+- [ ] `python -m pytest tests/ -v` — all ~138 backend tests pass (including regression)
+- [ ] `npx vitest run` — all ~111 frontend tests pass (including regression)
+- [ ] Manual: "plan my week" creates plan; "keep responses shorter" persists preference
 - [ ] Sessions persist and can be resumed
 - [ ] Committed with message `feat: step-07 planning + sessions + preferences`
 - [ ] [index-spec.md](../index-spec.md) updated with ✅

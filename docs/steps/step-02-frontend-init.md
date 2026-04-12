@@ -1,4 +1,4 @@
-# Step 02 — Frontend Initialization (Vue + Vite)
+# Step 02 — Frontend Initialization (Nuxt 3)
 
 > **Guidelines**: [CODING-GUIDELINES.md](../CODING-GUIDELINES.md)
 > **Plan**: [JARVIS-PLAN.md](../JARVIS-PLAN.md)
@@ -8,7 +8,7 @@
 
 ## Goal
 
-Create a minimal Vue 3 frontend with TypeScript, Vite, Vue Router, and Pinia. It should show a placeholder page and proxy API calls to the backend.
+Create a minimal Nuxt 3 frontend with TypeScript. Nuxt gives us file-based routing, auto-imports, and first-class TS support out of the box. The app should show a placeholder page and proxy API calls to the backend.
 
 ---
 
@@ -17,30 +17,24 @@ Create a minimal Vue 3 frontend with TypeScript, Vite, Vue Router, and Pinia. It
 ```
 frontend/
 ├── package.json
-├── vite.config.ts
-├── tsconfig.json
-├── tsconfig.app.json
-├── tsconfig.node.json
-├── index.html
-├── env.d.ts
-├── src/
-│   ├── main.ts                # App entry point
-│   ├── App.vue                # Root component with <RouterView>
-│   ├── router/
-│   │   └── index.ts           # Vue Router setup
-│   ├── stores/
-│   │   └── app.ts             # Global app store (Pinia)
-│   ├── views/
-│   │   └── MainView.vue       # Placeholder main view
-│   ├── components/
-│   │   └── StatusBar.vue      # Simple top bar with status text
-│   ├── services/
-│   │   └── api.ts             # API client (fetch wrapper)
-│   ├── types/
-│   │   └── index.ts           # Shared TypeScript types
-│   └── assets/
-│       └── styles/
-│           └── main.css        # Base styles + CSS reset
+├── nuxt.config.ts              # Nuxt config + API proxy
+├── tsconfig.json               # Extends .nuxt/tsconfig.json
+├── app.vue                     # Root layout with <NuxtPage>
+├── pages/
+│   ├── index.vue               # Redirect to /main
+│   └── main.vue                # Placeholder main page
+├── components/
+│   └── StatusBar.vue           # Top bar with backend status
+├── composables/
+│   ├── useApi.ts               # API client (useFetch wrapper)
+│   └── useAppState.ts          # Global app state (replaces Pinia store)
+├── types/
+│   └── index.ts                # Shared TypeScript types
+├── assets/
+│   └── css/
+│       └── main.css            # Base styles + CSS reset
+├── server/
+│   └── tsconfig.json
 └── public/
 ```
 
@@ -48,88 +42,93 @@ frontend/
 
 ## Specification
 
-### 1. Scaffold with Vite
+### 1. Initialize Nuxt
 
-Initialize using `npm create vue@latest` conventions but create files manually to keep full control.
+```bash
+npx nuxi@latest init frontend
+```
 
-Dependencies:
+Then customize. Key deps (pinned after install):
 ```json
 {
   "dependencies": {
-    "vue": "^3.5",
-    "vue-router": "^4.4",
-    "pinia": "^2.2"
+    "nuxt": "^3.15"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0",
-    "typescript": "~5.6",
-    "vite": "^6.0",
-    "vue-tsc": "^2.0"
+    "@nuxt/test-utils": "^3.15",
+    "@vue/test-utils": "^2.4",
+    "vitest": "^2.0",
+    "happy-dom": "^15.0"
   }
 }
 ```
 
-### 2. `vite.config.ts`
+### 2. `nuxt.config.ts`
 
-- Vue plugin
-- Proxy `/api` to `http://127.0.0.1:8000` (the FastAPI backend)
-- Resolve `@` alias to `./src`
+- Proxy `/api` to `http://127.0.0.1:8000` (FastAPI backend) via `routeRules`
+- Enable TypeScript strict mode
+- Register global CSS
+- SSR disabled (SPA mode) — this is a local desktop app
 
 ```typescript
-server: {
-  proxy: {
-    '/api': {
-      target: 'http://127.0.0.1:8000',
-      changeOrigin: true,
-    }
-  }
-}
+export default defineNuxtConfig({
+  ssr: false,
+  devtools: { enabled: false },
+  css: ['~/assets/css/main.css'],
+  routeRules: {
+    '/api/**': { proxy: 'http://127.0.0.1:8000/api/**' },
+  },
+  typescript: {
+    strict: true,
+  },
+})
 ```
 
-### 3. Router (`router/index.ts`)
+### 3. Pages (file-based routing)
 
-Two routes for now:
-- `/` → redirect to `/main`
-- `/main` → `MainView.vue`
+- `pages/index.vue` — redirects to `/main` via `navigateTo('/main')`
+- `pages/main.vue` — placeholder layout with StatusBar + title
 
-Later steps will add `/onboarding`, `/memory`, `/graph`, `/specialists`, `/settings`.
+Later steps add: `pages/onboarding.vue`, `pages/memory.vue`, `pages/graph.vue`, `pages/specialists.vue`, `pages/settings.vue`
 
-### 4. App Store (`stores/app.ts`)
+### 4. Composable: `useAppState()`
 
-Pinia store with:
+Replaces Pinia store — uses Nuxt's `useState()` for SSR-safe shared state:
 - `isInitialized: boolean` — whether workspace exists
 - `backendStatus: 'unknown' | 'online' | 'offline'`
-- `checkHealth()` action — calls `GET /api/health`, updates `backendStatus`
+- `checkHealth()` — calls `GET /api/health`, updates `backendStatus`
 
-### 5. API Service (`services/api.ts`)
+### 5. Composable: `useApi()`
 
-- Base URL: empty string (Vite proxy handles `/api` prefix)
+Thin wrapper around `$fetch`:
 - `fetchHealth(): Promise<HealthResponse>` — calls `GET /api/health`
 - Typed error class: `ApiError` with `status` and `message`
+- Uses Nuxt's built-in `$fetch` (ohmyfetch) — no manual fetch needed
 
-### 6. `MainView.vue`
+### 6. `pages/main.vue`
 
 Placeholder layout:
-- StatusBar at top
+- StatusBar at top (auto-imported component)
 - Centered text: "Jarvis" + backend status indicator
 - Text input at bottom (non-functional yet)
 
-### 7. `main.css`
+### 7. `assets/css/main.css`
 
 - CSS reset (box-sizing, margin, padding)
-- Dark background (`#0a0a0f` or similar)
+- Dark background (`#0a0a0f`)
 - Light text
 - System font stack
-- No framework — keep it simple
 
 ---
 
 ## Key Decisions
 
-- Vite proxy eliminates CORS issues during development
-- No Tailwind yet — start with plain CSS to avoid premature dependency
-- Router uses `createWebHistory` (not hash mode)
-- All API calls go through `services/api.ts` — components never use `fetch` directly
+- **Nuxt over plain Vue**: file-based routing, auto-imports (no manual imports for composables/components), built-in TypeScript, built-in proxy via `routeRules`
+- **SPA mode (`ssr: false`)**: this is a local app, no need for SSR
+- **No Pinia**: Nuxt's `useState()` composable is sufficient for shared state in SPA mode
+- **`$fetch` over `fetch`**: Nuxt's `$fetch` auto-serializes, has better error handling, works with proxy
+- **No Tailwind yet** — start with plain CSS
+- All API calls go through `useApi()` composable — components never call `$fetch` directly
 
 ---
 
@@ -139,49 +138,85 @@ Placeholder layout:
 ```
 frontend/
 ├── vitest.config.ts
-└── src/
-    └── __tests__/
-        ├── App.test.ts              # App mounts correctly
-        ├── stores/app.test.ts       # App store + health check
-        └── services/api.test.ts     # API client tests
+└── tests/
+    ├── components/
+    │   └── StatusBar.test.ts
+    ├── composables/
+    │   ├── useApi.test.ts
+    │   └── useAppState.test.ts
+    ├── pages/
+    │   ├── index.test.ts
+    │   └── main.test.ts
+    └── setup.ts                 # Global test setup (mocks)
 ```
 
-Add dev dependencies:
-```json
-"vitest": "^2.0",
-"@vue/test-utils": "^2.4",
-"jsdom": "^25.0"
+### vitest.config.ts
+```typescript
+import { defineVitestConfig } from '@nuxt/test-utils/config'
+
+export default defineVitestConfig({})
 ```
 
-### Test Cases
+### Test Cases (~20 tests)
 
-**`App.test.ts`**
-- App component mounts without errors
-- RouterView is rendered
+**`tests/composables/useApi.test.ts`** (6 tests)
+- `fetchHealth()` returns `{ status: 'ok', version: '0.1.0' }` on 200
+- `fetchHealth()` throws `ApiError` with status code on 500
+- `fetchHealth()` throws `ApiError` with message on 404
+- `fetchHealth()` throws on network error (fetch rejects)
+- `ApiError` has correct `status` and `message` properties
+- `ApiError` is instanceof `Error`
 
-**`stores/app.test.ts`**
-- Initial state: `isInitialized = false`, `backendStatus = 'unknown'`
-- `checkHealth()` sets `backendStatus = 'online'` on success
-- `checkHealth()` sets `backendStatus = 'offline'` on fetch error
+**`tests/composables/useAppState.test.ts`** (7 tests)
+- Initial `isInitialized` is `false`
+- Initial `backendStatus` is `'unknown'`
+- `checkHealth()` sets `backendStatus = 'online'` when API returns 200
+- `checkHealth()` sets `backendStatus = 'offline'` when API throws
+- `checkHealth()` does not change `isInitialized`
+- Calling `checkHealth()` twice — latest result wins
+- State persists across multiple calls to `useAppState()` (shared via useState)
 
-**`services/api.test.ts`**
-- `fetchHealth()` returns parsed HealthResponse on 200
-- `fetchHealth()` throws ApiError on non-200
+**`tests/components/StatusBar.test.ts`** (5 tests)
+- Renders "Jarvis" label text
+- Shows status text from appState
+- Applies `.online` CSS class when status is `'online'`
+- Applies `.offline` CSS class when status is `'offline'`
+- Applies `.unknown` CSS class when status is `'unknown'`
+
+**`tests/pages/main.test.ts`** (5 tests)
+- Page mounts without errors
+- Renders StatusBar component
+- Renders "Jarvis" heading
+- Renders text input element
+- Input is disabled (placeholder, not functional yet)
+
+**`tests/pages/index.test.ts`** (1 test)
+- Visiting `/` redirects to `/main`
+
+### Regression: Backend still works
+After step-02, backend tests must still pass:
+```bash
+cd backend && python -m pytest tests/ -v
+```
 
 ### Run
 ```bash
-cd frontend && npx vitest run
+cd frontend && npx vitest run          # ~24 tests
+cd backend && python -m pytest -v      # regression (~11 tests)
 ```
+
+**Expected total: ~35 tests across both stacks**
 
 ---
 
 ## Definition of Done
 
-- [ ] `npm install && npm run dev` starts on `localhost:5173`
-- [ ] MainView placeholder visible in browser
+- [ ] `npm install && npm run dev` starts on `localhost:3000`
+- [ ] Main page placeholder visible in browser
 - [ ] StatusBar shows backend status (online/offline)
-- [ ] `npm run type-check` passes
-- [ ] `npx vitest run` — all tests pass
+- [ ] `npx nuxi typecheck` passes
+- [ ] `npx vitest run` — all 24 frontend tests pass
+- [ ] `cd backend && python -m pytest -v` — all backend tests still pass
 - [ ] All components use `<script setup lang="ts">`
-- [ ] Committed with message `feat: step-02 frontend init`
+- [ ] Committed with message `feat: step-02 frontend init (nuxt)`
 - [ ] [index-spec.md](../index-spec.md) updated with ✅

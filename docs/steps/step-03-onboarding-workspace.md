@@ -180,32 +180,67 @@ After onboarding, show:
 
 ## Tests
 
-### Backend — `tests/test_onboarding.py`
-- `test_workspace_status_no_workspace` → returns `{"exists": false}`
-- `test_create_workspace` → creates folder tree at configured path
-- `test_create_workspace_stores_api_key` → key in keyring, not in config.json
-- `test_workspace_status_after_creation` → returns `{"exists": true}`
-- `test_create_workspace_already_exists` → returns 409 Conflict
-- `test_config_json_no_raw_key` → config.json has `api_key_set: true`, no key value
+### Backend — `tests/test_workspace_service.py` (~12 tests)
+- `test_workspace_not_exists_initially` → service returns `False`
+- `test_create_workspace_creates_dirs` → creates `memory/`, `app/`, `agents/`, `.trash/`
+- `test_create_workspace_creates_config` → `config.json` exists in `app/`
+- `test_config_contains_api_key_set_true` → config has `api_key_set: true`
+- `test_config_does_not_contain_raw_key` → raw API key string NOT in config.json
+- `test_api_key_stored_in_keyring` → retrievable via `keyring.get_password()`
+- `test_workspace_exists_after_creation` → service returns `True`
+- `test_create_workspace_twice_raises` → second call raises `WorkspaceExistsError`
+- `test_workspace_path_from_settings` → uses `Settings.workspace_path`
+- `test_create_workspace_with_empty_key_raises` → empty string → `ValueError`
+- `test_create_workspace_with_whitespace_key_raises` → whitespace → `ValueError`
+- `test_workspace_folder_permissions` → created dirs are user-only readable
 
-### Frontend — `src/__tests__/views/OnboardingView.test.ts`
-- Renders onboarding form when no workspace
-- Submit calls API and redirects to `/main`
-- Shows error on API failure
+### Backend — `tests/test_workspace_api.py` (~8 tests)
+- `test_get_status_no_workspace` → 200 + `{"exists": false}`
+- `test_post_init_creates_workspace` → 201 + workspace created
+- `test_post_init_returns_structure` → response includes created folder list
+- `test_get_status_after_init` → 200 + `{"exists": true}`
+- `test_post_init_duplicate` → 409 Conflict
+- `test_post_init_missing_api_key` → 422 validation error
+- `test_post_init_empty_api_key` → 422 validation error
+- `test_api_key_not_in_any_response` → scan all response bodies for key absence
+
+### Frontend — `tests/pages/onboarding.test.ts` (~8 tests)
+- Renders API key input field
+- Renders "Create Workspace" button
+- Button disabled when input empty
+- Button enabled when input has text
+- Submit sends POST to `/api/workspace/init`
+- Success → redirects to `/main`
+- API error → shows error message, no redirect
+- Network error → shows connection error message
+
+### Frontend — `tests/composables/useAppState.test.ts` additions (~3 tests)
+- `isInitialized` becomes `true` after workspace init succeeds
+- `checkWorkspaceStatus()` calls GET `/api/workspace/status`
+- Initial load: if workspace exists → skip onboarding
+
+### Regression suite (~35 previous tests)
+```bash
+cd backend && python -m pytest tests/ -v          # ALL backend tests
+cd frontend && npx vitest run                      # ALL frontend tests
+```
 
 ### Run
 ```bash
-cd backend && python -m pytest tests/test_onboarding.py -v
-cd frontend && npx vitest run src/__tests__/views/OnboardingView.test.ts
+cd backend && python -m pytest tests/ -v           # ~31 backend tests
+cd frontend && npx vitest run                      # ~35 frontend tests
 ```
+
+**Expected total: ~66 tests**
 
 ---
 
 ## Definition of Done
 
 - [ ] All files listed in this step are created
-- [ ] `python -m pytest tests/test_onboarding.py` — all pass
-- [ ] `npx vitest run` — all pass
+- [ ] `python -m pytest tests/ -v` — all ~31 backend tests pass (including step 01 regression)
+- [ ] `npx vitest run` — all ~35 frontend tests pass (including step 02 regression)
 - [ ] Manual smoke: onboarding flow creates `~/Jarvis/` with correct structure
+- [ ] API key never appears in any REST response
 - [ ] Committed with message `feat: step-03 onboarding + workspace`
 - [ ] [index-spec.md](../index-spec.md) updated with ✅

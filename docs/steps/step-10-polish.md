@@ -208,56 +208,129 @@ Frontend:
 
 ## Tests
 
-### Backend — `tests/test_settings_api.py`
-- `test_get_settings` → 200 + current settings (no raw key)
-- `test_update_api_key` → key stored in keyring
-- `test_update_voice_prefs` → preferences persisted
+### Backend — `tests/test_settings_api.py` (~8 tests)
+- `test_get_settings_200` → 200 + current settings
+- `test_get_settings_no_raw_key` → API key NOT in response
+- `test_update_api_key` → key stored in keyring, response has `api_key_set: true`
+- `test_update_api_key_empty_rejected` → 422
+- `test_update_voice_prefs` → voice preferences persisted
+- `test_update_voice_prefs_invalid` → 422 for invalid values
+- `test_get_settings_includes_voice_prefs` → voice prefs in response
+- `test_settings_survives_restart` → settings file persists
 
-### Backend — `tests/test_ingest_service.py`
-- `test_import_markdown` → file copied + indexed
-- `test_import_txt` → converted to .md + indexed
-- `test_import_pdf` → text extracted + indexed
-- `test_enrich_note` → summary + tags added to frontmatter
+### Backend — `tests/test_ingest_service.py` (~14 tests)
+- `test_import_markdown_copies_file` → file in memory/ with same content
+- `test_import_markdown_indexed` → appears in SQLite index
+- `test_import_markdown_preserves_frontmatter` → existing frontmatter kept
+- `test_import_txt_converts_to_md` → `.txt` → `.md` with added frontmatter
+- `test_import_txt_content_preserved` → body text intact
+- `test_import_pdf_extracts_text` → text extracted to `.md`
+- `test_import_pdf_indexed` → appears in search
+- `test_import_duplicate_path_renames` → conflict resolution: adds suffix
+- `test_import_empty_file_handled` → no crash on empty file
+- `test_import_large_file_handled` → >1MB file imported (maybe with warning)
+- `test_enrich_adds_summary` → summary field added to frontmatter
+- `test_enrich_adds_tags` → tags array added to frontmatter
+- `test_enrich_preserves_existing_frontmatter` → existing fields unchanged
+- `test_enrich_uses_claude` → Claude API called for enrichment
 
-### Backend — `tests/test_token_tracking.py`
-- `test_log_token_usage` → usage recorded in log
-- `test_get_usage_summary` → returns totals by day
-- `test_budget_warning` → warning event when approaching limit
+### Backend — `tests/test_token_tracking.py` (~10 tests)
+- `test_log_usage_creates_entry` → usage recorded with timestamp
+- `test_log_usage_fields` → has input_tokens, output_tokens, model, cost_estimate
+- `test_get_usage_today` → returns today's total
+- `test_get_usage_by_day` → returns grouped daily totals
+- `test_get_usage_empty` → `{total: 0}` when no usage
+- `test_budget_warning_at_80pct` → warning event at 80% of daily budget
+- `test_budget_warning_at_100pct` → hard warning at 100%
+- `test_budget_configurable` → budget from settings
+- `test_usage_log_survives_restart` → persistent storage
+- `test_usage_api_endpoint` → `GET /api/usage` returns summary
 
-### Frontend — `src/__tests__/composables/useKeyboard.test.ts`
-- Space key toggles voice
-- Escape cancels current action
-- Enter sends message
-- Shortcuts disabled when input focused (except Enter)
+### Backend — `tests/test_error_handling.py` (~6 tests)
+- `test_claude_429_returns_graceful_error` → rate limit → user-friendly message
+- `test_claude_500_returns_graceful_error` → server error → retryable message
+- `test_claude_timeout_returns_error` → timeout → user-friendly message
+- `test_invalid_api_key_returns_auth_error` → 401 → "check your key" message
+- `test_ws_disconnect_cleans_up` → no resource leak after disconnect
+- `test_ws_reconnect_works` → new connection after drop succeeds
 
-### Frontend — `src/__tests__/views/SettingsView.test.ts`
-- Renders settings form
-- Submit updates settings via API
-- API key field masked
+### Frontend — `tests/composables/useKeyboard.test.ts` (~8 tests)
+- Space key calls `toggleVoice()` when not in input
+- Escape calls `cancelAction()`
+- Enter sends message when input focused
+- Space does NOT toggle voice when typing in input
+- Ctrl+K opens command palette (if applicable)
+- Key events fire correct handler functions
+- Shortcuts disabled in modal/dialog context
+- Shortcuts table matches documented shortcuts
 
-### Frontend — `src/__tests__/composables/useWebSocket.test.ts`
-- Auto-reconnect after disconnect
-- Reconnect with exponential backoff
-- Events buffered during reconnect
+### Frontend — `tests/pages/settings.test.ts` (~8 tests)
+- Renders API key field (masked: `••••••••`)
+- Renders voice preferences toggles
+- Submit API key calls PATCH endpoint
+- Submit voice prefs calls PATCH endpoint
+- Success shows confirmation toast
+- Error shows error message
+- Token usage summary displayed
+- "Open in Obsidian" button rendered
+
+### Frontend — `tests/composables/useWebSocket.test.ts` (~8 tests)
+- Connects to correct WS URL
+- Receives and parses JSON messages
+- Auto-reconnect on close event
+- Reconnect uses exponential backoff (100ms, 200ms, 400ms...)
+- Max reconnect attempts before giving up
+- `isConnected` ref updates on connect/disconnect
+- Events buffered during reconnect, sent after connect
+- Manual `close()` does NOT trigger reconnect
+
+### Frontend — `tests/components/ImportDialog.test.ts` (~5 tests)
+- File picker accepts .md, .txt, .pdf
+- Drag-and-drop zone visible
+- Upload progress shown
+- Success adds note to memory browser
+- Error shows message
+
+### Backend — `tests/test_full_regression.py` (~10 tests: end-to-end smoke)
+- `test_health_still_works` → GET /api/health = 200
+- `test_workspace_status` → GET /api/workspace/status = 200
+- `test_create_and_search_note` → POST note → search finds it
+- `test_graph_rebuild_after_note` → note → rebuild → node exists
+- `test_session_save_and_load` → save → list → load = same messages
+- `test_specialist_crud` → create → get → edit → delete
+- `test_preferences_round_trip` → set → get → same value
+- `test_settings_update` → PATCH → GET → reflects change
+- `test_import_and_find` → import file → search → found
+- `test_no_api_key_leak_anywhere` → scan all endpoints for key string
+
+### Regression suite
+```bash
+cd backend && python -m pytest tests/ -v
+cd frontend && npx vitest run
+```
 
 ### Run
 ```bash
-cd backend && python -m pytest tests/test_settings_api.py tests/test_ingest_service.py tests/test_token_tracking.py -v
-cd frontend && npx vitest run
+cd backend && python -m pytest tests/ -v           # ~254 backend tests
+cd frontend && npx vitest run                      # ~172 frontend tests
 ```
+
+**Expected total: ~426 tests — full MVP coverage**
 
 ---
 
 ## Definition of Done
 
 - [ ] All files listed in this step are created
-- [ ] `python -m pytest` — full suite passes
-- [ ] `npx vitest run` — full suite passes
+- [ ] `python -m pytest tests/ -v` — all ~254 backend tests pass (FULL regression)
+- [ ] `npx vitest run` — all ~172 frontend tests pass (FULL regression)
+- [ ] `test_full_regression.py` — all 10 smoke tests pass
 - [ ] Manual: keyboard shortcuts, settings, import, Obsidian link
-- [ ] Error handling graceful (rate limits, disconnects)
+- [ ] Error handling graceful (rate limits, disconnects, bad input)
+- [ ] No API key leakage in any endpoint (verified by scan test)
 - [ ] Committed with message `feat: step-10 polish + ingest + settings`
 - [ ] [index-spec.md](../index-spec.md) updated with ✅
-- [ ] 🎉 MVP complete
+- [ ] 🎉 MVP complete — 426 tests guard the full app
 
 ---
 

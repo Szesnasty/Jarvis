@@ -53,7 +53,7 @@ python-multipart>=0.0.9
   - `workspace_path: Path = Path.home() / "Jarvis"` — where user data lives
   - `api_host: str = "127.0.0.1"`
   - `api_port: int = 8000`
-  - `cors_origins: list[str] = ["http://localhost:5173"]` — Vite dev server
+  - `cors_origins: list[str] = ["http://localhost:3000"]` — Nuxt dev server
 - Singleton getter: `get_settings() -> Settings`
 - No API key in settings — that goes through keyring (later in step 03)
 
@@ -73,7 +73,7 @@ python-multipart>=0.0.9
 ## Key Decisions
 
 - Backend runs on `127.0.0.1:8000` — local only, not exposed to network
-- CORS allows only the Vite dev server origin
+- CORS allows only the Nuxt dev server origin
 - All routers will be registered in `main.py` via `app.include_router()`
 - No database initialization yet — that comes in step 03
 
@@ -87,7 +87,8 @@ backend/
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py              # Shared fixtures (test client, settings)
-│   └── test_health.py           # Health endpoint tests
+│   ├── test_health.py           # Health endpoint tests
+│   └── test_config.py           # Config loading tests
 ├── pytest.ini                   # Pytest config
 ```
 
@@ -104,32 +105,20 @@ async def client():
         yield ac
 ```
 
-### `tests/test_health.py`
-```python
-import pytest
+### `tests/test_health.py` (~6 tests)
+- `test_health_returns_200` → status code 200
+- `test_health_status_ok` → `data["status"] == "ok"`
+- `test_health_version_format` → `data["version"]` matches semver pattern
+- `test_health_response_schema` → response has exactly {status, version} keys
+- `test_cors_allows_nuxt_origin` → OPTIONS with `Origin: http://localhost:3000` → 200 + allow header
+- `test_cors_blocks_unknown_origin` → OPTIONS with `Origin: http://evil.com` → no allow-origin header
 
-@pytest.mark.anyio
-async def test_health_returns_ok(client):
-    response = await client.get("/api/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "ok"
-    assert data["version"] == "0.1.0"
-
-@pytest.mark.anyio
-async def test_health_response_schema(client):
-    response = await client.get("/api/health")
-    data = response.json()
-    assert set(data.keys()) == {"status", "version"}
-
-@pytest.mark.anyio
-async def test_cors_headers(client):
-    response = await client.options(
-        "/api/health",
-        headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "GET"}
-    )
-    assert response.status_code == 200
-```
+### `tests/test_config.py` (~5 tests)
+- `test_default_workspace_path` → defaults to `~/Jarvis`
+- `test_default_host_is_localhost` → `127.0.0.1`
+- `test_default_port` → `8000`
+- `test_cors_includes_nuxt` → `http://localhost:3000` in cors_origins
+- `test_env_override` → setting `JARVIS_API_PORT=9999` overrides default
 
 ### `pytest.ini`
 ```ini
@@ -137,18 +126,12 @@ async def test_cors_headers(client):
 asyncio_mode = auto
 ```
 
-Add to `requirements.txt`:
-```
-pytest>=8.0
-anyio[trio]>=4.0
-pytest-anyio>=0.0.0
-httpx>=0.27.0
-```
-
 ### Run
 ```bash
 cd backend && python -m pytest tests/ -v
 ```
+
+**Expected**: ~11 tests pass
 
 ---
 

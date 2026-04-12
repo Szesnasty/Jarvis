@@ -86,11 +86,11 @@ User creates specialists (Health Guide, Weekly Planner, Study Coach, etc.) with 
 ## 5. Tech Stack (MVP)
 
 ### Frontend
-- **Vue 3** (Composition API + `<script setup>`)
-- **TypeScript**
-- **Vite** (build tool)
-- **Pinia** (state management)
-- CSS: **Tailwind CSS** or simple scoped CSS (TBD — start minimal)
+- **Nuxt 3** (Vue 3 + file-based routing + auto-imports)
+- **TypeScript** (strict mode)
+- **Nitro** (built-in dev proxy to backend)
+- **useState()** composable for shared state (no Pinia needed)
+- CSS: simple scoped CSS (start minimal)
 
 ### Backend
 - **Python 3.12+**
@@ -151,33 +151,25 @@ jarvis/
 │       └── markdown.py          # Markdown parsing helpers
 ├── frontend/
 │   ├── package.json
-│   ├── vite.config.ts
+│   ├── nuxt.config.ts
 │   ├── tsconfig.json
-│   ├── index.html
-│   ├── src/
-│   │   ├── main.ts
-│   │   ├── App.vue
-│   │   ├── router/
-│   │   │   └── index.ts
-│   │   ├── stores/
-│   │   │   ├── app.ts           # Global app state
-│   │   │   ├── chat.ts          # Chat state
-│   │   │   └── voice.ts         # Voice state
-│   │   ├── views/
-│   │   │   ├── OnboardingView.vue
-│   │   │   ├── MainView.vue
-│   │   │   ├── MemoryView.vue
-│   │   │   ├── GraphView.vue
-│   │   │   ├── SpecialistsView.vue
-│   │   │   └── SettingsView.vue
-│   │   ├── components/
-│   │   │   ├── Orb.vue
-│   │   │   ├── ChatPanel.vue
-│   │   │   ├── TranscriptBar.vue
-│   │   │   ├── VoiceButton.vue
-│   │   │   ├── StatusBar.vue
-│   │   │   └── SpecialistCard.vue
-│   │   ├── composables/
+│   ├── app.vue                    # Root layout
+│   ├── pages/
+│   │   ├── index.vue              # Redirect to /main
+│   │   ├── main.vue
+│   │   ├── onboarding.vue
+│   │   ├── memory.vue
+│   │   ├── graph.vue
+│   │   ├── specialists.vue
+│   │   └── settings.vue
+│   ├── components/
+│   │   ├── Orb.vue
+│   │   ├── ChatPanel.vue
+│   │   ├── TranscriptBar.vue
+│   │   ├── VoiceButton.vue
+│   │   ├── StatusBar.vue
+│   │   └── SpecialistCard.vue
+│   ├── composables/
 │   │   │   ├── useVoice.ts
 │   │   │   ├── useChat.ts
 │   │   │   └── useWebSocket.ts
@@ -494,9 +486,9 @@ No manual vault setup. No extra installs. No multiple API keys.
 
 ### Phase 1 — System Skeleton ✦ START HERE
 - [ ] Initialize Python backend (FastAPI)
-- [ ] Initialize Vue frontend (Vite + TypeScript)
+- [ ] Initialize Nuxt 3 frontend (TypeScript + file-based routing)
 - [ ] Backend: `/api/health` endpoint
-- [ ] Frontend: basic app shell with router
+- [ ] Frontend: basic app shell with pages
 - [ ] Onboarding screen (API key input + workspace creation)
 - [ ] Backend: workspace initialization (`Jarvis/` folder structure)
 - [ ] Config save/load
@@ -569,7 +561,7 @@ No manual vault setup. No extra installs. No multiple API keys.
 | # | Task | Output |
 |---|------|--------|
 | 1 | Create backend with FastAPI | `backend/main.py`, `requirements.txt` |
-| 2 | Create frontend with Vue + Vite | `frontend/` scaffolding |
+| 2 | Create frontend with Nuxt 3 | `frontend/` scaffolding |
 | 3 | Health check endpoint | `GET /api/health` → `{"status": "ok"}` |
 | 4 | Onboarding view | API key input, "Create Workspace" button |
 | 5 | Workspace init endpoint | `POST /api/workspace/init` → creates `Jarvis/` tree |

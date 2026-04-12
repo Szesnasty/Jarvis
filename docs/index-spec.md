@@ -7,7 +7,7 @@
 ## References
 
 - [JARVIS-PLAN.md](JARVIS-PLAN.md) — Full project plan
-- [CODING-GUIDELINES.md](CODING-GUIDELINES.md) — Coding rules (Python + Vue)
+- [CODING-GUIDELINES.md](CODING-GUIDELINES.md) — Coding rules (Python + Nuxt)
 
 ---
 
@@ -27,7 +27,7 @@ Every step is considered **done** only when ALL of the following are true:
 ## Phase 1 — System Skeleton
 
 - [x] [Step 01 — Backend Init (FastAPI)](steps/step-01-backend-init.md)
-- [ ] [Step 02 — Frontend Init (Vue + Vite)](steps/step-02-frontend-init.md)
+- [ ] [Step 02 — Frontend Init (Nuxt 3)](steps/step-02-frontend-init.md)
 - [ ] [Step 03 — Onboarding + Workspace Creation](steps/step-03-onboarding-workspace.md)
 
 ## Phase 2 — Local Memory

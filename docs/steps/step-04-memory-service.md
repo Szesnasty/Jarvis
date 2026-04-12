@@ -213,42 +213,80 @@ Two-panel layout:
 
 ## Tests
 
-### Backend — `tests/test_memory_service.py`
-- `test_create_note` → file created on disk with YAML frontmatter
-- `test_create_note_indexed` → note appears in SQLite after creation
-- `test_list_notes` → returns list with title, path, created_at
-- `test_search_fts5` → FTS5 search returns matching notes
-- `test_search_no_results` → returns empty list
+### Backend — `tests/test_memory_service.py` (~18 tests)
+- `test_create_note_creates_file` → `.md` file exists on disk
+- `test_create_note_has_yaml_frontmatter` → title, created_at, tags in frontmatter
+- `test_create_note_body_content` → body text after frontmatter matches input
+- `test_create_note_indexed_in_sqlite` → note appears in SQLite query
+- `test_create_note_in_subfolder` → creates parent dirs if needed
+- `test_create_note_duplicate_path_raises` → error on duplicate
+- `test_list_notes_empty` → returns `[]` when no notes
+- `test_list_notes_returns_all` → 3 notes created → 3 returned
+- `test_list_notes_by_folder` → only notes in specified folder
+- `test_list_notes_metadata_fields` → each has title, path, created_at, tags
+- `test_search_fts5_finds_match` → search "python" finds note with "python"
+- `test_search_fts5_no_match` → search "xyz" returns `[]`
+- `test_search_fts5_partial_word` → "pyth" matches "python" (prefix search)
+- `test_search_ranks_by_relevance` → exact match ranked higher
 - `test_get_note_content` → returns full markdown body
-- `test_delete_note_soft` → file moved to `.trash/`, removed from index
-- `test_reindex_from_disk` → delete SQLite, call reindex, index restored
+- `test_get_note_nonexistent_raises` → NoteNotFoundError
+- `test_delete_note_moves_to_trash` → file in `.trash/`, not on original path
+- `test_delete_note_removes_from_index` → not in SQLite after delete
 
-### Backend — `tests/test_memory_api.py`
-- `test_post_notes` → 201 + location header
-- `test_get_notes_list` → 200 + array
-- `test_get_notes_search` → 200 + filtered results
-- `test_get_note_by_path` → 200 + content
-- `test_delete_note` → 200 + moved to trash
-- `test_post_reindex` → 200 + count
+### Backend — `tests/test_memory_reindex.py` (~6 tests)
+- `test_reindex_from_empty` → 0 notes indexed
+- `test_reindex_restores_after_db_delete` → delete SQLite → reindex → same count
+- `test_reindex_matches_original_metadata` → titles, tags, paths identical
+- `test_reindex_picks_up_manual_file` → file added to disk directly → appears after reindex
+- `test_reindex_removes_orphaned_entries` → file deleted from disk → gone after reindex
+- `test_reindex_preserves_search` → FTS5 search works after reindex
 
-### Frontend — `src/__tests__/views/MemoryBrowser.test.ts`
+### Backend — `tests/test_memory_api.py` (~12 tests)
+- `test_post_notes_201` → 201 + note path in response
+- `test_post_notes_invalid_body` → 422
+- `test_get_notes_list_200` → 200 + array
+- `test_get_notes_list_empty` → 200 + `[]`
+- `test_get_notes_search_200` → 200 + filtered results
+- `test_get_notes_search_empty_query` → 200 + all notes (or 422)
+- `test_get_note_by_path_200` → 200 + content + metadata
+- `test_get_note_by_path_404` → 404 for nonexistent
+- `test_delete_note_200` → 200 + confirmation
+- `test_delete_note_404` → 404 for nonexistent
+- `test_post_reindex_200` → 200 + `{"indexed": N}`
+- `test_path_traversal_blocked` → `../../../etc/passwd` → 400/403
+
+### Frontend — `tests/pages/memory.test.ts` (~8 tests)
 - Renders folder tree from API data
-- Clicking note shows content panel
-- Search input filters notes
+- Empty state shows "No notes yet" message
+- Clicking folder expands/collapses it
+- Clicking note shows content in preview panel
+- Search input triggers API search on Enter
+- Search results replace folder view
+- Clear search restores folder view
+- Delete note calls API and removes from list
+
+### Regression suite
+```bash
+cd backend && python -m pytest tests/ -v           # ALL backend tests
+cd frontend && npx vitest run                       # ALL frontend tests
+```
 
 ### Run
 ```bash
-cd backend && python -m pytest tests/test_memory_service.py tests/test_memory_api.py -v
-cd frontend && npx vitest run src/__tests__/views/MemoryBrowser.test.ts
+cd backend && python -m pytest tests/ -v           # ~67 backend tests
+cd frontend && npx vitest run                      # ~43 frontend tests
 ```
+
+**Expected total: ~110 tests**
 
 ---
 
 ## Definition of Done
 
 - [ ] All files listed in this step are created
-- [ ] `python -m pytest tests/test_memory_service.py tests/test_memory_api.py` — all pass
-- [ ] `npx vitest run` — all pass
+- [ ] `python -m pytest tests/ -v` — all ~67 backend tests pass (including regression)
+- [ ] `npx vitest run` — all ~43 frontend tests pass (including regression)
 - [ ] Source-of-truth doctrine verified: delete SQLite → reindex → same results
+- [ ] Path traversal attack blocked
 - [ ] Committed with message `feat: step-04 memory service + sqlite index`
 - [ ] [index-spec.md](../index-spec.md) updated with ✅

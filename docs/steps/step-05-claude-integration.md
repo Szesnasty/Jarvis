@@ -289,41 +289,84 @@ Message format (server → client):
 
 ## Tests
 
-### Backend — `tests/test_claude_service.py`
-- `test_build_system_prompt` → includes persona + preferences + context
-- `test_build_messages` → correct message format for Anthropic API
-- `test_tool_definitions` → tools list includes search_notes, write_note
-- `test_execute_tool_search` → search_notes tool calls memory service
-- `test_execute_tool_write` → write_note tool creates note
-- `test_no_api_key_in_response` → response never contains API key string
+### Backend — `tests/test_claude_service.py` (~14 tests)
+- `test_build_system_prompt_has_persona` → system prompt contains Jarvis persona
+- `test_build_system_prompt_includes_preferences` → user prefs injected when present
+- `test_build_system_prompt_includes_context` → relevant notes included when found
+- `test_build_system_prompt_max_length` → prompt stays within token budget
+- `test_build_messages_format` → messages match Anthropic API `{role, content}` format
+- `test_build_messages_preserves_order` → chronological order maintained
+- `test_tool_definitions_include_search` → `search_notes` in tools list
+- `test_tool_definitions_include_write` → `write_note` in tools list
+- `test_tool_definitions_schema_valid` → each tool has name, description, input_schema
+- `test_execute_tool_search` → `search_notes` calls memory service, returns results
+- `test_execute_tool_write` → `write_note` creates note via memory service
+- `test_execute_unknown_tool` → unknown tool name → ToolNotFoundError
+- `test_no_api_key_in_response_body` → response never contains raw API key
+- `test_no_api_key_in_error_messages` → errors don't leak key
 
-### Backend — `tests/test_chat_ws.py`
-- `test_ws_connect` → WebSocket connects successfully
-- `test_ws_send_message` → receives streaming chunks
-- `test_ws_tool_use` → receives tool_use + tool_result events
-- `test_ws_session_history` → second message includes first in history
-- `test_ws_invalid_message` → returns error event, no crash
+### Backend — `tests/test_chat_ws.py` (~10 tests)
+- `test_ws_connect_succeeds` → WebSocket handshake 101
+- `test_ws_connect_returns_session_id` → first message has session_id
+- `test_ws_send_message_receives_chunks` → streaming text_delta events
+- `test_ws_chunks_form_complete_response` → concatenated chunks = full response
+- `test_ws_tool_use_event` → receives `tool_use` event with tool name + input
+- `test_ws_tool_result_event` → `tool_result` follows `tool_use`
+- `test_ws_session_history_grows` → 2nd message includes 1st in history
+- `test_ws_invalid_json` → returns error event, connection stays open
+- `test_ws_empty_message` → returns validation error event
+- `test_ws_disconnect_cleanup` → session resources freed after disconnect
 
-### Frontend — `src/__tests__/composables/useChat.test.ts`
-- `sendMessage()` opens WS and emits message
-- Streaming chunks update `currentResponse`
-- Tool use displays activity indicator
-- Session messages array grows after exchange
+### Backend — `tests/test_chat_security.py` (~5 tests)
+- `test_api_key_not_in_ws_messages` → scan all WS frames for key string
+- `test_api_key_not_in_rest_responses` → scan all REST endpoint responses
+- `test_prompt_injection_basic` → "ignore previous instructions" doesn't leak system prompt
+- `test_tool_results_sanitized` → tool output doesn't contain raw paths outside workspace
+- `test_rate_limit_handling` → Claude 429 → graceful error event to client
+
+### Frontend — `tests/composables/useChat.test.ts` (~10 tests)
+- `sendMessage()` connects WebSocket with correct URL
+- `sendMessage()` sends JSON with `content` field
+- Streaming chunks update `currentResponse` ref progressively
+- `currentResponse` cleared when new message sent
+- `isLoading` is true during streaming, false after
+- Tool use event updates `toolActivity` ref
+- Tool result clears `toolActivity`
+- Session `messages` array grows after each exchange
+- Error event sets `error` ref with message
+- Disconnect during stream sets `error` + `isLoading = false`
+
+### Frontend — `tests/components/ChatPanel.test.ts` (~7 tests)
+- Renders message list from chat state
+- User messages aligned right
+- Assistant messages aligned left
+- Streaming response shows typing indicator
+- Tool activity shows "Searching notes..." or similar
+- Text input at bottom with send button
+- Send button disabled while loading
+
+### Regression suite
+```bash
+cd backend && python -m pytest tests/ -v           # ALL backend tests
+cd frontend && npx vitest run                       # ALL frontend tests
+```
 
 ### Run
 ```bash
-cd backend && python -m pytest tests/test_claude_service.py tests/test_chat_ws.py -v
-cd frontend && npx vitest run src/__tests__/composables/useChat.test.ts
+cd backend && python -m pytest tests/ -v           # ~96 backend tests
+cd frontend && npx vitest run                      # ~60 frontend tests
 ```
+
+**Expected total: ~156 tests**
 
 ---
 
 ## Definition of Done
 
 - [ ] All files listed in this step are created
-- [ ] `python -m pytest tests/test_claude_service.py tests/test_chat_ws.py` — all pass
-- [ ] `npx vitest run` — all pass
+- [ ] `python -m pytest tests/ -v` — all ~96 backend tests pass (including regression)
+- [ ] `npx vitest run` — all ~60 frontend tests pass (including regression)
 - [ ] Manual: type message → streaming response visible
-- [ ] No API key in any WS message or REST response
+- [ ] No API key in any WS message or REST response (verified by security tests)
 - [ ] Committed with message `feat: step-05 claude integration + streaming`
 - [ ] [index-spec.md](../index-spec.md) updated with ✅
