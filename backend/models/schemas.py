@@ -120,3 +120,38 @@ class GraphStatsResponse(BaseModel):
     node_count: int
     edge_count: int
     top_connected: list = []
+
+
+# --- Specialists ---
+
+class SpecialistCreateRequest(BaseModel):
+    name: str
+    role: str = ""
+    sources: list = []
+    style: dict = {}
+    rules: list = []
+    tools: list = []
+    examples: list = []
+    icon: str = "\U0001f916"
+
+
+class SpecialistSummaryResponse(BaseModel):
+    id: str
+    name: str
+    icon: str = "\U0001f916"
+    source_count: int = 0
+    rule_count: int = 0
+
+
+class SpecialistDetailResponse(BaseModel):
+    id: str
+    name: str
+    role: str = ""
+    sources: list = []
+    style: dict = {}
+    rules: list = []
+    tools: list = []
+    examples: list = []
+    icon: str = "\U0001f916"
+    created_at: str = ""
+    updated_at: str = ""

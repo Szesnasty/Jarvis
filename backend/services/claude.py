@@ -147,12 +147,19 @@ async def build_system_prompt(
     user_message: str,
     workspace_path=None,
 ) -> str:
-    """Build system prompt with optional context from notes."""
+    """Build system prompt with optional context and active specialist."""
+    from services import specialist_service
+
+    base = SYSTEM_PROMPT
+    active = specialist_service.get_active_specialist()
+    if active:
+        base = specialist_service.build_specialist_prompt(active, base)
+
     context = await build_context(user_message, workspace_path=workspace_path)
     if not context:
-        return SYSTEM_PROMPT
+        return base
     return (
-        SYSTEM_PROMPT
+        base
         + "\n\nHere are potentially relevant notes from the user's memory:\n"
         + context
     )

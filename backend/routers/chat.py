@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from services import session_service
+from services import specialist_service
 from services.claude import ClaudeService, StreamEvent, build_system_prompt
 from services.tools import TOOLS, ToolNotFoundError, execute_tool
 from services.workspace_service import get_api_key
@@ -61,13 +62,14 @@ async def _stream_follow_up(
     claude: ClaudeService,
     tool_messages: list[dict],
     system_prompt: str,
+    tools: list[dict],
 ) -> str:
     """Stream Claude's follow-up after tool execution. Returns accumulated text."""
     text = ""
     async for event in claude.stream_response(
         messages=tool_messages,
         system_prompt=system_prompt,
-        tools=TOOLS,
+        tools=tools,
     ):
         if event.type == "text_delta":
             text += event.content
@@ -90,13 +92,15 @@ async def _handle_message(
     session_service.add_message(session_id, "user", content)
     messages = session_service.get_messages(session_id)
     system_prompt = await build_system_prompt(content)
+    active_spec = specialist_service.get_active_specialist()
+    tools = specialist_service.filter_tools(TOOLS, active_spec)
     claude = ClaudeService(api_key=api_key)
     assistant_text = ""
 
     async for event in claude.stream_response(
         messages=messages,
         system_prompt=system_prompt,
-        tools=TOOLS,
+        tools=tools,
     ):
         if event.type == "text_delta":
             assistant_text += event.content
@@ -110,7 +114,7 @@ async def _handle_message(
 
             tool_messages = _build_tool_messages(messages, event, result)
             assistant_text += await _stream_follow_up(
-                ws, claude, tool_messages, system_prompt,
+                ws, claude, tool_messages, system_prompt, tools,
             )
 
         elif event.type == "error":

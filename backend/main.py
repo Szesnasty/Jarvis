@@ -8,6 +8,7 @@ from routers.graph import router as graph_router
 from routers.memory import router as memory_router
 from routers.preferences import router as preferences_router
 from routers.sessions import router as sessions_router
+from routers.specialists import router as specialists_router
 from routers.workspace import router as workspace_router
 
 APP_VERSION = "0.1.0"
@@ -36,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(sessions_router)
     app.include_router(preferences_router)
     app.include_router(graph_router)
+    app.include_router(specialists_router)
 
     return app
 

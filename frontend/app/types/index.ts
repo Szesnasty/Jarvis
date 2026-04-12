@@ -120,3 +120,27 @@ export interface GraphStats {
   edge_count: number
   top_connected: { id: string; degree: number }[]
 }
+
+// --- Specialists ---
+
+export interface SpecialistSummary {
+  id: string
+  name: string
+  icon: string
+  source_count: number
+  rule_count: number
+}
+
+export interface SpecialistDetail {
+  id: string
+  name: string
+  role: string
+  sources: string[]
+  style: { tone?: string; format?: string; length?: string }
+  rules: string[]
+  tools: string[]
+  examples: { user: string; assistant: string }[]
+  icon: string
+  created_at: string
+  updated_at: string
+}
