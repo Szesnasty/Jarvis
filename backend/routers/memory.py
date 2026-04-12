@@ -1,6 +1,8 @@
+import tempfile
+from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, status
 
 from models.schemas import (
     NoteContentRequest,
@@ -76,3 +78,28 @@ async def delete_note_endpoint(note_path: str):
 async def reindex_endpoint():
     count = await reindex_all()
     return ReindexResponse(indexed=count)
+
+
+@router.post("/ingest")
+async def ingest_file(
+    file: UploadFile = File(...),
+    folder: str = Form("knowledge"),
+):
+    from services.ingest import IngestError, fast_ingest
+
+    with tempfile.NamedTemporaryFile(
+        delete=False,
+        suffix=Path(file.filename or "upload").suffix,
+    ) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+
+    try:
+        result = await fast_ingest(tmp_path, target_folder=folder)
+    except IngestError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    return result

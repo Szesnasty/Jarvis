@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from config import get_settings
 from models.schemas import HealthResponse
@@ -8,6 +9,7 @@ from routers.graph import router as graph_router
 from routers.memory import router as memory_router
 from routers.preferences import router as preferences_router
 from routers.sessions import router as sessions_router
+from routers.settings import router as settings_router
 from routers.specialists import router as specialists_router
 from routers.workspace import router as workspace_router
 
@@ -38,6 +40,14 @@ def create_app() -> FastAPI:
     app.include_router(preferences_router)
     app.include_router(graph_router)
     app.include_router(specialists_router)
+    app.include_router(settings_router)
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )
 
     return app
 
