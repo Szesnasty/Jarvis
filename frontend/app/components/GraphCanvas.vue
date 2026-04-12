@@ -8,13 +8,20 @@
     </div>
     <div v-if="hoveredNode" class="graph-canvas__tooltip" :style="tooltipStyle">
       <strong>{{ hoveredNode.label }}</strong>
-      <span class="graph-canvas__tooltip-type">{{ hoveredNode.type }}</span>
+      <span class="graph-canvas__tooltip-type">{{ hoveredNode.type }}{{ hoveredNode.folder ? ' · ' + hoveredNode.folder : '' }}</span>
+      <span class="graph-canvas__tooltip-degree" v-if="hoveredDegree > 0">{{ hoveredDegree }} connections</span>
+    </div>
+    <div class="graph-canvas__legend">
+      <span class="graph-canvas__legend-item"><i style="background:#60a5fa"></i> note</span>
+      <span class="graph-canvas__legend-item"><i style="background:#34d399"></i> tag</span>
+      <span class="graph-canvas__legend-item"><i style="background:#c084fc"></i> person</span>
+      <span class="graph-canvas__legend-item"><i style="background:#fb923c"></i> area</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 import type { GraphNode, GraphEdge } from '~/types'
 
 const props = defineProps<{
@@ -29,30 +36,55 @@ const emit = defineEmits<{
 
 const containerRef = ref<HTMLElement | null>(null)
 const hoveredNode = ref<GraphNode | null>(null)
+const hoveredDegree = ref(0)
 const tooltipStyle = ref({ left: '0px', top: '0px' })
 
 let graph: any = null
 let resizeObserver: ResizeObserver | null = null
 
-const COLOR_MAP: Record<string, string> = {
+// --- Color palette ---
+const NODE_COLOR: Record<string, string> = {
   note: '#60a5fa',
   tag: '#34d399',
   person: '#c084fc',
   area: '#fb923c',
 }
 
-const SIZE_MAP: Record<string, number> = {
-  note: 5,
-  tag: 3,
-  person: 6,
-  area: 8,
+const EDGE_COLOR: Record<string, string> = {
+  tagged:   'rgba(52, 211, 153, 0.35)',   // green — tag links
+  part_of:  'rgba(251, 146, 60, 0.25)',   // orange — folder membership
+  linked:   'rgba(167, 139, 250, 0.45)',  // purple — wiki links
+  mentions: 'rgba(192, 132, 252, 0.4)',   // purple — people
+  related:  'rgba(96, 165, 250, 0.4)',    // blue — explicit related
+}
+
+const EDGE_PARTICLE_COLOR: Record<string, string> = {
+  tagged:   'rgba(52, 211, 153, 0.6)',
+  part_of:  'rgba(251, 146, 60, 0.4)',
+  linked:   'rgba(167, 139, 250, 0.7)',
+  mentions: 'rgba(192, 132, 252, 0.6)',
+  related:  'rgba(96, 165, 250, 0.6)',
+}
+
+// --- Compute degree per node (for sizing) ---
+function computeDegrees(): Record<string, number> {
+  const deg: Record<string, number> = {}
+  for (const e of props.edges) {
+    deg[e.source] = (deg[e.source] || 0) + 1
+    deg[e.target] = (deg[e.target] || 0) + 1
+  }
+  return deg
+}
+
+function nodeRadius(type: string, degree: number): number {
+  const base = type === 'area' ? 7 : type === 'person' ? 5 : type === 'note' ? 4 : 3
+  return base + Math.min(degree * 0.4, 8)
 }
 
 async function buildGraph() {
   if (!containerRef.value) return
   const el = containerRef.value
 
-  // Destroy previous instance
   if (graph) {
     graph._destructor()
     graph = null
@@ -61,65 +93,122 @@ async function buildGraph() {
 
   if (props.nodes.length === 0) return
 
-  // Dynamic import — only runs on client
   const { default: ForceGraph } = await import('force-graph')
+  const degrees = computeDegrees()
 
   graph = new ForceGraph(el)
     .backgroundColor('#0f172a')
     .width(el.clientWidth)
     .height(el.clientHeight)
     .nodeId('id')
-    .nodeColor((n: any) => COLOR_MAP[n.type] ?? '#9ca3af')
     .nodeLabel('')
-    .nodeRelSize(1)
     .nodeCanvasObjectMode(() => 'replace')
     .nodeCanvasObject((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const r = SIZE_MAP[node.type] ?? 4
+      const deg = degrees[node.id] || 0
+      const r = nodeRadius(node.type, deg)
+      const color = NODE_COLOR[node.type] ?? '#9ca3af'
       const isHighlighted = props.highlightedNode === node.id
+      const isHovered = hoveredNode.value?.id === node.id
 
-      // Glow effect
-      if (isHighlighted) {
-        ctx.shadowColor = COLOR_MAP[node.type] ?? '#60a5fa'
-        ctx.shadowBlur = 15
+      // Outer glow for highlighted / hovered
+      if (isHighlighted || isHovered) {
+        ctx.beginPath()
+        ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI)
+        ctx.fillStyle = color.replace(')', ', 0.15)').replace('rgb', 'rgba')
+        ctx.fill()
+
+        ctx.shadowColor = color
+        ctx.shadowBlur = isHighlighted ? 20 : 12
       }
 
-      // Node circle
+      // Node body
       ctx.beginPath()
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
-      ctx.fillStyle = COLOR_MAP[node.type] ?? '#9ca3af'
+      ctx.fillStyle = color
       ctx.fill()
+
+      // Subtle border for areas
+      if (node.type === 'area') {
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)'
+        ctx.lineWidth = 0.5
+        ctx.stroke()
+      }
+
       ctx.shadowBlur = 0
 
-      // Label (only when zoomed enough)
-      if (globalScale > 0.8) {
-        const fontSize = Math.min(12 / globalScale, 5)
-        ctx.font = `${fontSize}px Sans-Serif`
+      // Label logic: always show for area, show for high-degree nodes, else only on zoom
+      const showLabel =
+        node.type === 'area' ||
+        deg >= 4 ||
+        isHovered ||
+        isHighlighted ||
+        globalScale > 1.2
+
+      if (showLabel) {
+        const maxFontSize = node.type === 'area' ? 6 : node.type === 'tag' ? 3.5 : 4.5
+        const fontSize = Math.min(14 / globalScale, maxFontSize)
+        const alpha = node.type === 'tag' ? 0.5 : 0.85
+
+        ctx.font = `${node.type === 'area' ? 'bold ' : ''}${fontSize}px Inter, system-ui, sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'top'
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'
-        ctx.fillText(node.label, node.x, node.y + r + 2)
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`
+
+        // Truncate long labels
+        let label = node.label
+        if (label.length > 25 && !isHovered) {
+          label = label.slice(0, 22) + '…'
+        }
+
+        ctx.fillText(label, node.x, node.y + r + 2)
       }
     })
     .nodePointerAreaPaint((node: any, color: string, ctx: CanvasRenderingContext2D) => {
-      const r = (SIZE_MAP[node.type] ?? 4) + 3
+      const deg = degrees[node.id] || 0
+      const r = nodeRadius(node.type, deg) + 4
       ctx.beginPath()
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
       ctx.fillStyle = color
       ctx.fill()
     })
-    .linkColor(() => 'rgba(100, 160, 220, 0.15)')
-    .linkWidth(1)
-    .linkDirectionalParticles(2)
-    .linkDirectionalParticleWidth(1.5)
-    .linkDirectionalParticleSpeed(0.004)
-    .linkDirectionalParticleColor(() => 'rgba(100, 180, 255, 0.4)')
+    // --- Edge styling by type ---
+    .linkColor((link: any) => {
+      const type = link._type || 'tagged'
+      return EDGE_COLOR[type] ?? 'rgba(100, 160, 220, 0.15)'
+    })
+    .linkWidth((link: any) => {
+      const type = link._type || 'tagged'
+      if (type === 'linked' || type === 'related') return 1.8
+      if (type === 'part_of') return 0.6
+      return 1
+    })
+    .linkLineDash((link: any) => {
+      return link._type === 'part_of' ? [2, 2] : []
+    })
+    .linkDirectionalArrowLength((link: any) => {
+      return link._type === 'linked' || link._type === 'related' ? 4 : 0
+    })
+    .linkDirectionalArrowRelPos(0.85)
+    .linkDirectionalParticles((link: any) => {
+      return link._type === 'tagged' || link._type === 'linked' ? 1 : 0
+    })
+    .linkDirectionalParticleWidth(1.2)
+    .linkDirectionalParticleSpeed(0.003)
+    .linkDirectionalParticleColor((link: any) => {
+      return EDGE_PARTICLE_COLOR[link._type] ?? 'rgba(100, 180, 255, 0.4)'
+    })
+    .linkCurvature((link: any) => {
+      // Slight curve to avoid overlapping straight lines
+      return link._type === 'part_of' ? 0.15 : 0
+    })
+    // --- Interaction ---
     .enableNodeDrag(true)
     .enableZoomInteraction(true)
     .enablePanInteraction(true)
     .d3AlphaDecay(0.02)
     .d3VelocityDecay(0.3)
-    .warmupTicks(50)
-    .cooldownTime(3000)
+    .warmupTicks(80)
+    .cooldownTime(4000)
     .onNodeClick((node: any) => {
       const orig = props.nodes.find(n => n.id === node.id)
       if (orig) emit('nodeClick', orig)
@@ -128,22 +217,35 @@ async function buildGraph() {
       if (containerRef.value) {
         containerRef.value.style.cursor = node ? 'pointer' : 'default'
       }
-      hoveredNode.value = node
-        ? (props.nodes.find(n => n.id === node.id) ?? null)
-        : null
+      if (node) {
+        hoveredNode.value = props.nodes.find(n => n.id === node.id) ?? null
+        hoveredDegree.value = degrees[node.id] || 0
+      } else {
+        hoveredNode.value = null
+        hoveredDegree.value = 0
+      }
     })
     .graphData({
       nodes: props.nodes.map(n => ({ ...n })),
-      links: props.edges.map(e => ({ source: e.source, target: e.target })),
+      links: props.edges.map(e => ({ source: e.source, target: e.target, _type: e.type })),
     })
 
-  // Tune forces after instantiation
-  graph.d3Force('charge')?.strength(-80)
-  graph.d3Force('link')?.distance(30)
-  graph.d3Force('center')?.strength(0.1)
+  // --- Force tuning ---
+  // Areas strongly repel, tags weakly repel: tiered charge
+  graph.d3Force('charge')?.strength((node: any) => {
+    const deg = degrees[node.id] || 0
+    if (node.type === 'area') return -200 - deg * 10
+    if (node.type === 'tag') return -30 - deg * 3
+    return -60 - deg * 5
+  })
+  graph.d3Force('link')?.distance((link: any) => {
+    if (link._type === 'part_of') return 50
+    if (link._type === 'tagged') return 35
+    return 45
+  })
+  graph.d3Force('center')?.strength(0.05)
 
-  // Initial zoom-to-fit after layout settles
-  setTimeout(() => graph?.zoomToFit(600, 60), 1200)
+  setTimeout(() => graph?.zoomToFit(600, 60), 1500)
 }
 
 // Exposed methods for parent
@@ -158,15 +260,7 @@ watch(
   () => [props.nodes, props.edges],
   async () => {
     await nextTick()
-    if (graph && props.nodes.length > 0) {
-      graph.graphData({
-        nodes: props.nodes.map(n => ({ ...n })),
-        links: props.edges.map(e => ({ source: e.source, target: e.target })),
-      })
-      setTimeout(() => graph?.zoomToFit(600, 60), 1200)
-    } else {
-      buildGraph()
-    }
+    buildGraph()
   },
   { deep: true },
 )
@@ -180,7 +274,6 @@ onMounted(async () => {
   await nextTick()
   buildGraph()
 
-  // Responsive sizing
   if (containerRef.value) {
     resizeObserver = new ResizeObserver(() => {
       if (graph && containerRef.value) {
@@ -199,11 +292,6 @@ onBeforeUnmount(() => {
     graph = null
   }
 })
-
-// Track mouse for tooltip
-function handleMouseMove(e: MouseEvent) {
-  tooltipStyle.value = { left: `${e.offsetX + 14}px`, top: `${e.offsetY - 10}px` }
-}
 </script>
 
 <style scoped>
@@ -274,6 +362,35 @@ function handleMouseMove(e: MouseEvent) {
   color: #64748b;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.graph-canvas__tooltip-degree {
+  font-size: 0.6rem;
+  color: #475569;
+}
+
+.graph-canvas__legend {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  display: flex;
+  gap: 0.6rem;
+  z-index: 10;
+  font-size: 0.65rem;
+  color: #64748b;
+}
+
+.graph-canvas__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.graph-canvas__legend-item i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 </style>
 
