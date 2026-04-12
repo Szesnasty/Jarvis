@@ -59,8 +59,8 @@ function handleFit(): void {
   canvasRef.value?.zoomToFit()
 }
 
-onMounted(() => {
-  loadGraph()
+onMounted(async () => {
+  await rebuildGraph()
 })
 </script>
 
