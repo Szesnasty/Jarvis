@@ -111,8 +111,22 @@ class ClaudeService:
                 type="error",
                 content="Rate limited by Claude API. Please try again shortly.",
             )
+        except anthropic.APIStatusError as exc:
+            if exc.status_code == 529 or "overloaded" in str(exc).lower():
+                msg = "Claude is currently overloaded. Please try again in a moment."
+            elif exc.status_code == 401:
+                msg = "Invalid API key. Please check your key in Settings."
+            elif exc.status_code == 403:
+                msg = "API key does not have permission for this model."
+            elif exc.status_code >= 500:
+                msg = "Claude API is experiencing issues. Please try again shortly."
+            else:
+                msg = f"Claude API error ({exc.status_code}). Please try again."
+            logger.warning("Claude API error %d: %s", exc.status_code, exc)
+            yield StreamEvent(type="error", content=msg)
         except anthropic.APIError as exc:
-            yield StreamEvent(type="error", content=f"Claude API error: {exc}")
+            logger.warning("Claude API error: %s", exc)
+            yield StreamEvent(type="error", content="Failed to reach Claude API. Please try again.")
 
     async def _iter_stream(
         self,

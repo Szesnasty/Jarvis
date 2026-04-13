@@ -8,8 +8,18 @@ export function useChat() {
   const toolActivity = ref('')
   const error = ref('')
   const sessionId = ref('')
+  const canRetry = ref(false)
+  let _lastContent = ''
+  let _errorClearTimer: ReturnType<typeof setTimeout> | null = null
 
   const { isConnected, connect, send, onMessage, close, onReconnect } = useWebSocket()
+
+  function _setError(msg: string, retryable = false): void {
+    error.value = msg
+    canRetry.value = retryable
+    if (_errorClearTimer) clearTimeout(_errorClearTimer)
+    _errorClearTimer = setTimeout(() => { error.value = ''; canRetry.value = false }, 8000)
+  }
 
   function _handleEvent(event: WsEvent): void {
     if (event.type === 'session_start') {
@@ -44,7 +54,9 @@ export function useChat() {
     }
 
     if (event.type === 'error') {
-      error.value = event.content
+      const content = event.content || 'Something went wrong.'
+      const retryable = /try again|overloaded|rate limit|reconnect/i.test(content)
+      _setError(content, retryable)
       isLoading.value = false
       toolActivity.value = ''
       return
@@ -59,8 +71,7 @@ export function useChat() {
         }
         isLoading.value = false
         toolActivity.value = ''
-        error.value = 'Connection lost — reconnecting...'
-        setTimeout(() => { error.value = '' }, 3000)
+        _setError('Connection lost — reconnecting...', true)
       }
     }
   }
@@ -82,24 +93,38 @@ export function useChat() {
     onReconnect(() => {
       sessionId.value = ''
       error.value = ''
+      canRetry.value = false
     })
   }
 
   function sendMessage(content: string): void {
     if (!content.trim() || isLoading.value) return
 
-    messages.value.push({ role: 'user', content: content.trim() })
+    _lastContent = content.trim()
+    messages.value.push({ role: 'user', content: _lastContent })
     currentResponse.value = ''
     error.value = ''
+    canRetry.value = false
     isLoading.value = true
 
-    const sent = send({ type: 'message', content: content.trim(), session_id: sessionId.value })
+    const sent = send({ type: 'message', content: _lastContent, session_id: sessionId.value })
     if (!sent) {
       // WS not ready — reset and show error
       isLoading.value = false
-      error.value = 'Not connected — reconnecting, try again in a moment.'
-      setTimeout(() => { error.value = '' }, 4000)
+      _setError('Not connected — reconnecting, try again in a moment.', true)
     }
+  }
+
+  function retry(): void {
+    if (!_lastContent || isLoading.value) return
+    // Remove the last user message to re-send cleanly
+    const last = messages.value[messages.value.length - 1]
+    if (last?.role === 'user' && last.content === _lastContent) {
+      messages.value.pop()
+    }
+    error.value = ''
+    canRetry.value = false
+    sendMessage(_lastContent)
   }
 
   function disconnect(): void {
@@ -112,10 +137,12 @@ export function useChat() {
     isLoading,
     toolActivity,
     error,
+    canRetry,
     sessionId,
     isConnected,
     init,
     sendMessage,
+    retry,
     disconnect,
   }
 }

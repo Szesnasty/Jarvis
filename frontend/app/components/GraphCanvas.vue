@@ -58,11 +58,11 @@ const NODE_GLOW: Record<string, string> = {
 }
 
 const EDGE_COLOR: Record<string, string> = {
-  tagged:   'rgba(52, 211, 153, 0.4)',
-  part_of:  'rgba(251, 146, 60, 0.25)',
-  linked:   'rgba(2, 254, 255, 0.4)',
-  mentions: 'rgba(192, 132, 252, 0.4)',
-  related:  'rgba(2, 254, 255, 0.35)',
+  tagged:   'rgba(52, 211, 153, 0.7)',
+  part_of:  'rgba(251, 146, 60, 0.55)',
+  linked:   'rgba(2, 254, 255, 0.75)',
+  mentions: 'rgba(192, 132, 252, 0.7)',
+  related:  'rgba(2, 254, 255, 0.65)',
 }
 
 const EDGE_PARTICLE_COLOR: Record<string, string> = {
@@ -111,6 +111,8 @@ async function buildGraph() {
     .nodeLabel('')
     .nodeCanvasObjectMode(() => 'replace')
     .nodeCanvasObject((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return
+
       const deg = degrees[node.id] || 0
       const r = nodeRadius(node.type, deg)
       const color = NODE_COLOR[node.type] ?? '#9ca3af'
@@ -118,36 +120,56 @@ async function buildGraph() {
       const isHighlighted = props.highlightedNode === node.id
       const isHovered = hoveredNode.value?.id === node.id
 
-      // Outer soft aura — big diffuse glow
+      // Layer 1 — wide, faint outer halo
+      const grad1 = ctx.createRadialGradient(node.x, node.y, r * 0.5, node.x, node.y, r + 14)
+      grad1.addColorStop(0, glow.replace(/[\d.]+\)$/, '0.28)'))
+      grad1.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.0)'))
       ctx.beginPath()
-      ctx.arc(node.x, node.y, r + 10, 0, 2 * Math.PI)
-      ctx.fillStyle = glow.replace(/[\d.]+\)$/, '0.06)')
+      ctx.arc(node.x, node.y, r + 14, 0, 2 * Math.PI)
+      ctx.fillStyle = grad1
       ctx.fill()
 
-      // Neon glow aura — always visible
+      // Layer 2 — mid glow
+      const grad2 = ctx.createRadialGradient(node.x, node.y, r * 0.3, node.x, node.y, r + 12)
+      grad2.addColorStop(0, glow.replace(/[\d.]+\)$/, '0.45)'))
+      grad2.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.0)'))
       ctx.beginPath()
-      ctx.arc(node.x, node.y, r + 5, 0, 2 * Math.PI)
-      ctx.fillStyle = glow.replace(/[\d.]+\)$/, '0.18)')
+      ctx.arc(node.x, node.y, r + 12, 0, 2 * Math.PI)
+      ctx.fillStyle = grad2
       ctx.fill()
 
-      // Enhanced glow for highlighted / hovered
+      // Layer 3 — tight inner glow ring
+      const grad3 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r + 4)
+      grad3.addColorStop(0, glow.replace(/[\d.]+\)$/, '0.6)'))
+      grad3.addColorStop(0.6, glow.replace(/[\d.]+\)$/, '0.35)'))
+      grad3.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.0)'))
+      ctx.beginPath()
+      ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI)
+      ctx.fillStyle = grad3
+      ctx.fill()
+
+      // Shadow glow on node body
       if (isHighlighted || isHovered) {
         ctx.shadowColor = color
-        ctx.shadowBlur = isHighlighted ? 35 : 22
+        ctx.shadowBlur = isHighlighted ? 50 : 36
       } else {
-        ctx.shadowColor = glow
-        ctx.shadowBlur = 15
+        ctx.shadowColor = color
+        ctx.shadowBlur = 28
       }
 
-      // Node body
+      // Node body — radial gradient core (bright center → dim edge)
+      const bodyGrad = ctx.createRadialGradient(node.x - r * 0.25, node.y - r * 0.25, 0, node.x, node.y, r)
+      bodyGrad.addColorStop(0, 'rgba(255,255,255,0.55)')
+      bodyGrad.addColorStop(0.4, color)
+      bodyGrad.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.8)'))
       ctx.beginPath()
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
-      ctx.fillStyle = color
+      ctx.fillStyle = bodyGrad
       ctx.fill()
 
       // Bright edge ring
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)'
-      ctx.lineWidth = 0.4
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)'
+      ctx.lineWidth = 0.6
       ctx.stroke()
 
       ctx.shadowBlur = 0
@@ -194,9 +216,9 @@ async function buildGraph() {
     })
     .linkWidth((link: any) => {
       const type = link._type || 'tagged'
-      if (type === 'linked' || type === 'related') return 1.8
-      if (type === 'part_of') return 0.6
-      return 1
+      if (type === 'linked' || type === 'related') return 3.5
+      if (type === 'part_of') return 1.2
+      return 2
     })
     .linkLineDash((link: any) => {
       return link._type === 'part_of' ? [2, 2] : []

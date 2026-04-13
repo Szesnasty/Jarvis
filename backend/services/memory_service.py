@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -121,17 +122,21 @@ async def list_notes(
     async with aiosqlite.connect(str(db_p)) as db:
         db.row_factory = aiosqlite.Row
         if search:
+            # sanitize: extract word tokens to avoid FTS5 syntax errors from punctuation
+            tokens = re.findall(r'\w+', search)[:8]
+            if not tokens:
+                return []
+            fts_query = " ".join(t + "*" for t in tokens)
             query = """
                 SELECT n.path, n.title, n.folder, n.tags, n.updated_at, n.word_count
                 FROM notes n
-                JOIN notes_fts f ON n.id = f.rowid
-                WHERE notes_fts MATCH ?
+                WHERE n.id IN (SELECT rowid FROM notes_fts WHERE notes_fts MATCH ?)
             """
-            params: list = [search + "*"]
+            params: list = [fts_query]
             if folder:
                 query += " AND n.folder = ?"
                 params.append(folder)
-            query += " ORDER BY rank LIMIT ?"
+            query += " ORDER BY n.updated_at DESC LIMIT ?"
             params.append(limit)
             cursor = await db.execute(query, params)
         else:

@@ -16,12 +16,14 @@ const props = defineProps<{
   isLoading: boolean
   toolActivity: string
   error?: string
+  canRetry?: boolean
   voiceState?: OrbState
   voiceSupported?: boolean
 }>()
 
 const emit = defineEmits<{
   send: [content: string]
+  retry: []
   toggleVoice: []
 }>()
 
@@ -113,11 +115,24 @@ watch(
         <div class="chat-panel__bubble chat-panel__bubble--md" v-html="renderMarkdown(currentResponse) + '<span class=chat-panel__cursor>▊</span>'" />
       </div>
 
+      <!-- Typing indicator (dots) when loading but no response yet -->
+      <div v-if="isLoading && !currentResponse && !toolActivity" class="chat-panel__message assistant">
+        <div class="chat-panel__bubble chat-panel__typing">
+          <span class="chat-panel__dot" />
+          <span class="chat-panel__dot" />
+          <span class="chat-panel__dot" />
+        </div>
+      </div>
+
       <div v-if="toolActivity" class="chat-panel__activity">
+        <span class="chat-panel__activity-spinner" />
         {{ toolActivity }}
       </div>
-      <div v-if="error" class="chat-panel__conn-error">
-        {{ error }}
+
+      <div v-if="error" class="chat-panel__error">
+        <span class="chat-panel__error-icon">⚠</span>
+        <span class="chat-panel__error-text">{{ error }}</span>
+        <button v-if="canRetry" class="chat-panel__error-retry" @click="emit('retry')">Retry</button>
       </div>
     </div>
 
@@ -199,6 +214,7 @@ watch(
 
 .chat-panel__message {
   display: flex;
+  animation: slideIn 0.25s ease-out;
 }
 
 .chat-panel__message.user {
@@ -289,16 +305,7 @@ watch(
   text-underline-offset: 2px;
 }
 
-.chat-panel__conn-error {
-  margin: 0.5rem 1.5rem;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.8rem;
-  color: rgba(239, 68, 68, 0.9);
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: 6px;
-}
-
+/* --- Messages --- */
 .chat-panel__message.user .chat-panel__bubble {
   background: rgba(2, 254, 255, 0.1);
   border: 1px solid rgba(2, 254, 255, 0.2);
@@ -321,10 +328,134 @@ watch(
 }
 
 .chat-panel__activity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.8rem;
   color: var(--neon-cyan-60);
   padding: 0.25rem 0;
   font-style: italic;
+}
+
+.chat-panel__activity-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--neon-cyan-30);
+  border-top-color: var(--neon-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- Error bar --- */
+.chat-panel__error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.85rem;
+  color: rgba(251, 146, 60, 0.95);
+  background: rgba(251, 146, 60, 0.06);
+  border: 1px solid rgba(251, 146, 60, 0.2);
+  border-radius: 8px;
+  animation: slideIn 0.25s ease-out;
+}
+
+.chat-panel__error-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.chat-panel__error-text {
+  flex: 1;
+}
+
+.chat-panel__error-retry {
+  flex-shrink: 0;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8rem;
+  border: 1px solid rgba(251, 146, 60, 0.3);
+  border-radius: 6px;
+  background: rgba(251, 146, 60, 0.1);
+  color: rgba(251, 146, 60, 0.95);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.chat-panel__error-retry:hover {
+  background: rgba(251, 146, 60, 0.2);
+  border-color: rgba(251, 146, 60, 0.5);
+}
+
+/* --- Empty state --- */
+.chat-panel__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 0.75rem;
+  opacity: 0.5;
+  padding: 3rem 1rem;
+}
+
+.chat-panel__empty-icon {
+  font-size: 2.5rem;
+}
+
+.chat-panel__empty-text {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 300px;
+  line-height: 1.5;
+}
+
+/* --- Typing dots --- */
+.chat-panel__typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0.85rem 1.1rem !important;
+  min-height: auto;
+}
+
+.chat-panel__dot {
+  width: 7px;
+  height: 7px;
+  background: var(--neon-cyan-60);
+  border-radius: 50%;
+  animation: typingBounce 1.2s ease-in-out infinite;
+}
+
+.chat-panel__dot:nth-child(2) { animation-delay: 0.15s; }
+.chat-panel__dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-panel__input-bar {

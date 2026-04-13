@@ -5,16 +5,34 @@
     <!-- API Key -->
     <section class="settings-page__section">
       <h2 class="settings-page__section-title">API Key</h2>
+      <p class="settings-page__hint">
+        Your key is stored <strong>locally only</strong> — in your system's encrypted keystore:
+        <span class="settings-page__mono">Keychain</span> (macOS),
+        <span class="settings-page__mono">Credential Locker</span> (Windows), or
+        <span class="settings-page__mono">Secret Service</span> (Linux).
+        It never leaves your machine and is never sent to any server except
+        <span class="settings-page__mono">api.anthropic.com</span> directly.
+      </p>
+      <p v-if="keyStorage === 'file'" class="settings-page__warning">
+        ⚠ System keystore unavailable — key is stored in a local file. Consider installing a keyring provider for stronger protection.
+      </p>
+      <p v-if="keyStorage === 'environment'" class="settings-page__hint-subtle">
+        ℹ Using <span class="settings-page__mono">ANTHROPIC_API_KEY</span> environment variable.
+      </p>
       <div class="settings-page__field">
         <span class="settings-page__masked-key">{{ apiKeySet ? '••••••••' : 'Not set' }}</span>
         <input
           v-model="newApiKey"
           type="password"
           class="settings-page__input"
-          placeholder="Enter new API key"
+          placeholder="sk-ant-..."
         />
         <button class="settings-page__btn" @click="updateApiKey">Update Key</button>
       </div>
+      <p class="settings-page__micro">
+        Get your key at
+        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" class="settings-page__link">console.anthropic.com</a>
+      </p>
     </section>
 
     <!-- Workspace -->
@@ -51,9 +69,6 @@
       </div>
     </section>
 
-    <!-- Obsidian -->
-    <ObsidianHelper />
-
     <!-- Status -->
     <p v-if="statusMsg" class="settings-page__status">{{ statusMsg }}</p>
   </div>
@@ -63,6 +78,7 @@
 import { ref, onMounted } from 'vue'
 
 const apiKeySet = ref(false)
+const keyStorage = ref('')
 const workspacePath = ref('')
 const newApiKey = ref('')
 const autoSpeak = ref(false)
@@ -74,10 +90,12 @@ onMounted(async () => {
     const resp = await $fetch<{
       workspace_path: string
       api_key_set: boolean
+      key_storage: string
       voice: { auto_speak: string; tts_voice: string }
     }>('/api/settings')
     workspacePath.value = resp.workspace_path
     apiKeySet.value = resp.api_key_set
+    keyStorage.value = resp.key_storage
     autoSpeak.value = resp.voice.auto_speak === 'true'
   } catch { /* ignore */ }
 
@@ -155,6 +173,51 @@ async function rebuildGraphAction() {
 .settings-page__masked-key {
   font-family: monospace;
   opacity: 0.6;
+}
+.settings-page__hint {
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+.settings-page__hint strong {
+  color: var(--neon-cyan);
+  font-weight: 600;
+}
+.settings-page__mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.9em;
+  background: rgba(2, 254, 255, 0.06);
+  padding: 0.05em 0.35em;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+}
+.settings-page__micro {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+}
+.settings-page__link {
+  color: var(--neon-cyan-60);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.settings-page__link:hover {
+  color: var(--neon-cyan);
+}
+.settings-page__warning {
+  font-size: 0.8rem;
+  color: rgba(251, 146, 60, 0.9);
+  background: rgba(251, 146, 60, 0.06);
+  border: 1px solid rgba(251, 146, 60, 0.2);
+  border-radius: 6px;
+  padding: 0.45rem 0.7rem;
+  margin-bottom: 0.5rem;
+}
+.settings-page__hint-subtle {
+  font-size: 0.8rem;
+  color: var(--neon-cyan-60);
+  margin-bottom: 0.5rem;
 }
 .settings-page__input {
   padding: 0.4rem 0.75rem;

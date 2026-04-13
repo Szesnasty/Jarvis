@@ -19,9 +19,11 @@
           :is-loading="isLoading"
           :tool-activity="toolActivity"
           :error="error"
+          :can-retry="canRetry"
           :voice-state="voiceState"
           :voice-supported="isVoiceAvailable"
           @send="handleSend"
+          @retry="chat.retry()"
           @toggle-voice="handleVoiceToggle"
         />
       </main>
@@ -39,7 +41,7 @@ import { useVoice } from '~/composables/useVoice'
 
 const { checkHealth, chatActive } = useAppState()
 const chat = useChat()
-const { messages, currentResponse, isLoading, toolActivity, error, init, sendMessage } = chat
+const { messages, currentResponse, isLoading, toolActivity, error, canRetry, init, sendMessage } = chat
 
 const sessionsState = useSessions()
 const { sessions, activeSessionId } = sessionsState

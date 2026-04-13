@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -93,10 +94,29 @@ def _store_api_key(api_key: str, workspace_path: Path) -> None:
     try:
         keyring.set_password("jarvis", "anthropic_api_key", api_key)
     except (NoKeyringError, Exception) as exc:
-        logger.warning("keyring unavailable (%s), storing API key in config.json", exc)
+        logger.warning("keyring unavailable (%s), storing API key in local file", exc)
         key_file = workspace_path / "app" / "api_key.json"
         key_file.write_text(json.dumps({"api_key": api_key}))
-        key_file.chmod(0o600)
+        # Restrict file permissions on Unix systems
+        if sys.platform != "win32":
+            key_file.chmod(0o600)
+
+
+def get_key_storage_method(workspace_path: Optional[Path] = None) -> str:
+    """Return how the API key is currently stored."""
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "environment"
+    try:
+        key = keyring.get_password("jarvis", "anthropic_api_key")
+        if key:
+            return "keyring"
+    except (NoKeyringError, Exception):
+        pass
+    path = workspace_path or get_settings().workspace_path
+    key_file = path / "app" / "api_key.json"
+    if key_file.exists():
+        return "file"
+    return "none"
 
 
 def get_api_key(workspace_path: Optional[Path] = None) -> Optional[str]:

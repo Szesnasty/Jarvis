@@ -20,6 +20,7 @@ async def get_settings_view():
     return {
         "workspace_path": str(ws),
         "api_key_set": status.get("api_key_set", False),
+        "key_storage": workspace_service.get_key_storage_method(ws),
         "voice": voice_prefs,
     }
 
