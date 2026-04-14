@@ -52,11 +52,18 @@ def get_workspace_status(workspace_path: Optional[Path] = None) -> dict:
         return {"initialized": False}
 
     config_file = path / "app" / "config.json"
-    config = json.loads(config_file.read_text())
+    try:
+        config = json.loads(config_file.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Could not read config.json: %s", exc)
+        return {"initialized": False}
+
+    # Verify key actually exists rather than trusting the flag alone
+    key_exists = get_api_key(path) is not None
     return {
         "initialized": True,
         "workspace_path": str(path),
-        "api_key_set": config.get("api_key_set", False),
+        "api_key_set": key_exists,
     }
 
 
@@ -74,18 +81,23 @@ def create_workspace(api_key: str, workspace_path: Optional[Path] = None) -> dic
     for d in WORKSPACE_DIRS:
         (path / d).mkdir(parents=True, exist_ok=True)
 
-    # Store API key
-    _store_api_key(api_key, path)
+    # Store API key and config atomically — rollback on failure
+    try:
+        _store_api_key(api_key, path)
 
-    # Write config.json
-    config = {
-        "version": "0.1.0",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "api_key_set": True,
-        "workspace_path": str(path),
-    }
-    config_file = path / "app" / "config.json"
-    config_file.write_text(json.dumps(config, indent=2))
+        config = {
+            "version": "0.1.0",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "api_key_set": True,
+            "workspace_path": str(path),
+        }
+        config_file = path / "app" / "config.json"
+        config_file.write_text(json.dumps(config, indent=2))
+    except Exception:
+        # Rollback: remove partially created workspace
+        import shutil
+        shutil.rmtree(path, ignore_errors=True)
+        raise
 
     return {"status": "ok", "workspace_path": str(path)}
 
@@ -93,13 +105,16 @@ def create_workspace(api_key: str, workspace_path: Optional[Path] = None) -> dic
 def _store_api_key(api_key: str, workspace_path: Path) -> None:
     try:
         keyring.set_password("jarvis", "anthropic_api_key", api_key)
-    except (NoKeyringError, Exception) as exc:
-        logger.warning("keyring unavailable (%s), storing API key in local file", exc)
-        key_file = workspace_path / "app" / "api_key.json"
-        key_file.write_text(json.dumps({"api_key": api_key}))
-        # Restrict file permissions on Unix systems
-        if sys.platform != "win32":
-            key_file.chmod(0o600)
+        return
+    except NoKeyringError as exc:
+        logger.warning("keyring unavailable (%s), falling back to file", exc)
+    except Exception as exc:
+        logger.warning("keyring error (%s), falling back to file", exc)
+    # File fallback — let OSError propagate to caller
+    key_file = workspace_path / "app" / "api_key.json"
+    key_file.write_text(json.dumps({"api_key": api_key}))
+    if sys.platform != "win32":
+        key_file.chmod(0o600)
 
 
 def get_key_storage_method(workspace_path: Optional[Path] = None) -> str:
@@ -134,7 +149,14 @@ def get_api_key(workspace_path: Optional[Path] = None) -> Optional[str]:
     path = workspace_path or get_settings().workspace_path
     key_file = path / "app" / "api_key.json"
     if key_file.exists():
-        data = json.loads(key_file.read_text())
-        return data.get("api_key")
+        try:
+            data = json.loads(key_file.read_text())
+            key = data.get("api_key")
+            if not key:
+                logger.warning("API key file exists but key field is empty")
+            return key
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to read API key file: %s", exc)
+            return None
 
     return None

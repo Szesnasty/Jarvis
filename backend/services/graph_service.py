@@ -16,7 +16,7 @@ class Node:
     folder: str = ""
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class Edge:
     source: str
     target: str
@@ -33,7 +33,9 @@ class Graph:
             self.nodes[node_id] = Node(id=node_id, type=node_type, label=label, folder=folder)
 
     def add_edge(self, source: str, target: str, edge_type: str) -> None:
-        self.edges.append(Edge(source=source, target=target, type=edge_type))
+        edge = Edge(source=source, target=target, type=edge_type)
+        if edge not in self.edges:
+            self.edges.append(edge)
 
     def get_neighbors(self, node_id: str, depth: int = 1) -> List[Dict]:
         if depth < 1 or node_id not in self.nodes:

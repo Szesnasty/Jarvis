@@ -270,7 +270,7 @@ async def execute_tool(
         return content
 
     if name == "summarize_context":
-        return _execute_summarize(tool_input, workspace_path)
+        return await _execute_summarize(tool_input, workspace_path)
 
     if name == "save_preference":
         category = tool_input.get("category", "general")
@@ -310,7 +310,7 @@ def _slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
-def _execute_summarize(
+async def _execute_summarize(
     tool_input: dict[str, Any],
     workspace_path: Optional[Path],
 ) -> str:
@@ -325,15 +325,16 @@ def _execute_summarize(
     slug = _slugify(title)
     note_path = f"summaries/{date}-{slug}.md"
 
-    fm = (
+    fm_content = (
         f"---\ntitle: {title}\ntype: summary\n"
         f"source: conversation\ntags: [summary]\n---\n\n"
+        + content
     )
-    full = fm + content
 
-    mem = (workspace_path or Path.home() / "Jarvis") / "memory"
-    target = mem / note_path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(full, encoding="utf-8")
+    try:
+        await memory_service.create_note(note_path, fm_content, workspace_path)
+    except memory_service.NoteExistsError:
+        # Append instead if it already exists
+        await memory_service.append_note(note_path, f"\n\n{content}", workspace_path)
 
     return json.dumps({"path": note_path, "saved": True})

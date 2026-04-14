@@ -1,6 +1,8 @@
+import ipaddress
 import json
 import logging
 import re
+import socket
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
@@ -55,6 +57,15 @@ def _slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:80]
 
 
+def _is_private_host(hostname: str) -> bool:
+    """Check if a hostname resolves to a private/internal IP address."""
+    try:
+        ip = ipaddress.ip_address(socket.gethostbyname(hostname))
+        return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+    except Exception:
+        return True  # fail safe — block if we can't resolve
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -82,14 +93,9 @@ def _unique_path(target: Path) -> Path:
 
 
 def _build_frontmatter(meta: dict) -> str:
-    fm = "---\n"
-    for k, v in meta.items():
-        if isinstance(v, list):
-            fm += f"{k}: {json.dumps(v)}\n"
-        else:
-            fm += f"{k}: {v}\n"
-    fm += "---\n\n"
-    return fm
+    from utils.markdown import add_frontmatter
+    # add_frontmatter prepends fm to body; we just want the fm part
+    return add_frontmatter("", meta)
 
 
 async def _fetch_yt_metadata(video_id: str, url: str) -> Dict:
@@ -218,20 +224,20 @@ async def _ingest_webpage(
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 
+    # SSRF protection: block private/internal network requests
+    parsed_host = urlparse(url).hostname
+    if not parsed_host:
+        raise IngestError(f"Invalid URL: {url}")
+    if _is_private_host(parsed_host):
+        raise IngestError(f"URL resolves to a private/internal address: {url}")
+
     downloaded = None
     try:
         response = requests.get(url, headers=headers, timeout=15, verify=True)
         response.raise_for_status()
         downloaded = response.text
     except Exception as exc:
-        # Retry without SSL verification if cert is bad
-        try:
-            logger.warning(f"First attempt failed for {url}, retrying without SSL verification: {exc}")
-            response = requests.get(url, headers=headers, timeout=15, verify=False)
-            response.raise_for_status()
-            downloaded = response.text
-        except Exception as exc2:
-            raise IngestError(f"Could not fetch URL: {url} ({exc2})")
+        raise IngestError(f"Could not fetch URL: {url} ({exc})")
 
     if not downloaded:
         raise IngestError(f"Could not fetch URL: {url}")

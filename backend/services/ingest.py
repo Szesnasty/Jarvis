@@ -31,18 +31,19 @@ def _unique_path(target: Path) -> Path:
     stem = target.stem
     suffix = target.suffix
     parent = target.parent
-    i = 1
-    while True:
+    for i in range(1, 1001):
         candidate = parent / f"{stem}-{i}{suffix}"
         if not candidate.exists():
             return candidate
-        i += 1
+    raise IngestError(f"Too many files with the same name: {target.name}")
 
 
 def _make_frontmatter(title: str, source: str, tags: Optional[list] = None) -> str:
+    from utils.markdown import add_frontmatter
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    tag_str = json.dumps(tags or ["imported"])
-    return f"---\ntitle: {title}\ndate: {now}\nsource: {source}\ntags: {tag_str}\n---\n\n"
+    fm = {"title": title, "date": now, "source": source, "tags": tags or ["imported"]}
+    # add_frontmatter prepends to body; we just want the frontmatter
+    return add_frontmatter("", fm)
 
 
 def _extract_pdf_text(file_path: Path) -> str:
@@ -135,8 +136,10 @@ async def smart_enrich(
 ) -> Dict:
     """Use Claude to enhance a note with summary and tags."""
     import anthropic
+    from services.memory_service import _validate_path
 
     mem = _memory_dir(workspace_path)
+    _validate_path(note_path, mem)
     full_path = mem / note_path
     if not full_path.exists():
         raise IngestError(f"Note not found: {note_path}")
@@ -168,15 +171,9 @@ async def smart_enrich(
     new_tags = data.get("tags", [])
     fm["tags"] = list(set(existing_tags + new_tags))
 
-    # Rebuild file
-    fm_str = "---\n"
-    for k, v in fm.items():
-        if isinstance(v, list):
-            fm_str += f"{k}: {json.dumps(v)}\n"
-        else:
-            fm_str += f"{k}: {v}\n"
-    fm_str += "---\n\n"
-    full_path.write_text(fm_str + body, encoding="utf-8")
+    # Rebuild file using safe YAML serialization
+    from utils.markdown import add_frontmatter as _add_fm
+    full_path.write_text(_add_fm(body, fm), encoding="utf-8")
 
     return {
         "path": note_path,

@@ -60,9 +60,9 @@ async def update_plan_task(
         if stripped.startswith("- [ ]") or stripped.startswith("- [x]"):
             if count == task_index:
                 if checked:
-                    lines[i] = line.replace("- [ ]", "- [x]")
+                    lines[i] = line.replace("- [ ]", "- [x]", 1)
                 else:
-                    lines[i] = line.replace("- [x]", "- [ ]")
+                    lines[i] = line.replace("- [x]", "- [ ]", 1)
                 break
             count += 1
 
