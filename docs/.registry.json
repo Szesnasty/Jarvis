@@ -25,8 +25,8 @@
         "frontend/app/composables/useWebSocket.ts",
         "frontend/app/components/ChatPanel.vue"
       ],
-      "depends_on": ["retrieval", "sessions", "specialists"],
-      "last_updated": "2026-04-15",
+      "depends_on": ["retrieval", "sessions", "specialists", "api-key-management"],
+      "last_updated": "2026-04-16",
       "status": "current"
     },
     "memory": {
@@ -145,8 +145,8 @@
         "frontend/app/pages/settings.vue",
         "frontend/app/composables/usePreferences.ts"
       ],
-      "depends_on": ["workspace-onboarding"],
-      "last_updated": "2026-04-14",
+      "depends_on": ["workspace-onboarding", "api-key-management"],
+      "last_updated": "2026-04-16",
       "status": "current"
     },
     "app-shell": {
@@ -196,6 +196,20 @@
       ],
       "depends_on": ["chat", "specialists", "knowledge-graph"],
       "last_updated": "2026-04-15",
+      "status": "current"
+    },
+    "api-key-management": {
+      "doc": "docs/features/api-key-management.md",
+      "type": "feature",
+      "sources": [
+        "frontend/app/composables/useApiKeys.ts",
+        "frontend/app/components/ProviderCard.vue",
+        "frontend/app/components/AddKeyModal.vue",
+        "frontend/app/components/KeyProtectionInfo.vue",
+        "frontend/app/types/index.ts"
+      ],
+      "depends_on": ["preferences-settings", "chat"],
+      "last_updated": "2026-04-16",
       "status": "current"
     }
   }

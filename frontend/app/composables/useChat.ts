@@ -154,6 +154,13 @@ export function useChat() {
     const payload: Record<string, string> = { type: 'message', content: _lastContent, session_id: sessionId.value }
     if (options?.graphScope) payload.graph_scope = options.graphScope
 
+    // Attach provider + API key from browser storage
+    const { activeProvider, activeKey } = useApiKeys()
+    if (activeKey.value) {
+      payload.provider = activeProvider.value
+      payload.api_key = activeKey.value
+    }
+
     const sent = send(payload)
     if (!sent) {
       // WS not ready — reset and show error

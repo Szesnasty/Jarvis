@@ -290,3 +290,62 @@ async def test_ws_disconnect_cleanup(mock_api_key, mock_claude_stream):
     session = get_session(sid)
     assert session is not None
     assert session["id"] == sid
+
+
+@pytest.mark.anyio
+async def test_ws_uses_client_api_key_when_provided(mock_claude_stream):
+    """When the WS message includes api_key, use it instead of server-stored key."""
+    mock_claude_stream.stream_response = _fake_stream(
+        StreamEvent(type="text_delta", content="OK"),
+    )
+
+    # No server-side key configured — get_api_key returns None
+    with patch("routers.chat.get_api_key", return_value=None):
+        from starlette.testclient import TestClient
+
+        with TestClient(app) as client:
+            with client.websocket_connect("/api/chat/ws") as ws:
+                ws.receive_json()  # session_start
+                ws.send_json({
+                    "content": "Hello",
+                    "api_key": "sk-ant-client-key-123",
+                    "provider": "anthropic",
+                })
+
+                events = []
+                while True:
+                    msg = ws.receive_json()
+                    events.append(msg)
+                    if msg["type"] == "done":
+                        break
+
+                # Should have received text, not an error about missing API key
+                text_events = [e for e in events if e["type"] == "text_delta"]
+                assert len(text_events) >= 1
+                assert text_events[0]["content"] == "OK"
+
+
+@pytest.mark.anyio
+async def test_ws_falls_back_to_server_key_without_client_key(mock_api_key, mock_claude_stream):
+    """When no api_key in WS message, fall back to server-stored key."""
+    mock_claude_stream.stream_response = _fake_stream(
+        StreamEvent(type="text_delta", content="Fallback"),
+    )
+
+    from starlette.testclient import TestClient
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/api/chat/ws") as ws:
+            ws.receive_json()  # session_start
+            ws.send_json({"content": "Hello"})  # no api_key
+
+            events = []
+            while True:
+                msg = ws.receive_json()
+                events.append(msg)
+                if msg["type"] == "done":
+                    break
+
+            text_events = [e for e in events if e["type"] == "text_delta"]
+            assert len(text_events) >= 1
+            assert text_events[0]["content"] == "Fallback"

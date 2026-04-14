@@ -2,68 +2,54 @@
   <div class="settings-page">
     <h1 class="settings-page__title">Settings</h1>
 
-    <!-- API Key -->
-    <section class="settings-page__section api-key-section">
-      <div class="api-key-header">
-        <h2 class="settings-page__section-title">API Key</h2>
-        <div v-if="settingsLoaded" class="api-key-badge" :class="apiKeySet ? 'api-key-badge--active' : 'api-key-badge--missing'">
-          <span class="api-key-badge__dot" />
-          <span class="api-key-badge__label">{{ apiKeySet ? 'Connected' : 'Not configured' }}</span>
+    <!-- AI Providers -->
+    <section class="settings-page__section providers-section">
+      <div class="providers-header">
+        <h2 class="settings-page__section-title">AI Providers</h2>
+        <div class="providers-badge">
+          <span class="providers-badge__icon">🔒</span>
+          <span class="providers-badge__label">Keys handled locally</span>
         </div>
       </div>
 
-      <div v-if="!settingsLoaded" class="api-key-status api-key-status--loading">
-        <span class="api-key-status__primary">Loading...</span>
-      </div>
-      <div v-else-if="apiKeySet" class="api-key-status api-key-status--ok">
-        <svg class="api-key-status__icon" viewBox="0 0 20 20" fill="none">
+      <KeyProtectionInfo />
+
+      <!-- Server-stored Anthropic key (legacy) -->
+      <div v-if="settingsLoaded && serverKeyConfigured" class="server-key-notice">
+        <svg class="server-key-notice__icon" viewBox="0 0 20 20" fill="none">
           <circle cx="10" cy="10" r="9" stroke="currentColor" stroke-width="1.5" />
           <path d="M6 10.5l2.5 2.5 5.5-5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        <div class="api-key-status__text">
-          <span class="api-key-status__primary">Key stored securely</span>
-          <span class="api-key-status__secondary">
+        <div class="server-key-notice__text">
+          <span class="server-key-notice__primary">Anthropic key stored on server</span>
+          <span class="server-key-notice__secondary">
             <template v-if="keyStorage === 'keyring'">via system credential store</template>
             <template v-else-if="keyStorage === 'environment'">via environment variable</template>
             <template v-else-if="keyStorage === 'file'">via local file</template>
           </span>
         </div>
       </div>
-      <div v-else class="api-key-status api-key-status--missing">
-        <svg class="api-key-status__icon" viewBox="0 0 20 20" fill="none">
-          <circle cx="10" cy="10" r="9" stroke="currentColor" stroke-width="1.5" />
-          <path d="M10 6v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
-          <circle cx="10" cy="14" r="0.8" fill="currentColor" />
-        </svg>
-        <div class="api-key-status__text">
-          <span class="api-key-status__primary">No API key configured</span>
-          <span class="api-key-status__secondary">Chat and AI features are disabled</span>
-        </div>
-      </div>
 
-      <p v-if="keyStorage === 'file'" class="settings-page__warning">
-        System keystore unavailable — key is stored in a local file. Consider installing a keyring provider for stronger protection.
-      </p>
-
-      <div class="api-key-input-row">
-        <input
-          v-model="newApiKey"
-          type="password"
-          class="settings-page__input"
-          :placeholder="apiKeySet ? 'Paste new key to replace...' : 'sk-ant-...'"
+      <div class="providers-list">
+        <ProviderCard
+          v-for="p in apiKeys.providers"
+          :key="p.id"
+          :provider="p"
+          :configured="apiKeys.isConfigured(p.id)"
+          :masked-key="apiKeys.getMaskedKey(p.id)"
+          :remembered="apiKeys.isRemembered(p.id)"
+          @add-key="openAddKey(p)"
+          @remove-key="apiKeys.removeKey(p.id)"
         />
-        <button class="settings-page__btn" @click="updateApiKey">
-          {{ apiKeySet ? 'Replace' : 'Set Key' }}
-        </button>
       </div>
-
-      <p class="settings-page__hint">
-        Your key is stored <strong>locally only</strong> — never sent anywhere except
-        <span class="settings-page__mono">api.anthropic.com</span>.
-        Get yours at
-        <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" class="settings-page__link">console.anthropic.com</a>
-      </p>
     </section>
+
+    <AddKeyModal
+      :provider="addKeyProvider"
+      :show="showAddKeyModal"
+      @close="showAddKeyModal = false"
+      @saved="onKeySaved"
+    />
 
     <!-- Workspace -->
     <section class="settings-page__section">
@@ -221,18 +207,32 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import type { ProviderConfig } from '~/types'
 
 const settingsLoaded = ref(false)
-const apiKeySet = ref(false)
+const serverKeyConfigured = ref(false)
 const keyStorage = ref('')
 const workspacePath = ref('')
-const newApiKey = ref('')
 const autoSpeak = ref(false)
 const usage = ref<{ total: number; request_count: number; cost_estimate: number } | null>(null)
 const budget = ref<{ daily_budget: number; used_today: number; percent: number; level: string } | null>(null)
 const budgetValue = ref(100000)
 const history = ref<{ date: string; total_tokens: number }[]>([])
 const statusMsg = ref('')
+
+// Provider keys
+const apiKeys = useApiKeys()
+const showAddKeyModal = ref(false)
+const addKeyProvider = ref<ProviderConfig>(apiKeys.providers[0]!)
+
+function openAddKey(provider: ProviderConfig) {
+  addKeyProvider.value = provider
+  showAddKeyModal.value = true
+}
+
+function onKeySaved(_providerId: string) {
+  statusMsg.value = 'API key saved'
+}
 
 const budgetPresets = [
   { label: '50K', value: 50000 },
@@ -279,7 +279,7 @@ onMounted(async () => {
       voice: { auto_speak: string; tts_voice: string }
     }>('/api/settings')
     workspacePath.value = resp.workspace_path
-    apiKeySet.value = resp.api_key_set
+    serverKeyConfigured.value = resp.api_key_set
     keyStorage.value = resp.key_storage
     autoSpeak.value = resp.voice.auto_speak === 'true' || resp.voice.auto_speak === true
     settingsLoaded.value = true
@@ -303,18 +303,6 @@ onMounted(async () => {
     history.value = h.slice(0, 14)
   } catch { /* non-critical */ }
 })
-
-async function updateApiKey() {
-  if (!newApiKey.value.trim()) return
-  try {
-    await $fetch('/api/settings/api-key', { method: 'PATCH', body: { api_key: newApiKey.value } })
-    apiKeySet.value = true
-    newApiKey.value = ''
-    statusMsg.value = 'API key updated'
-  } catch {
-    statusMsg.value = 'Failed to update API key'
-  }
-}
 
 async function updateVoicePrefs() {
   try {
@@ -444,109 +432,65 @@ async function rebuildGraphAction() {
   box-shadow: 0 0 12px var(--neon-cyan-08);
   text-shadow: 0 0 6px var(--neon-cyan-30);
 }
-/* ---- API Key Section ---- */
-.api-key-header {
+/* ---- Providers Section ---- */
+.providers-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 0.75rem;
 }
-.api-key-header .settings-page__section-title {
+.providers-header .settings-page__section-title {
   margin-bottom: 0;
 }
-.api-key-badge {
+.providers-badge {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   padding: 0.2rem 0.6rem;
   border-radius: 20px;
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-.api-key-badge--active {
   color: #34d399;
   background: rgba(52, 211, 153, 0.08);
   border: 1px solid rgba(52, 211, 153, 0.25);
 }
-.api-key-badge--missing {
-  color: rgba(248, 113, 113, 0.9);
-  background: rgba(248, 113, 113, 0.06);
-  border: 1px solid rgba(248, 113, 113, 0.2);
+.providers-badge__icon {
+  font-size: 0.75rem;
 }
-.api-key-badge__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.providers-list {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  overflow: hidden;
 }
-.api-key-badge--active .api-key-badge__dot {
-  background: #34d399;
-  box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
-  animation: dot-pulse 2.5s ease-in-out infinite;
-}
-.api-key-badge--missing .api-key-badge__dot {
-  background: rgba(248, 113, 113, 0.9);
-  box-shadow: 0 0 6px rgba(248, 113, 113, 0.4);
-}
-@keyframes dot-pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(52, 211, 153, 0.6); }
-  50% { opacity: 0.5; box-shadow: 0 0 2px rgba(52, 211, 153, 0.3); }
-}
-
-.api-key-status {
+.server-key-notice {
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  padding: 0.6rem 0.8rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 6px;
   margin-bottom: 0.75rem;
-}
-.api-key-status--loading {
-  color: var(--text-muted);
-  background: transparent;
-  border: 1px solid var(--border-subtle);
-}
-.api-key-status--ok {
   color: #34d399;
   background: rgba(52, 211, 153, 0.04);
   border: 1px solid rgba(52, 211, 153, 0.12);
 }
-.api-key-status--missing {
-  color: rgba(248, 113, 113, 0.9);
-  background: rgba(248, 113, 113, 0.04);
-  border: 1px solid rgba(248, 113, 113, 0.12);
-}
-.api-key-status__icon {
-  width: 22px;
-  height: 22px;
+.server-key-notice__icon {
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
-.api-key-status__text {
+.server-key-notice__text {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
 }
-.api-key-status__primary {
+.server-key-notice__primary {
   font-size: 0.82rem;
   font-weight: 600;
 }
-.api-key-status__secondary {
+.server-key-notice__secondary {
   font-size: 0.72rem;
   opacity: 0.7;
-  font-weight: 400;
-}
-
-.api-key-input-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.6rem;
-}
-.api-key-input-row .settings-page__input {
-  flex: 1;
-  min-width: 0;
 }
 
 .settings-page__path {

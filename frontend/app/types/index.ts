@@ -214,6 +214,23 @@ export class ApiError extends Error {
   }
 }
 
+// --- AI Providers ---
+
+export interface ProviderConfig {
+  id: string
+  name: string
+  icon: string
+  keyPrefix: string
+  docsUrl: string
+  models: string[]
+  color: string
+}
+
+export interface StoredKeyMeta {
+  remember: boolean
+  addedAt: string
+}
+
 // --- Duel ---
 
 export interface DuelConfig {

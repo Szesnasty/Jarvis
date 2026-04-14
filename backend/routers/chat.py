@@ -137,8 +137,9 @@ async def _handle_message(
     content: str,
     get_claude: callable = None,
     graph_scope: Optional[str] = None,
+    client_api_key: Optional[str] = None,
 ) -> None:
-    api_key = get_api_key()
+    api_key = client_api_key or get_api_key()
     if not api_key:
         await _send_event(ws, "error", content="API key not configured")
         return
@@ -254,11 +255,12 @@ async def _handle_duel(
     data: dict,
     session_id: str,
     get_claude: callable,
+    client_api_key: Optional[str] = None,
 ) -> None:
     """Handle a duel_start WS message."""
     from services.council import DuelConfig, DuelOrchestrator, validate_duel_config
 
-    api_key = get_api_key()
+    api_key = client_api_key or get_api_key()
     if not api_key:
         await _send_event(ws, "error", content="API key not configured")
         return
@@ -331,13 +333,16 @@ async def chat_ws(websocket: WebSocket) -> None:
     if existing:
         await _send_event(websocket, "session_history", messages=existing)
 
-    # Reuse a single ClaudeService per connection to avoid per-message HTTP pool churn
+    # Reuse a single ClaudeService per connection to avoid per-message HTTP pool churn.
+    # If the client sends an api_key, we use that; otherwise fall back to server-stored key.
     _connection_claude: ClaudeService | None = None
+    _connection_claude_key: str | None = None
 
     def _get_claude(api_key: str) -> ClaudeService:
-        nonlocal _connection_claude
-        if _connection_claude is None:
+        nonlocal _connection_claude, _connection_claude_key
+        if _connection_claude is None or _connection_claude_key != api_key:
             _connection_claude = ClaudeService(api_key=api_key)
+            _connection_claude_key = api_key
         return _connection_claude
 
     try:
@@ -353,9 +358,12 @@ async def chat_ws(websocket: WebSocket) -> None:
                 await _send_event(websocket, "error", content=error)
                 continue
 
+            # Extract client-provided API key (browser-only storage)
+            client_api_key = data.get("api_key") or None
+
             # Route duel messages
             if data.get("type") == "duel_start":
-                await _handle_duel(websocket, data, session_id, _get_claude)
+                await _handle_duel(websocket, data, session_id, _get_claude, client_api_key=client_api_key)
                 continue
 
             content = data.get("content", "").strip()
@@ -366,7 +374,7 @@ async def chat_ws(websocket: WebSocket) -> None:
                     session_id = requested_sid
 
             graph_scope = data.get("graph_scope") or None
-            await _handle_message(websocket, session_id, content, _get_claude, graph_scope=graph_scope)
+            await _handle_message(websocket, session_id, content, _get_claude, graph_scope=graph_scope, client_api_key=client_api_key)
 
     except WebSocketDisconnect:
         session_service.save_session(session_id)
