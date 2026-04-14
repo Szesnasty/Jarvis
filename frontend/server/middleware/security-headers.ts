@@ -1,13 +1,14 @@
+import { randomBytes } from 'node:crypto'
+
 /**
  * Security headers middleware — sets CSP and hardening headers on all responses.
  *
- * CSP is assembled dynamically to allow:
- * - Self-origin for scripts, styles, images, fonts
- * - Backend API (HTTP + WS) for chat and data
- * - WebSocket connections (ws:// in dev, wss:// in prod)
- * - data: / blob: URIs for inline assets (SVG icons, canvas blobs)
- * - 'unsafe-inline' for styles (Vue scoped styles inject at runtime)
- * - Dev-mode HMR websockets
+ * CSP strategy:
+ * - PRODUCTION: nonce-based script-src. A fresh random nonce is generated per
+ *   request and injected into inline <script> tags by the csp-nonce plugin.
+ * - DEV: 'unsafe-inline' (Vite HMR needs it; nonce won't help because HMR
+ *   injects scripts dynamically).
+ * - Styles always need 'unsafe-inline' (Vue scoped styles inject at runtime).
  */
 export default defineEventHandler((event) => {
   const config = useRuntimeConfig()
@@ -19,18 +20,30 @@ export default defineEventHandler((event) => {
   // HTTP equivalent for API proxy
   const httpOrigin = wsOrigin.replace(/^ws/, 'http')
 
-  // Dev-mode: allow Vite HMR websockets
   const isDev = process.env.NODE_ENV !== 'production'
-  const devSources = isDev
+
+  // Dev-mode: allow Vite HMR websockets
+  const devWsSources = isDev
     ? ' ws://localhost:3000 ws://localhost:24678 ws://127.0.0.1:3000 ws://127.0.0.1:24678'
     : ''
 
-  const connectSrc = `'self' ${httpOrigin} ${wsOrigin}${devSources}`
+  const connectSrc = `'self' ${httpOrigin} ${wsOrigin}${devWsSources}`
+
+  // Production: per-request nonce for inline scripts (Nuxt SPA bootstrap).
+  // Dev: 'unsafe-inline' because Vite HMR injects scripts dynamically.
+  let scriptSrc: string
+  if (isDev) {
+    scriptSrc = "script-src 'self' 'unsafe-inline'"
+  } else {
+    const nonce = randomBytes(16).toString('base64')
+    event.context.cspNonce = nonce
+    scriptSrc = `script-src 'self' 'nonce-${nonce}'`
+  }
 
   const csp = [
     "default-src 'self'",
-    // unsafe-inline required: Vue injects scoped styles at runtime
-    "script-src 'self' 'unsafe-inline'",
+    scriptSrc,
+    // style 'unsafe-inline' is required: Vue injects scoped <style> at runtime
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "img-src 'self' data: blob:",

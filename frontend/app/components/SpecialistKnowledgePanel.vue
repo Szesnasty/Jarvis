@@ -227,7 +227,7 @@ async function handleDeleteFile(filename: string) {
 }
 
 function fileIcon(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase()
+  const ext = (filename ?? '').split('.').pop()?.toLowerCase()
   switch (ext) {
     case 'pdf': return '\u{1F4C4}'
     case 'md': return '\u{1F4DD}'

@@ -165,7 +165,7 @@
           <span class="budget-stat__label">Requests</span>
         </div>
         <div class="budget-stat">
-          <span class="budget-stat__value">${{ usage.cost_estimate.toFixed(2) }}</span>
+          <span class="budget-stat__value">${{ (usage.cost_estimate ?? 0).toFixed(2) }}</span>
           <span class="budget-stat__label">Est. total cost</span>
         </div>
       </div>

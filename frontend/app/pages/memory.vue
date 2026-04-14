@@ -86,7 +86,8 @@ const vClickOutside = {
 }
 
 const folders = computed(() => {
-  const set = new Set(notes.value.map((n) => n.folder))
+  const list = Array.isArray(notes.value) ? notes.value : []
+  const set = new Set(list.map((n) => n.folder))
   return Array.from(set).sort()
 })
 
@@ -96,7 +97,8 @@ async function loadNotes() {
     const params: { folder?: string; search?: string } = {}
     if (activeFolder.value) params.folder = activeFolder.value
     if (searchQuery.value) params.search = searchQuery.value
-    notes.value = await fetchNotes(params)
+    const result = await fetchNotes(params)
+    notes.value = Array.isArray(result) ? result : []
   } finally {
     loadingNotes.value = false
   }

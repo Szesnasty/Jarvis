@@ -16,6 +16,9 @@ export default defineNuxtConfig({
         changeOrigin: true,
       },
     },
+    routeRules: {
+      '/api/**': { proxy: 'http://127.0.0.1:8000/api/**' },
+    },
   },
   vite: {
     server: {

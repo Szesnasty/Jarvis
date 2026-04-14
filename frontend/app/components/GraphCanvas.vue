@@ -74,8 +74,10 @@ const EDGE_PARTICLE_COLOR: Record<string, string> = {
 // --- Compute degree per node (for sizing) ---
 function computeDegrees(): Record<string, number> {
   const deg: Record<string, number> = {}
-  const nodeIds = new Set(props.nodes.map(n => n.id))
-  for (const e of props.edges) {
+  const nodes = props.nodes ?? []
+  const edges = props.edges ?? []
+  const nodeIds = new Set(nodes.map(n => n.id))
+  for (const e of edges) {
     if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue
     deg[e.source] = (deg[e.source] || 0) + 1
     deg[e.target] = (deg[e.target] || 0) + 1
@@ -294,10 +296,12 @@ async function buildGraph() {
       }
     })
     .graphData((() => {
-      const nodeIds = new Set(props.nodes.map(n => n.id))
+      const nodes = props.nodes ?? []
+      const edges = props.edges ?? []
+      const nodeIds = new Set(nodes.map(n => n.id))
       return {
-        nodes: props.nodes.map(n => ({ ...n })),
-        links: props.edges
+        nodes: nodes.map(n => ({ ...n })),
+        links: edges
           .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
           .map(e => ({ source: e.source, target: e.target, _type: e.type })),
       }
