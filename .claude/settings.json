@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "command": "node node_modules/codument/dist/hooks/check-docs.js"
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(wc -l g:/Projects/Jarvis/docs/features/*.md g:/Projects/Jarvis/docs/concepts/*.md)"
+    ]
+  }
+}

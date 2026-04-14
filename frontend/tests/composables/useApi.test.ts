@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { registerEndpoint } from '@nuxt/test-utils/runtime'
-import { ApiError, useApi } from '~/composables/useApi'
+import { useApi } from '~/composables/useApi'
+import { ApiError } from '~/types'
 
 describe('useApi', () => {
   describe('fetchHealth()', () => {

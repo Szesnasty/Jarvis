@@ -1,0 +1,21 @@
+{
+  "version": "0.1.0",
+  "initialized": "2026-04-14",
+  "project": {
+    "language": "typescript+python",
+    "srcDir": ".",
+    "sourceGlobs": [
+      "backend/**/*.py",
+      "frontend/app/**/*.vue",
+      "frontend/app/**/*.ts"
+    ],
+    "framework": "nuxt+fastapi"
+  },
+  "lastScan": {
+    "date": "2026-04-14",
+    "featuresFound": 12,
+    "docsCreated": 14,
+    "skipped": 0,
+    "sourceFiles": 88
+  }
+}

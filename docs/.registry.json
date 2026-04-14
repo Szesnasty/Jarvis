@@ -1,0 +1,267 @@
+{
+  "features": {
+    "workspace-onboarding": {
+      "doc": "docs/features/workspace-onboarding.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/workspace.py",
+        "backend/services/workspace_service.py",
+        "frontend/app/pages/onboarding.vue"
+      ],
+      "depends_on": ["database", "settings-config"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "workspace_service.py:74-88 no rollback on partial workspace creation (critical)",
+        "workspace_service.py:93-102 _store_api_key swallows all exceptions including disk/permission errors (critical)",
+        "workspace_service.py:49-60 get_workspace_status no error handling around config read, 500 on corrupt file (high)",
+        "WorkspaceInitRequest no API key format validation (medium)",
+        "workspace_service.py:122-140 get_api_key re-reads file on every call, unhandled JSONDecodeError on corrupt file (medium)"
+      ]
+    },
+    "chat": {
+      "doc": "docs/features/chat.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/chat.py",
+        "backend/services/claude.py",
+        "backend/services/_anthropic_client.py",
+        "backend/services/tools.py",
+        "backend/services/token_tracking.py",
+        "frontend/app/composables/useChat.ts",
+        "frontend/app/composables/useWebSocket.ts",
+        "frontend/app/components/ChatPanel.vue"
+      ],
+      "depends_on": ["retrieval", "sessions", "specialists"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "context_builder.py:52 raw note content embedded verbatim into system prompt — prompt injection risk (critical)",
+        "chat.py:96-97 only last tool_use per streaming round is executed, parallel tool calls silently dropped (high)",
+        "chat.py:135 ClaudeService instantiated per-message, new HTTP connection pool on every WebSocket message (high)",
+        "token_tracking.py:11-15 token budgets defined but check_budget never called before Claude API calls (high)",
+        "tools.py:313-339 _execute_summarize does sync file I/O on async event loop, bypasses memory_service (no indexing, no path validation) (medium)",
+        "context_builder.py:52 hard 500-char truncation breaks mid-word (medium)",
+        "_anthropic_client.py dead code — creates sync client but codebase uses async everywhere (medium)",
+        "ChatPanel.vue:115 XSS via unsanitized cursor span concatenated after DOMPurify runs (frontend)",
+        "ChatPanel.vue:37 URL_RE regex matches trailing punctuation (frontend)",
+        "useChat.ts:13 _errorClearTimer never cleared on unmount (frontend)",
+        "useWebSocket.ts:26-43 reconnect callbacks fire on first connection due to _ws.value being null (frontend)",
+        "useChat.ts:66-70 (event as any).type === 'disconnected' bypasses TypeScript type checking (frontend)"
+      ]
+    },
+    "memory": {
+      "doc": "docs/features/memory.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/memory.py",
+        "backend/services/memory_service.py",
+        "backend/services/ingest.py",
+        "backend/services/url_ingest.py",
+        "backend/utils/markdown.py",
+        "frontend/app/pages/memory.vue",
+        "frontend/app/components/NoteList.vue",
+        "frontend/app/components/NoteViewer.vue",
+        "frontend/app/components/ImportDialog.vue",
+        "frontend/app/components/LinkIngestDialog.vue"
+      ],
+      "depends_on": ["database"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "url_ingest.py:223 SSRF - requests.get on any URL without private/loopback host check (critical)",
+        "memory_service.py:37-41 path traversal not blocked on Windows absolute paths (critical)",
+        "url_ingest.py:227-234 SSL verification silently disabled on retry (high)",
+        "memory_service.py:239-249 reindex_all clears notes table outside transaction (high)",
+        "memory.py:84-108 unbounded file upload size (high)",
+        "ingest.py:139-142 smart_enrich reads arbitrary file - note_path not validated (high)",
+        "ingest.py:172-178 + url_ingest.py:84-92 frontmatter YAML built by f-string (medium)",
+        "memory_service.py:158 json.loads(tags) unhandled on corrupt row (medium)",
+        "memory.py:84-108 folder form param not validated against path traversal (medium)"
+      ]
+    },
+    "knowledge-graph": {
+      "doc": "docs/features/knowledge-graph.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/graph.py",
+        "backend/services/graph_service.py",
+        "frontend/app/pages/graph.vue",
+        "frontend/app/components/GraphCanvas.vue",
+        "frontend/app/composables/useGraph.ts"
+      ],
+      "depends_on": ["memory"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "graph_service.py:36 duplicate edges accumulated on rebuild — no dedup check (high)",
+        "graph_service.py via session_service.py:349 rebuild called synchronously inside async handler (high)",
+        "graph.py:25 unbounded depth parameter in neighbors query — DoS risk (medium)",
+        "graph.vue:63 rebuildGraph() called on every mount instead of loadGraph() (medium)",
+        "GraphCanvas.vue:297-304 full rebuild on data change orphans ResizeObserver (medium)"
+      ]
+    },
+    "voice": {
+      "doc": "docs/features/voice.md",
+      "type": "feature",
+      "sources": [
+        "frontend/app/composables/useVoice.ts",
+        "frontend/app/composables/stt/types.ts",
+        "frontend/app/composables/stt/webSpeechSTT.ts",
+        "frontend/app/composables/tts/types.ts",
+        "frontend/app/composables/tts/webSpeechTTS.ts",
+        "frontend/app/components/VoiceButton.vue",
+        "frontend/app/components/TranscriptBar.vue"
+      ],
+      "depends_on": ["chat"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "useVoice.ts:19-25 STT callbacks registered before bindChat — final transcript silently dropped if STT fires early (medium)"
+      ]
+    },
+    "specialists": {
+      "doc": "docs/features/specialists.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/specialists.py",
+        "backend/services/specialist_service.py",
+        "frontend/app/pages/specialists.vue",
+        "frontend/app/composables/useSpecialists.ts",
+        "frontend/app/components/SpecialistCard.vue",
+        "frontend/app/components/SpecialistWizard.vue",
+        "frontend/app/components/SpecialistBadge.vue"
+      ],
+      "depends_on": ["memory"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "specialist_service.py:56,62 path traversal — spec_id used directly in file path (critical)",
+        "specialist_service.py:56 silent overwrite on ID collision (medium)",
+        "specialist_service.py:109 trash move name collision on repeat delete (medium)",
+        "SpecialistWizard.vue:148 submit() skips validation beyond name (medium)",
+        "specialist_service.py:182-185 suggest_specialist keyword matching overly broad (low)"
+      ]
+    },
+    "sessions": {
+      "doc": "docs/features/sessions.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/sessions.py",
+        "backend/services/session_service.py",
+        "frontend/app/composables/useSessions.ts",
+        "frontend/app/components/SessionHistory.vue"
+      ],
+      "depends_on": ["database", "memory", "knowledge-graph"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "session_service.py:139,161 path traversal — session_id from URL used directly in file path (critical)",
+        "session_service.py _sessions dict never auto-persisted — crash loses in-progress data (high)",
+        "session_service.py:186 _extract_topics crashes on non-string content (medium)",
+        "sessions.py:11 list_sessions full O(n) scan before limit applied (medium)"
+      ]
+    },
+    "retrieval": {
+      "doc": "docs/features/retrieval.md",
+      "type": "feature",
+      "sources": [
+        "backend/services/retrieval.py",
+        "backend/services/context_builder.py"
+      ],
+      "depends_on": ["memory", "knowledge-graph"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "context_builder.py:52-53 raw note content embedded verbatim into system prompt — prompt injection risk (critical)",
+        "context_builder.py:52 hard 500-char truncation breaks mid-word (medium)",
+        "token budgets defined in token_tracking but never enforced during context building (medium)"
+      ]
+    },
+    "planning": {
+      "doc": "docs/features/planning.md",
+      "type": "feature",
+      "sources": [
+        "backend/services/planning_service.py"
+      ],
+      "depends_on": ["retrieval", "chat"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "planning_service.py:63-65 str.replace targets first occurrence — checkbox text containing '- [ ]' causes incorrect replacement (medium)"
+      ]
+    },
+    "preferences-settings": {
+      "doc": "docs/features/preferences-settings.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/preferences.py",
+        "backend/routers/settings.py",
+        "backend/services/preference_service.py",
+        "backend/config.py",
+        "frontend/app/pages/settings.vue",
+        "frontend/app/composables/usePreferences.ts"
+      ],
+      "depends_on": ["workspace-onboarding"],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "settings.py:28-35 PATCH /api/settings/api-key calls private _store_api_key with no workspace guard, accepts raw dict body (high)",
+        "settings.py:38-50 voice settings writes not atomic — crash between two saves leaves inconsistent state (medium)",
+        "preference_service.py:29 no size limit on preference values — large values inflate every system prompt (medium)",
+        "config.py:8-19 hand-written .env parser redundant with pydantic-settings; strips quotes incorrectly for mixed-quote values, does not strip inline comments (medium)",
+        "settings.vue:100,103-104 swallowed errors in empty catch blocks — failed settings fetch shows wrong UI state (medium)",
+        "settings.vue:99 auto_speak stored as string 'true'/'false' not boolean (low)"
+      ]
+    },
+    "app-shell": {
+      "doc": "docs/features/app-shell.md",
+      "type": "feature",
+      "sources": [
+        "frontend/app/app.vue",
+        "frontend/app/layouts/default.vue",
+        "frontend/app/pages/index.vue",
+        "frontend/app/pages/main.vue",
+        "frontend/app/composables/useAppState.ts",
+        "frontend/app/composables/useKeyboard.ts",
+        "frontend/app/composables/useApi.ts",
+        "frontend/app/components/Orb.vue",
+        "frontend/app/components/StatusBar.vue",
+        "frontend/app/components/ConfirmDialog.vue",
+        "frontend/app/components/ObsidianHelper.vue",
+        "frontend/app/types/index.ts"
+      ],
+      "depends_on": [],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "useApi.ts:71-72 note paths not URL-encoded — malformed requests for paths with special characters (medium)",
+        "useApi.ts error handling copy-pasted 22 times — maintenance risk (medium)",
+        "ObsidianHelper.vue:22 window.open with '_self' navigates current tab away if obsidian:// not registered (medium)",
+        "useKeyboard.ts onSend defined in interface but never invoked — dead API surface (low)",
+        "ChatPanel.vue:103 array index used as :key — stale DOM on list mutations (low)"
+      ]
+    },
+    "database": {
+      "doc": "docs/concepts/database.md",
+      "type": "concept",
+      "sources": [
+        "backend/models/database.py",
+        "backend/models/schemas.py",
+        "backend/main.py"
+      ],
+      "depends_on": [],
+      "last_updated": "2026-04-14",
+      "status": "current",
+      "known_issues": [
+        "schemas.py:127-151 SpecialistCreateRequest missing fields due to indentation error (critical)",
+        "database.py:84-91 FTS/trigger failures silently swallowed (high)",
+        "database.py:76-82 FTS rebuild not atomic (high)",
+        "main.py:55 no lifespan init_database call (medium)",
+        "schemas.py untyped list/dict collection fields (medium)",
+        "database.py:53 f-string in PRAGMA query (medium)",
+        "schemas.py:12 api_key accepts whitespace-only strings (medium)"
+      ]
+    }
+  }
+}

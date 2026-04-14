@@ -155,3 +155,15 @@ export interface UrlIngestResult {
   word_count: number
   summary?: string
 }
+
+// --- API Error ---
+
+export class ApiError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}

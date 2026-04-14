@@ -1,14 +1,5 @@
 import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, SpecialistSummary, SpecialistDetail, UrlIngestResult } from '~/types'
-
-export class ApiError extends Error {
-  status: number
-
-  constructor(status: number, message: string) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-  }
-}
+import { ApiError } from '~/types'
 
 export function useApi() {
   async function fetchHealth(): Promise<HealthResponse> {

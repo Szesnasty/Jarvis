@@ -1,0 +1,9 @@
+
+{
+  "name": "Jarvis",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "codument": "0.3.0"
+  }
+}
