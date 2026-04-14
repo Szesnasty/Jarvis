@@ -11,6 +11,14 @@ class HealthResponse(BaseModel):
 class WorkspaceInitRequest(BaseModel):
     api_key: str
 
+    @field_validator("api_key")
+    @classmethod
+    def validate_api_key(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("API key must not be blank")
+        return v
+
 
 class WorkspaceInitResponse(BaseModel):
     status: str
@@ -37,7 +45,7 @@ class NoteMetadataResponse(BaseModel):
     path: str
     title: str
     folder: str
-    tags: list
+    tags: list[str]
     updated_at: str
     word_count: int
 
@@ -46,7 +54,7 @@ class NoteDetailResponse(BaseModel):
     path: str
     title: str
     content: str
-    frontmatter: dict
+    frontmatter: dict[str, object]
     updated_at: str
 
 
@@ -85,8 +93,8 @@ class SessionDetailResponse(BaseModel):
     created_at: str
     ended_at: Optional[str] = None
     message_count: int
-    messages: list
-    tools_used: list = []
+    messages: list[dict[str, str]]
+    tools_used: list[str] = []
 
 
 # --- Preferences ---
@@ -112,14 +120,14 @@ class GraphEdgeResponse(BaseModel):
 
 
 class GraphResponse(BaseModel):
-    nodes: list
-    edges: list
+    nodes: list[GraphNodeResponse]
+    edges: list[GraphEdgeResponse]
 
 
 class GraphStatsResponse(BaseModel):
     node_count: int
     edge_count: int
-    top_connected: list = []
+    top_connected: list[dict[str, object]] = []
 
 
 # --- Specialists ---
@@ -127,7 +135,12 @@ class GraphStatsResponse(BaseModel):
 class SpecialistCreateRequest(BaseModel):
     name: str
     role: str = ""
-    sources: list = []
+    sources: list[str] = []
+    style: dict[str, str] = {}
+    rules: list[str] = []
+    tools: list[str] = []
+    examples: list[dict[str, str]] = []
+    icon: str = "\U0001f916"
 
 
 # --- URL Ingest ---
@@ -143,11 +156,6 @@ class UrlIngestRequest(BaseModel):
         if not value.startswith(("http://", "https://")):
             raise ValueError("url must start with http:// or https://")
         return value
-    style: dict = {}
-    rules: list = []
-    tools: list = []
-    examples: list = []
-    icon: str = "\U0001f916"
 
 
 class SpecialistSummaryResponse(BaseModel):
@@ -156,17 +164,26 @@ class SpecialistSummaryResponse(BaseModel):
     icon: str = "\U0001f916"
     source_count: int = 0
     rule_count: int = 0
+    file_count: int = 0
 
 
 class SpecialistDetailResponse(BaseModel):
     id: str
     name: str
     role: str = ""
-    sources: list = []
-    style: dict = {}
-    rules: list = []
-    tools: list = []
-    examples: list = []
+    sources: list[str] = []
+    style: dict[str, str] = {}
+    rules: list[str] = []
+    tools: list[str] = []
+    examples: list[dict[str, str]] = []
     icon: str = "\U0001f916"
     created_at: str = ""
     updated_at: str = ""
+
+
+class SpecialistFileInfoResponse(BaseModel):
+    filename: str
+    path: str
+    title: str
+    size: int
+    created_at: str

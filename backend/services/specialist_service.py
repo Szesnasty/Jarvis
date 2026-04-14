@@ -27,8 +27,17 @@ def _trash_dir(workspace_path: Optional[Path] = None) -> Path:
     return d
 
 
+_SPEC_ID_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,63}$")
+
+
 def _slugify(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def _validate_spec_id(spec_id: str) -> None:
+    """Validate specialist ID to prevent path traversal."""
+    if not _SPEC_ID_RE.match(spec_id):
+        raise ValueError(f"Invalid specialist id: {spec_id!r}")
 
 
 def create_specialist(data: Dict, workspace_path: Optional[Path] = None) -> Dict:
@@ -37,7 +46,12 @@ def create_specialist(data: Dict, workspace_path: Optional[Path] = None) -> Dict
         raise ValueError("Specialist name is required")
 
     spec_id = data.get("id") or _slugify(name)
+    _validate_spec_id(spec_id)
     now = datetime.now(timezone.utc).isoformat()
+
+    filepath = _agents_dir(workspace_path) / f"{spec_id}.json"
+    if filepath.exists():
+        raise ValueError(f"A specialist with id '{spec_id}' already exists")
 
     specialist = {
         "id": spec_id,
@@ -53,12 +67,12 @@ def create_specialist(data: Dict, workspace_path: Optional[Path] = None) -> Dict
         "updated_at": now,
     }
 
-    filepath = _agents_dir(workspace_path) / f"{spec_id}.json"
     filepath.write_text(json.dumps(specialist, indent=2), encoding="utf-8")
     return specialist
 
 
 def get_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> Dict:
+    _validate_spec_id(spec_id)
     filepath = _agents_dir(workspace_path) / f"{spec_id}.json"
     if not filepath.exists():
         raise SpecialistNotFoundError(f"Specialist not found: {spec_id}")
@@ -79,6 +93,7 @@ def list_specialists(workspace_path: Optional[Path] = None) -> List[Dict]:
             "icon": data.get("icon", "🤖"),
             "source_count": len(data.get("sources", [])),
             "rule_count": len(data.get("rules", [])),
+            "file_count": count_specialist_files(data["id"], workspace_path),
         })
     return result
 
@@ -105,8 +120,14 @@ def delete_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> No
         _active_specialist = None
 
     trash = _trash_dir(workspace_path)
-    dest = trash / f"{spec_id}.json"
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    dest = trash / f"{spec_id}-{stamp}.json"
     shutil.move(str(filepath), str(dest))
+
+    # Clean up knowledge-files directory
+    files_dir = _agents_dir(workspace_path) / spec_id
+    if files_dir.is_dir():
+        shutil.rmtree(str(files_dir))
 
 
 def activate_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> Dict:
@@ -171,19 +192,145 @@ def suggest_specialist(
     if not specialists:
         return None
 
+    _STOP_WORDS = {
+        "a", "an", "the", "is", "are", "you", "your", "and", "or", "for",
+        "to", "of", "in", "on", "with", "as", "at", "by", "from", "that",
+        "this", "it", "be", "do", "have", "will", "can", "who", "what",
+        "general", "assistant", "specialist", "help", "use", "make",
+    }
     msg_lower = user_message.lower()
     for spec_meta in specialists:
         try:
             spec = get_specialist(spec_meta["id"], workspace_path)
         except SpecialistNotFoundError:
             continue
-        keywords = [spec["name"].lower()]
+        # Include full name and individual name words
+        name_lower = spec["name"].lower()
+        keywords = [name_lower]
+        keywords.extend(w for w in name_lower.split() if len(w) >= 3 and w not in _STOP_WORDS)
         keywords.extend(s.lower() for s in spec.get("sources", []))
-        keywords.extend(spec.get("role", "").lower().split())
+        # Only use role words that are 4+ chars and not stop words
+        role_words = [w for w in spec.get("role", "").lower().split()
+                      if len(w) >= 4 and w not in _STOP_WORDS]
+        keywords.extend(role_words)
         for kw in keywords:
-            if kw and kw in msg_lower:
+            if kw and len(kw) >= 3 and kw in msg_lower:
                 return spec_meta
     return None
+
+
+def _files_dir(spec_id: str, workspace_path: Optional[Path] = None) -> Path:
+    """Return the knowledge-files directory for a specialist."""
+    _validate_spec_id(spec_id)
+    d = _agents_dir(workspace_path) / spec_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+_SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._\- ]{0,200}$")
+_ALLOWED_EXTENSIONS = {".md", ".txt", ".pdf", ".csv", ".json"}
+
+
+def _validate_filename(filename: str) -> None:
+    """Validate filename to prevent path traversal and restrict to allowed types."""
+    if not _SAFE_FILENAME_RE.match(filename):
+        raise ValueError(f"Invalid filename: {filename!r}")
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise ValueError(f"Invalid filename: {filename!r}")
+    ext = Path(filename).suffix.lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise ValueError(f"Unsupported file type: {ext}")
+
+
+def list_specialist_files(spec_id: str, workspace_path: Optional[Path] = None) -> List[Dict]:
+    """List all knowledge files for a specialist."""
+    # Verify specialist exists
+    get_specialist(spec_id, workspace_path)
+    files_dir = _agents_dir(workspace_path) / spec_id
+    if not files_dir.exists():
+        return []
+    result = []
+    for f in sorted(files_dir.iterdir()):
+        if f.is_file() and f.suffix.lower() in _ALLOWED_EXTENSIONS:
+            stat = f.stat()
+            result.append({
+                "filename": f.name,
+                "path": f.name,
+                "title": f.stem.replace("-", " ").replace("_", " "),
+                "size": stat.st_size,
+                "created_at": datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(),
+            })
+    return result
+
+
+def save_specialist_file(spec_id: str, filename: str, content: bytes, workspace_path: Optional[Path] = None) -> Dict:
+    """Save an uploaded file to a specialist's knowledge directory."""
+    get_specialist(spec_id, workspace_path)
+    _validate_filename(filename)
+    files_dir = _files_dir(spec_id, workspace_path)
+    target = files_dir / filename
+
+    # Avoid overwriting — append number if exists
+    if target.exists():
+        stem = target.stem
+        suffix = target.suffix
+        i = 1
+        while target.exists():
+            target = files_dir / f"{stem}-{i}{suffix}"
+            i += 1
+
+    target.write_bytes(content)
+    stat = target.stat()
+    return {
+        "filename": target.name,
+        "path": target.name,
+        "title": target.stem.replace("-", " ").replace("_", " "),
+        "size": stat.st_size,
+        "created_at": datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(),
+    }
+
+
+def delete_specialist_file(spec_id: str, filename: str, workspace_path: Optional[Path] = None) -> None:
+    """Delete a file from a specialist's knowledge directory."""
+    get_specialist(spec_id, workspace_path)
+    _validate_filename(filename)
+    files_dir = _agents_dir(workspace_path) / spec_id
+    target = files_dir / filename
+    if not target.exists() or not target.is_file():
+        raise FileNotFoundError(f"File not found: {filename}")
+    target.unlink()
+
+
+def copy_file_to_specialist(spec_id: str, source_path: Path, title: str = "", workspace_path: Optional[Path] = None) -> Dict:
+    """Copy an existing file into a specialist's knowledge directory."""
+    get_specialist(spec_id, workspace_path)
+    files_dir = _files_dir(spec_id, workspace_path)
+    dest = files_dir / source_path.name
+    # Avoid overwriting
+    if dest.exists():
+        stem = dest.stem
+        suffix = dest.suffix
+        i = 1
+        while dest.exists():
+            dest = files_dir / f"{stem}-{i}{suffix}"
+            i += 1
+    shutil.copy2(str(source_path), str(dest))
+    stat = dest.stat()
+    return {
+        "filename": dest.name,
+        "path": dest.name,
+        "title": title or dest.stem.replace("-", " ").replace("_", " "),
+        "size": stat.st_size,
+        "created_at": datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(),
+    }
+
+
+def count_specialist_files(spec_id: str, workspace_path: Optional[Path] = None) -> int:
+    """Count knowledge files for a specialist."""
+    files_dir = _agents_dir(workspace_path) / spec_id
+    if not files_dir.exists():
+        return 0
+    return sum(1 for f in files_dir.iterdir() if f.is_file() and f.suffix.lower() in _ALLOWED_EXTENSIONS)
 
 
 def reset_state() -> None:

@@ -78,7 +78,16 @@ export interface WsSessionStart {
   session_id: string
 }
 
-export type WsEvent = WsTextDelta | WsToolUse | WsToolResult | WsDone | WsError | WsSessionStart
+export interface WsSessionHistory {
+  type: 'session_history'
+  messages: ChatMessage[]
+}
+
+export interface WsDisconnected {
+  type: 'disconnected'
+}
+
+export type WsEvent = WsTextDelta | WsToolUse | WsToolResult | WsDone | WsError | WsSessionStart | WsSessionHistory | WsDisconnected
 
 // --- Sessions ---
 
@@ -129,6 +138,7 @@ export interface SpecialistSummary {
   icon: string
   source_count: number
   rule_count: number
+  file_count: number
 }
 
 export interface SpecialistDetail {
@@ -143,6 +153,14 @@ export interface SpecialistDetail {
   icon: string
   created_at: string
   updated_at: string
+}
+
+export interface SpecialistFileInfo {
+  filename: string
+  path: string
+  title: string
+  size: number
+  created_at: string
 }
 
 // --- URL Ingest ---

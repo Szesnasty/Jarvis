@@ -63,7 +63,8 @@ def test_delete_specialist_moves_to_trash(ws):
     create_specialist(SAMPLE_DATA, workspace_path=ws)
     delete_specialist("health-guide", workspace_path=ws)
     assert not (ws / "agents" / "health-guide.json").exists()
-    assert (ws / ".trash" / "health-guide.json").exists()
+    trash_files = list((ws / ".trash").glob("health-guide-*.json"))
+    assert len(trash_files) == 1
 
 
 def test_delete_specialist_removes_from_list(ws):

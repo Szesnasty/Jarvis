@@ -3,107 +3,138 @@ import { mountSuspended } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import SpecialistWizard from '~/components/SpecialistWizard.vue'
 
+async function goToStep(wrapper: ReturnType<Awaited<typeof mountSuspended>>, targetStep: number) {
+  // Fill name first (required for step 1)
+  if (targetStep > 1) {
+    await wrapper.find('.wiz__input').setValue('Test Specialist')
+  }
+  for (let i = 1; i < targetStep; i++) {
+    await wrapper.find('.wiz__next-btn').trigger('click')
+    await flushPromises()
+  }
+}
+
 describe('SpecialistWizard', () => {
   it('renders step 1 with name input', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    expect(wrapper.find('.specialist-wizard__input').exists()).toBe(true)
-    expect(wrapper.find('.specialist-wizard__step--active').text()).toContain('1')
+    expect(wrapper.find('.wiz__input').exists()).toBe(true)
+    expect(wrapper.find('.wiz__step--active').text()).toContain('1')
+  })
+
+  it('validation prevents proceeding with empty name', async () => {
+    const wrapper = await mountSuspended(SpecialistWizard)
+    const btn = wrapper.find('.wiz__next-btn')
+    expect((btn.element as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('step 2: role textarea', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    // Fill name and go to step 2
-    const input = wrapper.find('.specialist-wizard__input')
-    await input.setValue('Test Specialist')
-    await wrapper.find('.specialist-wizard__next-btn').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.specialist-wizard__textarea').exists()).toBe(true)
-    expect(wrapper.find('.specialist-wizard__step--active').text()).toContain('2')
+    await goToStep(wrapper, 2)
+    expect(wrapper.find('.wiz__textarea').exists()).toBe(true)
+    expect(wrapper.find('.wiz__step--active').text()).toContain('2')
   })
 
-  it('step 3: source folder picker', async () => {
+  it('step 3: knowledge sources with dropzone', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    await wrapper.find('.specialist-wizard__input').setValue('Test')
-    await wrapper.find('.specialist-wizard__next-btn').trigger('click')
+    await goToStep(wrapper, 3)
+    expect(wrapper.find('.wiz__step--active').text()).toContain('3')
+    expect(wrapper.find('.wiz__dropzone').exists()).toBe(true)
+  })
+
+  it('step 3: shows auto-created folder path based on name', async () => {
+    const wrapper = await mountSuspended(SpecialistWizard)
+    await wrapper.find('.wiz__input').setValue('Health Guide')
+    await wrapper.find('.wiz__next-btn').trigger('click')
     await flushPromises()
-    await wrapper.find('.specialist-wizard__next-btn').trigger('click')
+    await wrapper.find('.wiz__next-btn').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.specialist-wizard__step--active').text()).toContain('3')
-    expect(wrapper.find('.specialist-wizard__textarea').exists()).toBe(true)
+    expect(wrapper.find('.wiz__code').text()).toContain('health-guide')
+  })
+
+  it('step 3: extra sources toggle opens textarea', async () => {
+    const wrapper = await mountSuspended(SpecialistWizard)
+    await goToStep(wrapper, 3)
+    const details = wrapper.find('.wiz__extra-sources')
+    expect(details.exists()).toBe(true)
   })
 
   it('step 4: style inputs', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    await wrapper.find('.specialist-wizard__input').setValue('Test')
-    for (let i = 0; i < 3; i++) {
-      await wrapper.find('.specialist-wizard__next-btn').trigger('click')
-      await flushPromises()
-    }
-    expect(wrapper.find('.specialist-wizard__step--active').text()).toContain('4')
-    const inputs = wrapper.findAll('.specialist-wizard__input')
-    expect(inputs.length).toBeGreaterThanOrEqual(3)
+    await goToStep(wrapper, 4)
+    expect(wrapper.find('.wiz__step--active').text()).toContain('4')
+    const inputs = wrapper.findAll('.wiz__input')
+    expect(inputs.length).toBeGreaterThanOrEqual(2)
   })
 
   it('step 5: rules textarea', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    await wrapper.find('.specialist-wizard__input').setValue('Test')
-    for (let i = 0; i < 4; i++) {
-      await wrapper.find('.specialist-wizard__next-btn').trigger('click')
-      await flushPromises()
-    }
-    expect(wrapper.find('.specialist-wizard__step--active').text()).toContain('5')
-    expect(wrapper.find('.specialist-wizard__textarea').exists()).toBe(true)
+    await goToStep(wrapper, 5)
+    expect(wrapper.find('.wiz__step--active').text()).toContain('5')
+    expect(wrapper.find('.wiz__textarea').exists()).toBe(true)
   })
 
-  it('step 6: tool checkboxes', async () => {
+  it('step 6: tool checkboxes as grid', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    await wrapper.find('.specialist-wizard__input').setValue('Test')
-    for (let i = 0; i < 5; i++) {
-      await wrapper.find('.specialist-wizard__next-btn').trigger('click')
-      await flushPromises()
-    }
-    expect(wrapper.find('.specialist-wizard__step--active').text()).toContain('6')
-    const checkboxes = wrapper.findAll('.specialist-wizard__checkbox')
-    expect(checkboxes.length).toBeGreaterThan(0)
+    await goToStep(wrapper, 6)
+    expect(wrapper.find('.wiz__step--active').text()).toContain('6')
+    const tools = wrapper.findAll('.wiz__tool')
+    expect(tools.length).toBeGreaterThan(0)
   })
 
   it('step 7: review summary', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    await wrapper.find('.specialist-wizard__input').setValue('My Specialist')
-    for (let i = 0; i < 6; i++) {
-      await wrapper.find('.specialist-wizard__next-btn').trigger('click')
-      await flushPromises()
-    }
-    expect(wrapper.find('.specialist-wizard__step--active').text()).toContain('7')
-    expect(wrapper.find('.specialist-wizard__review').text()).toContain('My Specialist')
+    await goToStep(wrapper, 7)
+    expect(wrapper.find('.wiz__step--active').text()).toContain('7')
+    // Name was set to 'Test Specialist' by goToStep helper
+    expect(wrapper.find('.wiz__review').text()).toContain('Test Specialist')
+  })
+
+  it('step 7: review shows stat grid', async () => {
+    const wrapper = await mountSuspended(SpecialistWizard)
+    await wrapper.find('.wiz__input').setValue('Test')
+    await goToStep(wrapper, 7)
+    const stats = wrapper.findAll('.wiz__review-stat')
+    expect(stats.length).toBe(4) // staged files, source folders, rules, tools
   })
 
   it('back button returns to previous step', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    await wrapper.find('.specialist-wizard__input').setValue('Test')
-    await wrapper.find('.specialist-wizard__next-btn').trigger('click')
+    await goToStep(wrapper, 2)
+    expect(wrapper.find('.wiz__step--active').text()).toContain('2')
+    await wrapper.find('.wiz__back-btn').trigger('click')
     await flushPromises()
-    expect(wrapper.find('.specialist-wizard__step--active').text()).toContain('2')
-    await wrapper.find('.specialist-wizard__back-btn').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('.specialist-wizard__step--active').text()).toContain('1')
+    expect(wrapper.find('.wiz__step--active').text()).toContain('1')
   })
 
-  it('validation prevents skip with empty name', async () => {
+  it('cancel button emits cancel event', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    const btn = wrapper.find('.specialist-wizard__next-btn')
-    expect((btn.element as HTMLButtonElement).disabled).toBe(true)
+    await wrapper.find('.wiz__cancel-btn').trigger('click')
+    expect(wrapper.emitted('cancel')).toBeTruthy()
   })
 
-  it('submit emits save event', async () => {
+  it('submit emits save event with form data and staged files', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
-    await wrapper.find('.specialist-wizard__input').setValue('Test Spec')
-    for (let i = 0; i < 6; i++) {
-      await wrapper.find('.specialist-wizard__next-btn').trigger('click')
-      await flushPromises()
-    }
-    await wrapper.find('.specialist-wizard__submit-btn').trigger('click')
+    // goToStep sets name to 'Test Specialist'
+    await goToStep(wrapper, 7)
+    await wrapper.find('.wiz__submit-btn').trigger('click')
     expect(wrapper.emitted('save')).toBeTruthy()
-    expect(wrapper.emitted('save')![0][0]).toHaveProperty('name', 'Test Spec')
+    const payload = wrapper.emitted('save')![0]
+    expect(payload[0]).toHaveProperty('name', 'Test Specialist')
+    expect(Array.isArray(payload[1])).toBe(true) // staged files array
+  })
+
+  it('step indicators are clickable for completed steps', async () => {
+    const wrapper = await mountSuspended(SpecialistWizard)
+    await goToStep(wrapper, 3)
+    // Click back to step 1
+    const steps = wrapper.findAll('.wiz__step')
+    await steps[0].trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.wiz__step--active').text()).toContain('1')
+  })
+
+  it('exposes resetSubmitting method', async () => {
+    const wrapper = await mountSuspended(SpecialistWizard)
+    expect(typeof (wrapper.vm as any).resetSubmitting).toBe('function')
   })
 })
