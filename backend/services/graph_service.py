@@ -1,4 +1,5 @@
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,6 +22,7 @@ class Edge:
     source: str
     target: str
     type: str
+    weight: float = 1.0
 
 
 @dataclass
@@ -32,8 +34,8 @@ class Graph:
         if node_id not in self.nodes:
             self.nodes[node_id] = Node(id=node_id, type=node_type, label=label, folder=folder)
 
-    def add_edge(self, source: str, target: str, edge_type: str) -> None:
-        edge = Edge(source=source, target=target, type=edge_type)
+    def add_edge(self, source: str, target: str, edge_type: str, weight: float = 1.0) -> None:
+        edge = Edge(source=source, target=target, type=edge_type, weight=weight)
         if edge not in self.edges:
             self.edges.append(edge)
 
@@ -72,7 +74,7 @@ class Graph:
                 for n in self.nodes.values()
             ],
             "edges": [
-                {"source": e.source, "target": e.target, "type": e.type}
+                {"source": e.source, "target": e.target, "type": e.type, "weight": e.weight}
                 for e in self.edges
             ],
         }
@@ -106,6 +108,56 @@ def extract_wiki_links(body: str) -> List[str]:
     return results
 
 
+# Base edge weights by type
+_EDGE_BASE_WEIGHT: Dict[str, float] = {
+    "linked": 1.0,
+    "related": 0.9,
+    "mentions": 0.8,
+    "tagged": 0.6,
+    "part_of": 0.3,
+    "similar_to": 0.5,
+    "temporal": 0.2,
+}
+
+
+def compute_tag_idf(graph: "Graph") -> Dict[str, float]:
+    """Compute IDF score for each tag node. Normalized to [0, 1]."""
+    note_count = sum(1 for n in graph.nodes.values() if n.type == "note")
+    if note_count == 0:
+        return {}
+
+    tag_freq: Dict[str, int] = {}
+    for edge in graph.edges:
+        if edge.type == "tagged":
+            tag_id = edge.target if edge.target.startswith("tag:") else edge.source
+            tag_freq[tag_id] = tag_freq.get(tag_id, 0) + 1
+
+    max_idf = math.log(note_count + 1)
+    idf: Dict[str, float] = {}
+    for tag_id, freq in tag_freq.items():
+        raw = math.log((note_count + 1) / (freq + 1))
+        idf[tag_id] = round(raw / max_idf, 3) if max_idf > 0 else 0.5
+
+    return idf
+
+
+def _apply_edge_weights(graph: "Graph") -> None:
+    """Assign edge weights based on type and IDF for tags."""
+    idf = compute_tag_idf(graph)
+
+    updated: List[Edge] = []
+    for edge in graph.edges:
+        base = _EDGE_BASE_WEIGHT.get(edge.type, 1.0)
+        if edge.type == "tagged":
+            tag_id = edge.target if edge.target.startswith("tag:") else edge.source
+            weight = round(base * idf.get(tag_id, 0.5), 3)
+        else:
+            weight = base
+        updated.append(Edge(source=edge.source, target=edge.target, type=edge.type, weight=weight))
+
+    graph.edges = updated
+
+
 _graph_cache: Optional[Graph] = None
 
 
@@ -117,6 +169,147 @@ def _graph_path(workspace_path: Optional[Path] = None) -> Path:
     return (workspace_path or get_settings().workspace_path) / "graph" / "graph.json"
 
 
+def _enrich_with_entities(graph: Graph, mem: Path) -> None:
+    """Extract entities from note bodies and add person nodes/edges."""
+    from services.entity_extraction import extract_entities
+
+    existing_people = [n.label for n in graph.nodes.values() if n.type == "person"]
+
+    for node in list(graph.nodes.values()):
+        if node.type != "note":
+            continue
+        filepath = mem / node.id[5:]
+        if not filepath.exists():
+            continue
+        try:
+            content = filepath.read_text(encoding="utf-8", errors="replace")
+            fm, body = parse_frontmatter(content)
+        except Exception:
+            continue
+
+        fm_people = {str(p).lower() for p in fm.get("people", [])}
+        entities = extract_entities(body, existing_people)
+
+        for ent in entities:
+            if ent.type == "person" and ent.confidence >= 0.5:
+                if ent.text.lower() not in fm_people:
+                    person_id = f"person:{ent.text}"
+                    graph.add_node(person_id, "person", ent.text)
+                    graph.add_edge(node.id, person_id, "mentions")
+
+
+def _resolve_bidirectional_links(graph: Graph) -> None:
+    """For each linked edge A->B, add B->A if not already present."""
+    forward_links = [(e.source, e.target) for e in graph.edges if e.type == "linked"]
+    forward_set = set(forward_links)
+
+    for src, tgt in forward_links:
+        if (tgt, src) not in forward_set and tgt in graph.nodes:
+            graph.add_edge(tgt, src, "linked", weight=0.6)
+            forward_set.add((tgt, src))
+
+
+def _compute_similarity_edges(graph: Graph, memory_path: Path) -> List[Edge]:
+    """Compare notes by title + first 200 chars. Add similar_to edges for strong overlap."""
+    from services.context_builder import _extract_keywords
+
+    note_nodes = [n for n in graph.nodes.values() if n.type == "note"]
+    if len(note_nodes) > 500:
+        return []
+
+    note_keywords: Dict[str, Set[str]] = {}
+    for node in note_nodes:
+        path = node.id[5:]
+        filepath = memory_path / path
+        if not filepath.exists():
+            continue
+        try:
+            content = filepath.read_text(encoding="utf-8", errors="replace")
+            _, body = parse_frontmatter(content)
+        except Exception:
+            continue
+        text = f"{node.label} {body[:200]}"
+        keywords = _extract_keywords(text)
+        if len(keywords) >= 3:
+            note_keywords[node.id] = keywords
+
+    new_edges: List[Edge] = []
+    edge_count: Dict[str, int] = {}
+    node_ids = list(note_keywords.keys())
+    for i in range(len(node_ids)):
+        for j in range(i + 1, len(node_ids)):
+            a, b = node_ids[i], node_ids[j]
+            overlap = note_keywords[a] & note_keywords[b]
+            union = note_keywords[a] | note_keywords[b]
+            if len(union) == 0:
+                continue
+            jaccard = len(overlap) / len(union)
+            if jaccard >= 0.25 and len(overlap) >= 4:
+                if edge_count.get(a, 0) >= 3 or edge_count.get(b, 0) >= 3:
+                    continue
+                weight = round(0.3 + jaccard * 0.4, 3)
+                new_edges.append(Edge(source=a, target=b, type="similar_to", weight=weight))
+                edge_count[a] = edge_count.get(a, 0) + 1
+                edge_count[b] = edge_count.get(b, 0) + 1
+
+    return new_edges
+
+
+def _compute_temporal_edges(graph: Graph, memory_path: Path) -> List[Edge]:
+    """Group notes by creation date and add temporal edges within same day."""
+    date_groups: Dict[str, List[str]] = {}
+
+    for node in graph.nodes.values():
+        if node.type != "note":
+            continue
+        path = node.id[5:]
+        filepath = memory_path / path
+        if not filepath.exists():
+            continue
+        try:
+            content = filepath.read_text(encoding="utf-8", errors="replace")
+            fm, _ = parse_frontmatter(content)
+        except Exception:
+            continue
+        created = fm.get("created_at", "") or fm.get("date", "")
+        if isinstance(created, str) and len(created) >= 10:
+            day = created[:10]
+            date_groups.setdefault(day, []).append(node.id)
+
+    edges: List[Edge] = []
+    for day, node_ids in date_groups.items():
+        if len(node_ids) < 2 or len(node_ids) > 10:
+            continue
+        for i in range(len(node_ids)):
+            for j in range(i + 1, len(node_ids)):
+                edges.append(Edge(source=node_ids[i], target=node_ids[j], type="temporal", weight=0.2))
+
+    return edges
+
+
+def _prune_overloaded_tags(graph: Graph, max_degree: int = 30) -> None:
+    """Downweight tags that connect to more than max_degree notes."""
+    tag_degree: Dict[str, int] = {}
+    for edge in graph.edges:
+        if edge.type == "tagged":
+            tag_id = edge.target if edge.target.startswith("tag:") else edge.source
+            tag_degree[tag_id] = tag_degree.get(tag_id, 0) + 1
+
+    overloaded = {tid for tid, deg in tag_degree.items() if deg > max_degree}
+
+    if not overloaded:
+        return
+
+    pruned: List[Edge] = []
+    for edge in graph.edges:
+        if edge.type == "tagged" and (edge.source in overloaded or edge.target in overloaded):
+            pruned.append(Edge(source=edge.source, target=edge.target, type=edge.type, weight=0.05))
+        else:
+            pruned.append(edge)
+
+    graph.edges = pruned
+
+
 def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
     global _graph_cache
     mem = _memory_path(workspace_path)
@@ -126,6 +319,7 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
         _save_and_cache(graph, workspace_path)
         return graph
 
+    # Pass 1: Parse notes, extract frontmatter edges
     for md_file in sorted(mem.rglob("*.md")):
         rel = md_file.relative_to(mem).as_posix()
         content = md_file.read_text(encoding="utf-8")
@@ -163,6 +357,26 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
             graph.add_node(area_id, "area", folder)
             graph.add_edge(note_id, area_id, "part_of")
 
+    # Pass 2: Entity extraction (adds person nodes from body text)
+    _enrich_with_entities(graph, mem)
+
+    # Pass 3: Bidirectional wiki-link resolution
+    _resolve_bidirectional_links(graph)
+
+    # Pass 4: Keyword similarity edges
+    for edge in _compute_similarity_edges(graph, mem):
+        graph.edges.append(edge)
+
+    # Pass 5: Temporal edges
+    for edge in _compute_temporal_edges(graph, mem):
+        graph.edges.append(edge)
+
+    # Pass 6: Apply IDF-weighted edge weights
+    _apply_edge_weights(graph)
+
+    # Pass 7: Prune overloaded tags
+    _prune_overloaded_tags(graph)
+
     _save_and_cache(graph, workspace_path)
     return graph
 
@@ -189,7 +403,7 @@ def load_graph(workspace_path: Optional[Path] = None) -> Optional[Graph]:
     for n in data.get("nodes", []):
         graph.add_node(n["id"], n["type"], n["label"], n.get("folder", ""))
     for e in data.get("edges", []):
-        graph.add_edge(e["source"], e["target"], e["type"])
+        graph.add_edge(e["source"], e["target"], e["type"], e.get("weight", 1.0))
 
     _graph_cache = graph
     return graph
@@ -231,6 +445,62 @@ def query_entity(entity: str, relation_type: Optional[str] = None, depth: int = 
         results = [r for r in results if r["id"] in edge_targets]
 
     return results
+
+
+def get_node_detail(node_id: str, workspace_path: Optional[Path] = None) -> Optional[Dict]:
+    """Aggregate rich detail for a single node from graph + memory index."""
+    graph = load_graph(workspace_path)
+    if not graph or node_id not in graph.nodes:
+        return None
+
+    node = graph.nodes[node_id]
+    neighbors = graph.get_neighbors(node_id, depth=1)
+
+    connected_notes = [n for n in neighbors if n["type"] == "note"]
+    connected_tags = [n["label"] for n in neighbors if n["type"] == "tag"]
+    connected_people = [n["label"] for n in neighbors if n["type"] == "person"]
+
+    # For note nodes: read preview from file
+    preview = None
+    if node.type == "note":
+        path = node_id[5:]  # strip "note:"
+        mem = _memory_path(workspace_path)
+        filepath = mem / path
+        if filepath.exists():
+            try:
+                content = filepath.read_text(encoding="utf-8", errors="replace")
+                _fm, body = parse_frontmatter(content)
+                preview = body[:2000].strip()
+            except Exception:
+                pass
+
+    degree = sum(1 for e in graph.edges if e.source == node_id or e.target == node_id)
+
+    return {
+        "node": {"id": node.id, "type": node.type, "label": node.label, "folder": node.folder},
+        "preview": preview,
+        "connected_notes": connected_notes,
+        "connected_tags": connected_tags,
+        "connected_people": connected_people,
+        "neighbor_count": len(neighbors),
+        "degree": degree,
+    }
+
+
+def find_orphans(workspace_path: Optional[Path] = None) -> List[Dict]:
+    """Find note nodes with degree 0 (no connections)."""
+    graph = load_graph(workspace_path)
+    if not graph:
+        return []
+    connected: Set[str] = set()
+    for e in graph.edges:
+        connected.add(e.source)
+        connected.add(e.target)
+    return [
+        {"id": n.id, "label": n.label, "folder": n.folder}
+        for n in graph.nodes.values()
+        if n.type == "note" and n.id not in connected
+    ]
 
 
 def invalidate_cache() -> None:

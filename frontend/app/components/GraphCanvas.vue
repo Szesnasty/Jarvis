@@ -11,12 +11,6 @@
       <span class="graph-canvas__tooltip-type">{{ hoveredNode.type }}{{ hoveredNode.folder ? ' · ' + hoveredNode.folder : '' }}</span>
       <span class="graph-canvas__tooltip-degree" v-if="hoveredDegree > 0">{{ hoveredDegree }} connections</span>
     </div>
-    <div class="graph-canvas__legend">
-      <span class="graph-canvas__legend-item"><i style="background:rgba(2,254,255,1)"></i> note</span>
-      <span class="graph-canvas__legend-item"><i style="background:#34d399"></i> tag</span>
-      <span class="graph-canvas__legend-item"><i style="background:#c084fc"></i> person</span>
-      <span class="graph-canvas__legend-item"><i style="background:#fb923c"></i> area</span>
-    </div>
   </div>
 </template>
 
@@ -63,6 +57,8 @@ const EDGE_COLOR: Record<string, string> = {
   linked:   'rgba(2, 254, 255, 0.75)',
   mentions: 'rgba(192, 132, 252, 0.7)',
   related:  'rgba(2, 254, 255, 0.65)',
+  similar_to: 'rgba(156, 163, 175, 0.4)',
+  temporal: 'rgba(250, 204, 21, 0.35)',
 }
 
 const EDGE_PARTICLE_COLOR: Record<string, string> = {
@@ -71,12 +67,16 @@ const EDGE_PARTICLE_COLOR: Record<string, string> = {
   linked:   'rgba(2, 254, 255, 0.8)',
   mentions: 'rgba(192, 132, 252, 0.7)',
   related:  'rgba(2, 254, 255, 0.7)',
+  similar_to: 'rgba(156, 163, 175, 0.4)',
+  temporal: 'rgba(250, 204, 21, 0.3)',
 }
 
 // --- Compute degree per node (for sizing) ---
 function computeDegrees(): Record<string, number> {
   const deg: Record<string, number> = {}
+  const nodeIds = new Set(props.nodes.map(n => n.id))
   for (const e of props.edges) {
+    if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue
     deg[e.source] = (deg[e.source] || 0) + 1
     deg[e.target] = (deg[e.target] || 0) + 1
   }
@@ -224,10 +224,14 @@ async function buildGraph() {
       const type = link._type || 'tagged'
       if (type === 'linked' || type === 'related') return 3.5
       if (type === 'part_of') return 1.2
+      if (type === 'similar_to' || type === 'temporal') return 1.0
       return 2
     })
     .linkLineDash((link: any) => {
-      return link._type === 'part_of' ? [2, 2] : []
+      if (link._type === 'part_of') return [2, 2]
+      if (link._type === 'similar_to') return [3, 3]
+      if (link._type === 'temporal') return [1, 3]
+      return []
     })
     .linkDirectionalArrowLength((link: any) => {
       return link._type === 'linked' || link._type === 'related' ? 4 : 0
@@ -269,10 +273,15 @@ async function buildGraph() {
         hoveredDegree.value = 0
       }
     })
-    .graphData({
-      nodes: props.nodes.map(n => ({ ...n })),
-      links: props.edges.map(e => ({ source: e.source, target: e.target, _type: e.type })),
-    })
+    .graphData((() => {
+      const nodeIds = new Set(props.nodes.map(n => n.id))
+      return {
+        nodes: props.nodes.map(n => ({ ...n })),
+        links: props.edges
+          .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+          .map(e => ({ source: e.source, target: e.target, _type: e.type })),
+      }
+    })())
 
   // --- Force tuning ---
   // Areas strongly repel, tags weakly repel: tiered charge
@@ -426,31 +435,6 @@ onBeforeUnmount(() => {
 .graph-canvas__tooltip-degree {
   font-size: 0.6rem;
   color: var(--text-muted);
-}
-
-.graph-canvas__legend {
-  position: absolute;
-  top: 0.6rem;
-  left: 0.6rem;
-  display: flex;
-  gap: 0.6rem;
-  z-index: 10;
-  font-size: 0.65rem;
-  color: var(--text-secondary);
-}
-
-.graph-canvas__legend-item {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.graph-canvas__legend-item i {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  box-shadow: 0 0 6px currentColor;
 }
 </style>
 

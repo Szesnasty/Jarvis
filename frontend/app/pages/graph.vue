@@ -10,21 +10,37 @@
       </div>
       <span class="graph-view__stats">{{ stats.node_count }} nodes · {{ stats.edge_count }} edges</span>
     </div>
+
+    <GraphFilterBar
+      :filters="filters"
+      :orphan-count="orphans.length"
+      @update:filters="setFilters"
+    />
+
+    <!-- Orphan banner -->
+    <div v-if="orphans.length > 0 && !filters.showOrphans" class="graph-view__orphan-banner">
+      You have {{ orphans.length }} unconnected note{{ orphans.length > 1 ? 's' : '' }}.
+      <button class="graph-view__orphan-link" @click="setFilters({ ...filters, showOrphans: true })">View them</button>
+    </div>
+
     <div class="graph-view__main">
       <div class="graph-view__canvas">
         <GraphCanvas
           ref="canvasRef"
-          :nodes="graph.nodes"
-          :edges="graph.edges"
-          :highlighted-node="selectedNode?.id ?? null"
+          :nodes="filteredNodes"
+          :edges="filteredEdges"
+          :highlighted-node="highlightedNodeId"
           @node-click="handleNodeClick"
         />
       </div>
-      <aside v-if="selectedNode" class="graph-view__preview">
-        <h3 class="graph-view__preview-title">{{ selectedNode.label }}</h3>
-        <p class="graph-view__preview-type">{{ selectedNode.type }}</p>
-        <p v-if="selectedNode.folder" class="graph-view__preview-folder">{{ selectedNode.folder }}</p>
-      </aside>
+      <GraphNodePreview
+        v-if="selectedNode"
+        :node="selectedNode"
+        @close="selectNode(null)"
+        @navigate-node="handleNavigateNode"
+        @ask-about="handleAskAbout"
+        @open-in-memory="handleOpenInMemory"
+      />
     </div>
   </div>
 </template>
@@ -34,13 +50,32 @@ import { ref, onMounted } from 'vue'
 import type { GraphNode } from '~/types'
 import { useGraph } from '~/composables/useGraph'
 import GraphCanvas from '~/components/GraphCanvas.vue'
+import GraphNodePreview from '~/components/GraphNodePreview.vue'
+import GraphFilterBar from '~/components/GraphFilterBar.vue'
 
-const { graph, stats, selectedNode, loadGraph, rebuildGraph, selectNode } = useGraph()
+const {
+  stats, selectedNode, orphans, filters,
+  filteredNodes, filteredEdges, highlightedNodeId,
+  loadGraph, rebuildGraph, selectNode, setFilters,
+} = useGraph()
 
 const canvasRef = ref<InstanceType<typeof GraphCanvas> | null>(null)
 
 function handleNodeClick(node: GraphNode): void {
   selectNode(node)
+}
+
+function handleNavigateNode(nodeId: string): void {
+  const node = filteredNodes.value.find(n => n.id === nodeId)
+  if (node) selectNode(node)
+}
+
+function handleAskAbout(nodeId: string): void {
+  navigateTo(`/main?graph_scope=${encodeURIComponent(nodeId)}`)
+}
+
+function handleOpenInMemory(path: string): void {
+  navigateTo(`/memory?note=${encodeURIComponent(path)}`)
 }
 
 async function handleRebuild(): Promise<void> {
@@ -60,7 +95,7 @@ function handleFit(): void {
 }
 
 onMounted(async () => {
-  await loadGraph()
+  await rebuildGraph()
 })
 </script>
 
@@ -117,6 +152,25 @@ onMounted(async () => {
   margin-left: auto;
 }
 
+.graph-view__orphan-banner {
+  padding: 0.4rem 1.25rem;
+  background: rgba(251, 113, 133, 0.06);
+  border-bottom: 1px solid rgba(251, 113, 133, 0.15);
+  font-size: 0.75rem;
+  color: rgb(251, 113, 133);
+}
+
+.graph-view__orphan-link {
+  background: none;
+  border: none;
+  color: rgb(251, 113, 133);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0;
+  margin-left: 0.3rem;
+}
+
 .graph-view__main {
   flex: 1;
   display: flex;
@@ -127,30 +181,5 @@ onMounted(async () => {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-}
-
-.graph-view__preview {
-  width: 260px;
-  border-left: 1px solid var(--border-default);
-  padding: 1.25rem;
-  background: var(--bg-base);
-}
-
-.graph-view__preview-title {
-  font-size: 0.95rem;
-  margin: 0 0 0.4rem;
-  color: var(--neon-cyan);
-}
-
-.graph-view__preview-type {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.graph-view__preview-folder {
-  font-size: 0.75rem;
-  color: var(--text-muted);
 }
 </style>

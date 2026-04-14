@@ -117,6 +117,7 @@ export interface GraphEdge {
   source: string
   target: string
   type: string
+  weight?: number
 }
 
 export interface GraphData {
@@ -128,6 +129,22 @@ export interface GraphStats {
   node_count: number
   edge_count: number
   top_connected: { id: string; degree: number }[]
+}
+
+export interface GraphNodeDetail {
+  node: GraphNode
+  preview: string | null
+  connected_notes: GraphNode[]
+  connected_tags: string[]
+  connected_people: string[]
+  neighbor_count: number
+  degree: number
+}
+
+export interface GraphOrphan {
+  id: string
+  label: string
+  folder: string
 }
 
 // --- Specialists ---

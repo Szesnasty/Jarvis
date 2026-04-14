@@ -1,19 +1,66 @@
-import type { GraphData, GraphNode, GraphStats } from '~/types'
+import type { GraphData, GraphEdge, GraphNode, GraphOrphan, GraphStats } from '~/types'
+import type { GraphFilters } from '~/components/GraphFilterBar.vue'
 import { useApi } from '~/composables/useApi'
+
+function getTimeCutoff(range: string): string {
+  const now = new Date()
+  const days = range === '7d' ? 7 : range === '30d' ? 30 : range === '90d' ? 90 : 0
+  if (!days) return ''
+  now.setDate(now.getDate() - days)
+  return now.toISOString()
+}
 
 export function useGraph() {
   const graph = ref<GraphData>({ nodes: [], edges: [] })
   const stats = ref<GraphStats>({ node_count: 0, edge_count: 0, top_connected: [] })
   const selectedNode = ref<GraphNode | null>(null)
+  const orphans = ref<GraphOrphan[]>([])
   const isLoading = ref(false)
 
-  const { fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph: apiRebuild } = useApi()
+  const filters = ref<GraphFilters>({
+    showNotes: true,
+    showTags: true,
+    showPeople: true,
+    showAreas: true,
+    timeRange: 'all',
+    showOrphans: false,
+    searchText: '',
+  })
+
+  const { fetchGraph, fetchGraphStats, fetchGraphNeighbors, fetchOrphans, rebuildGraph: apiRebuild } = useApi()
+
+  const filteredNodes = computed(() => {
+    let nodes = graph.value.nodes
+    if (!filters.value.showNotes) nodes = nodes.filter(n => n.type !== 'note')
+    if (!filters.value.showTags) nodes = nodes.filter(n => n.type !== 'tag')
+    if (!filters.value.showPeople) nodes = nodes.filter(n => n.type !== 'person')
+    if (!filters.value.showAreas) nodes = nodes.filter(n => n.type !== 'area')
+    if (filters.value.searchText) {
+      const q = filters.value.searchText.toLowerCase()
+      nodes = nodes.filter(n => n.label.toLowerCase().includes(q))
+    }
+    return nodes
+  })
+
+  const filteredEdges = computed(() => {
+    const nodeIds = new Set(filteredNodes.value.map(n => n.id))
+    return graph.value.edges.filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+  })
+
+  const highlightedNodeId = computed(() => {
+    if (filters.value.searchText && filteredNodes.value.length === 1) {
+      return filteredNodes.value[0].id
+    }
+    return selectedNode.value?.id ?? null
+  })
 
   async function loadGraph(): Promise<void> {
     isLoading.value = true
     try {
-      graph.value = await fetchGraph()
-      stats.value = await fetchGraphStats()
+      const [g, s, o] = await Promise.all([fetchGraph(), fetchGraphStats(), fetchOrphans()])
+      graph.value = g
+      stats.value = s
+      orphans.value = o
     } finally {
       isLoading.value = false
     }
@@ -23,7 +70,9 @@ export function useGraph() {
     isLoading.value = true
     try {
       stats.value = await apiRebuild()
-      graph.value = await fetchGraph()
+      const [g, o] = await Promise.all([fetchGraph(), fetchOrphans()])
+      graph.value = g
+      orphans.value = o
     } finally {
       isLoading.value = false
     }
@@ -37,5 +86,13 @@ export function useGraph() {
     selectedNode.value = node
   }
 
-  return { graph, stats, selectedNode, isLoading, loadGraph, rebuildGraph, queryNeighbors, selectNode }
+  function setFilters(f: GraphFilters): void {
+    filters.value = f
+  }
+
+  return {
+    graph, stats, selectedNode, orphans, isLoading, filters,
+    filteredNodes, filteredEdges, highlightedNodeId,
+    loadGraph, rebuildGraph, queryNeighbors, selectNode, setFilters,
+  }
 }

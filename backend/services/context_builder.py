@@ -129,8 +129,8 @@ async def build_context(
         parts.append(prefs_text)
 
     # Inject relevant specialist knowledge files
-    active = specialist_service.get_active_specialist()
-    if active:
+    active_specs = specialist_service.get_active_specialists()
+    for active in active_specs:
         knowledge_parts = _load_specialist_knowledge(active["id"], user_message, workspace_path)
         if knowledge_parts:
             parts.append(
@@ -145,8 +145,12 @@ async def build_context(
         workspace_path=workspace_path,
     )
 
-    if active and active.get("sources"):
-        results = _scope_results(results, active["sources"])
+    if active_specs:
+        all_sources = []
+        for s in active_specs:
+            all_sources.extend(s.get("sources", []))
+        if all_sources:
+            results = _scope_results(results, all_sources)
 
     if results:
         note_parts = []
@@ -171,4 +175,76 @@ async def build_context(
                 + "\n---\n".join(note_parts)
             )
 
-    return "\n\n".join(parts) if parts else None
+    context_text = "\n\n".join(parts) if parts else None
+    return context_text, len(context_text) // 4 if context_text else 0
+
+
+async def build_graph_scoped_context(
+    node_id: str,
+    user_message: str,
+    workspace_path=None,
+) -> Optional[str]:
+    """Build context from a node's neighborhood only. No FTS search."""
+    from services import graph_service
+
+    neighbors = graph_service.get_neighbors(node_id, depth=2, workspace_path=workspace_path)
+    note_neighbors = [n for n in neighbors if n["type"] == "note"]
+    tag_neighbors = [n for n in neighbors if n["type"] == "tag"]
+    person_neighbors = [n for n in neighbors if n["type"] == "person"]
+
+    # Read the primary note itself
+    primary_content = None
+    if node_id.startswith("note:"):
+        primary_path = node_id[5:]
+        try:
+            note = await memory_service.get_note(primary_path, workspace_path=workspace_path)
+            primary_content = textwrap.shorten(note["content"], width=1500, placeholder="...")
+        except Exception:
+            pass
+
+    # Read connected notes
+    connected_parts = []
+    for n in note_neighbors[:5]:
+        path = n["id"][5:]  # strip "note:"
+        if node_id.startswith("note:") and path == node_id[5:]:
+            continue  # skip self
+        try:
+            note = await memory_service.get_note(path, workspace_path=workspace_path)
+            truncated = textwrap.shorten(note["content"], width=500, placeholder="...")
+            connected_parts.append(f'<connected_note path="{path}">\n{truncated}\n</connected_note>')
+        except Exception:
+            continue
+
+    parts = []
+    parts.append(f"Focused on node: {node_id}")
+
+    if primary_content:
+        parts.append(
+            "Content inside <primary_note> is the main note the user is asking about — "
+            "summarize its substance, not its format.\n"
+            f'<primary_note path="{node_id[5:]}">\n{primary_content}\n</primary_note>'
+        )
+
+    # Graph connections summary
+    connections = []
+    if tag_neighbors:
+        connections.append(f"Tags: {', '.join(n['label'] for n in tag_neighbors)}")
+    if person_neighbors:
+        connections.append(f"People: {', '.join(n['label'] for n in person_neighbors)}")
+    if note_neighbors:
+        note_labels = [n['label'] for n in note_neighbors[:8] if n['id'] != node_id]
+        if note_labels:
+            connections.append(f"Related notes: {', '.join(note_labels)}")
+    if connections:
+        parts.append("Graph connections:\n" + "\n".join(connections))
+
+    if connected_parts:
+        parts.append(
+            "Content inside <connected_note> tags are related notes for cross-referencing.\n"
+            + "\n---\n".join(connected_parts)
+        )
+
+    if not parts:
+        return None
+
+    return "\n\n".join(parts)
