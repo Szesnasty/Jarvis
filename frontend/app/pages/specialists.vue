@@ -54,7 +54,7 @@
         v-for="spec in specialists"
         :key="spec.id"
         :specialist="spec"
-        :active="activeSpecialist?.id === spec.id"
+        :active="activeSpecialists.some(a => a.id === spec.id)"
         :expanded="expandedId === spec.id"
         @activate="handleActivate(spec.id)"
         @edit="handleEdit(spec.id)"
@@ -101,7 +101,7 @@ import SpecialistWizard from '~/components/SpecialistWizard.vue'
 
 const {
   specialists,
-  activeSpecialist,
+  activeSpecialists,
   expandedId,
   load,
   activate,
@@ -124,11 +124,7 @@ onMounted(() => {
 })
 
 async function handleActivate(id: string) {
-  if (activeSpecialist.value?.id === id) {
-    await deactivate()
-  } else {
-    await activate(id)
-  }
+  await activate(id)
 }
 
 async function handleEdit(id: string) {

@@ -143,6 +143,17 @@ onMounted(async () => {
   checkHealth()
   init()
   await sessionsState.loadSessions()
+
+  // Handle graph_scope query param from "Ask about this" in graph view
+  const route = useRoute()
+  const graphScope = route.query.graph_scope as string | undefined
+  if (graphScope) {
+    const label = graphScope.includes(':') ? graphScope.split(':').slice(1).join(':') : graphScope
+    sendMessage(
+      `Summarize the key content of "${label}" and show how it connects to other notes in my knowledge base. Focus on insights, not metadata.`,
+      { graphScope },
+    )
+  }
 })
 </script>
 

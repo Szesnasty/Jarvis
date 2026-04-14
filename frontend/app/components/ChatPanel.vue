@@ -11,7 +11,7 @@ function renderMarkdown(text: string): string {
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
 }
 
-const { activeSpecialist, deactivate } = useSpecialists()
+const { activeSpecialists, deactivate } = useSpecialists()
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -111,10 +111,12 @@ watch(
 <template>
   <div class="chat-panel">
     <Transition name="badge-slide">
-      <div v-if="activeSpecialist" class="chat-panel__specialist-bar">
+      <div v-if="activeSpecialists.length" class="chat-panel__specialist-bar">
         <SpecialistBadge
-          :specialist="activeSpecialist"
-          @deactivate="deactivate"
+          v-for="spec in activeSpecialists"
+          :key="spec.id"
+          :specialist="spec"
+          @deactivate="deactivate(spec.id)"
         />
       </div>
     </Transition>
@@ -231,7 +233,11 @@ watch(
 .chat-panel__specialist-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
   padding: 0.4rem 1.5rem;
+  border-radius: 16px;
+  margin-top: 12px;
   border-bottom: 1px solid var(--border-subtle);
   background:
     linear-gradient(90deg, var(--neon-cyan-08) 0%, transparent 60%),

@@ -196,6 +196,29 @@ TOOLS = [
             "required": ["url"],
         },
     },
+    {
+        "name": "web_search",
+        "description": (
+            "Search the internet using DuckDuckGo. Use this when the user's notes "
+            "do not contain enough information to answer the question. "
+            "Always search notes first (search_notes) before using web_search."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query in the language most likely to give good results",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum number of results (1-10)",
+                    "default": 5,
+                },
+            },
+            "required": ["query"],
+        },
+    },
 ]
 
 
@@ -302,6 +325,14 @@ async def execute_tool(
         if session_id:
             session_service.record_note_access(session_id, result["path"])
         return json.dumps(result)
+
+    if name == "web_search":
+        from services.web_search import web_search
+        results = await web_search(
+            tool_input["query"],
+            max_results=tool_input.get("max_results", 5),
+        )
+        return json.dumps(results)
 
     raise ToolNotFoundError(f"Unknown tool: {name}")
 

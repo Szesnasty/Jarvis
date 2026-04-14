@@ -112,8 +112,9 @@ export function useChat() {
     const stored = (() => { try { return sessionStorage.getItem('jarvis_session_id') } catch { return null } })()
     if (stored && !sessionId.value) {
       sessionId.value = stored
-      setSessionId(stored)
     }
+    // Always sync _lastSessionId — clears stale ID when starting a new session
+    setSessionId(sessionId.value || '')
     connect(sessionId.value || undefined)
     _removeMessageListener = onMessage(_handleEvent)
     // When WS reconnects, clear transient error state.
@@ -125,7 +126,7 @@ export function useChat() {
     })
   }
 
-  function sendMessage(content: string): void {
+  function sendMessage(content: string, options?: { graphScope?: string }): void {
     if (!content.trim() || isLoading.value) return
 
     _lastContent = content.trim()
@@ -135,7 +136,10 @@ export function useChat() {
     canRetry.value = false
     isLoading.value = true
 
-    const sent = send({ type: 'message', content: _lastContent, session_id: sessionId.value })
+    const payload: Record<string, string> = { type: 'message', content: _lastContent, session_id: sessionId.value }
+    if (options?.graphScope) payload.graph_scope = options.graphScope
+
+    const sent = send(payload)
     if (!sent) {
       // WS not ready — reset and show error
       isLoading.value = false

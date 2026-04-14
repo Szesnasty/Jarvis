@@ -14,8 +14,8 @@ async def list_specialists():
 
 @router.get("/active")
 async def get_active():
-    active = specialist_service.get_active_specialist()
-    return active if active else {"active": None}
+    active = specialist_service.get_active_specialists()
+    return active if active else []
 
 
 @router.get("/suggest")
@@ -65,7 +65,8 @@ async def delete_specialist(spec_id: str):
 async def activate_specialist(spec_id: str):
     try:
         spec = specialist_service.activate_specialist(spec_id)
-        return {"status": "activated", "specialist": spec}
+        is_active = any(s["id"] == spec_id for s in specialist_service.get_active_specialists())
+        return {"status": "activated" if is_active else "deactivated", "specialist": spec, "active": specialist_service.get_active_specialists()}
     except specialist_service.SpecialistNotFoundError:
         raise HTTPException(status_code=404, detail="Specialist not found")
 
@@ -74,6 +75,12 @@ async def activate_specialist(spec_id: str):
 async def deactivate_specialist():
     specialist_service.deactivate_specialist()
     return {"status": "deactivated"}
+
+
+@router.post("/deactivate/{spec_id}")
+async def deactivate_one(spec_id: str):
+    specialist_service.deactivate_specialist(spec_id)
+    return {"status": "deactivated", "active": specialist_service.get_active_specialists()}
 
 
 # --- Specialist Files ---

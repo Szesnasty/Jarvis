@@ -25,6 +25,19 @@ Rules:
 - If you don't know something, say so — don't invent information
 - When relevant, suggest saving important information to memory
 
+Source priority and attribution:
+When answering factual questions, follow this order:
+1. FIRST search the user's notes (search_notes). If you find the answer there, use it.
+2. If notes are insufficient, use web_search to find current information online.
+3. Only as a last resort, use your own training knowledge.
+
+You MUST clearly mark the source of your information:
+- 📒 **From notes** — information found in the user's notes (cite the note path)
+- 🌐 **From web** — information from web search results (cite the URL)
+- 🤖 **General knowledge** — your own training knowledge (mention this is not verified)
+
+If you combine multiple sources, mark each part accordingly.
+
 You have access to the following tools to work with the user's memory."""
 
 
@@ -185,16 +198,28 @@ class ClaudeService:
 async def build_system_prompt(
     user_message: str,
     workspace_path=None,
+    graph_scope: Optional[str] = None,
 ) -> str:
-    """Build system prompt with optional context and active specialist."""
+    """Build system prompt with optional context and active specialist.
+
+    If graph_scope is provided, context is built from that node's
+    neighborhood instead of full-text retrieval.
+    """
     from services import specialist_service
+    from services.context_builder import build_graph_scoped_context
 
     base = SYSTEM_PROMPT
-    active = specialist_service.get_active_specialist()
-    if active:
-        base = specialist_service.build_specialist_prompt(active, base)
+    active_specs = specialist_service.get_active_specialists()
+    if active_specs:
+        base = specialist_service.build_multi_specialist_prompt(active_specs, base)
 
-    context = await build_context(user_message, workspace_path=workspace_path)
+    if graph_scope:
+        context = await build_graph_scoped_context(
+            graph_scope, user_message, workspace_path=workspace_path,
+        )
+    else:
+        context, _tokens = await build_context(user_message, workspace_path=workspace_path)
+
     if not context:
         return base
     return (

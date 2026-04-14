@@ -12,7 +12,7 @@ class SpecialistNotFoundError(Exception):
     pass
 
 
-_active_specialist: Optional[Dict] = None
+_active_specialists: List[Dict] = []
 
 
 def _agents_dir(workspace_path: Optional[Path] = None) -> Path:
@@ -111,13 +111,12 @@ def update_specialist(spec_id: str, data: Dict, workspace_path: Optional[Path] =
 
 
 def delete_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> None:
-    global _active_specialist
+    global _active_specialists
     filepath = _agents_dir(workspace_path) / f"{spec_id}.json"
     if not filepath.exists():
         raise SpecialistNotFoundError(f"Specialist not found: {spec_id}")
 
-    if _active_specialist and _active_specialist.get("id") == spec_id:
-        _active_specialist = None
+    _active_specialists = [s for s in _active_specialists if s.get("id") != spec_id]
 
     trash = _trash_dir(workspace_path)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
@@ -131,57 +130,84 @@ def delete_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> No
 
 
 def activate_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> Dict:
-    global _active_specialist
+    global _active_specialists
     specialist = get_specialist(spec_id, workspace_path)
-    _active_specialist = specialist
+    # Toggle: if already active, deactivate it
+    if any(s["id"] == spec_id for s in _active_specialists):
+        _active_specialists = [s for s in _active_specialists if s["id"] != spec_id]
+        return specialist
+    _active_specialists.append(specialist)
     return specialist
 
 
-def deactivate_specialist() -> None:
-    global _active_specialist
-    _active_specialist = None
+def deactivate_specialist(spec_id: Optional[str] = None) -> None:
+    global _active_specialists
+    if spec_id:
+        _active_specialists = [s for s in _active_specialists if s["id"] != spec_id]
+    else:
+        _active_specialists = []
 
 
 def get_active_specialist() -> Optional[Dict]:
-    return _active_specialist
+    """Return first active specialist for backward compatibility."""
+    return _active_specialists[0] if _active_specialists else None
+
+
+def get_active_specialists() -> List[Dict]:
+    return list(_active_specialists)
 
 
 def build_specialist_prompt(specialist: Dict, base_prompt: str) -> str:
+    """Build prompt for a single specialist (backward compat)."""
+    return build_multi_specialist_prompt([specialist], base_prompt)
+
+
+def build_multi_specialist_prompt(specialists: List[Dict], base_prompt: str) -> str:
     sections = [base_prompt]
 
-    sections.append(f"\n## Active Specialist: {specialist['name']}\n{specialist.get('role', '')}")
+    for specialist in specialists:
+        sections.append(f"\n## Active Specialist: {specialist['name']}\n{specialist.get('role', '')}")
 
-    style = specialist.get("style", {})
-    if style:
-        parts = []
-        if style.get("tone"):
-            parts.append(f"Tone: {style['tone']}")
-        if style.get("format"):
-            parts.append(f"Format: {style['format']}")
-        if style.get("length"):
-            parts.append(f"Length: {style['length']}")
-        if parts:
-            sections.append(f"\nResponse style: {'. '.join(parts)}.")
+        style = specialist.get("style", {})
+        if style:
+            parts = []
+            if style.get("tone"):
+                parts.append(f"Tone: {style['tone']}")
+            if style.get("format"):
+                parts.append(f"Format: {style['format']}")
+            if style.get("length"):
+                parts.append(f"Length: {style['length']}")
+            if parts:
+                sections.append(f"\nResponse style: {'. '.join(parts)}.")
 
-    rules = specialist.get("rules", [])
-    if rules:
-        rules_str = "\n".join(f"- {r}" for r in rules)
-        sections.append(f"\nRules you MUST follow:\n{rules_str}")
+        rules = specialist.get("rules", [])
+        if rules:
+            rules_str = "\n".join(f"- {r}" for r in rules)
+            sections.append(f"\nRules you MUST follow ({specialist['name']}):\n{rules_str}")
 
-    examples = specialist.get("examples", [])
-    for ex in examples[:2]:
-        sections.append(f"\nExample:\nUser: {ex['user']}\nAssistant: {ex['assistant']}")
+        examples = specialist.get("examples", [])
+        for ex in examples[:2]:
+            sections.append(f"\nExample ({specialist['name']}):\nUser: {ex['user']}\nAssistant: {ex['assistant']}")
 
     return "\n".join(sections)
 
 
-def filter_tools(tools: List[Dict], specialist: Optional[Dict]) -> List[Dict]:
-    if not specialist:
+def filter_tools(tools: List[Dict], specialist: Optional[Dict] = None, specialists: Optional[List[Dict]] = None) -> List[Dict]:
+    """Filter tools for active specialists. Union of all allowed tools."""
+    specs = specialists or ([specialist] if specialist else [])
+    if not specs:
         return tools
-    allowed = specialist.get("tools", [])
-    if not allowed:
+    # Collect allowed tools from all active specialists
+    all_allowed = set()
+    has_restrictions = False
+    for s in specs:
+        allowed = s.get("tools", [])
+        if allowed:
+            has_restrictions = True
+            all_allowed.update(allowed)
+    if not has_restrictions:
         return tools
-    return [t for t in tools if t["name"] in allowed]
+    return [t for t in tools if t["name"] in all_allowed]
 
 
 def suggest_specialist(
@@ -334,5 +360,5 @@ def count_specialist_files(spec_id: str, workspace_path: Optional[Path] = None) 
 
 
 def reset_state() -> None:
-    global _active_specialist
-    _active_specialist = None
+    global _active_specialists
+    _active_specialists = []

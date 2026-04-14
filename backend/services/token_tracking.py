@@ -14,6 +14,17 @@ PREFERENCES_BUDGET = 500
 SPECIALIST_BUDGET = 500
 HISTORY_BUDGET = 500
 
+# In-memory cache for today's running totals so check_budget() doesn't
+# re-read the full JSONL file on every Claude call.
+_today_cache: Dict = {
+    "date": "",
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cost_estimate": 0.0,
+    "request_count": 0,
+    "loaded": False,
+}
+
 
 def _logs_dir(workspace_path: Optional[Path] = None) -> Path:
     d = (workspace_path or get_settings().workspace_path) / "app" / "logs"
@@ -29,6 +40,7 @@ def log_usage(
     input_tokens: int,
     output_tokens: int,
     model: str = "claude-sonnet-4-20250514",
+    context_tokens: int = 0,
     workspace_path: Optional[Path] = None,
 ) -> Dict:
     """Log a single usage entry."""
@@ -41,12 +53,26 @@ def log_usage(
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "total_tokens": input_tokens + output_tokens,
+        "context_tokens": context_tokens,
         "model": model,
         "cost_estimate": round(cost_estimate, 6),
     }
+
+    # Ensure cache is loaded from disk *before* appending, so the new entry
+    # isn't double-counted (once from disk read, once from increment).
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    _ensure_cache_loaded(today, workspace_path)
+
     filepath = _usage_file(workspace_path)
     with open(filepath, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
+
+    # Increment running totals
+    _today_cache["input_tokens"] += input_tokens
+    _today_cache["output_tokens"] += output_tokens
+    _today_cache["cost_estimate"] += cost_estimate
+    _today_cache["request_count"] += 1
+
     return entry
 
 
@@ -64,8 +90,11 @@ def _read_entries(workspace_path: Optional[Path] = None) -> List[Dict]:
     return entries
 
 
-def get_usage_today(workspace_path: Optional[Path] = None) -> Dict:
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+def _ensure_cache_loaded(today: str, workspace_path: Optional[Path] = None) -> None:
+    """Load today's totals from disk into the cache on first access or date rollover."""
+    if _today_cache["loaded"] and _today_cache["date"] == today:
+        return
+    # Date changed or first call — rebuild from disk
     entries = _read_entries(workspace_path)
     total_input = 0
     total_output = 0
@@ -77,13 +106,38 @@ def get_usage_today(workspace_path: Optional[Path] = None) -> Dict:
             total_output += e.get("output_tokens", 0)
             total_cost += e.get("cost_estimate", 0)
             count += 1
-    return {
+    _today_cache.update({
         "date": today,
         "input_tokens": total_input,
         "output_tokens": total_output,
-        "total_tokens": total_input + total_output,
-        "cost_estimate": round(total_cost, 6),
+        "cost_estimate": total_cost,
         "request_count": count,
+        "loaded": True,
+    })
+
+
+def invalidate_usage_cache() -> None:
+    """Reset the in-memory cache. Useful for testing or after manual edits."""
+    _today_cache.update({
+        "date": "",
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cost_estimate": 0.0,
+        "request_count": 0,
+        "loaded": False,
+    })
+
+
+def get_usage_today(workspace_path: Optional[Path] = None) -> Dict:
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    _ensure_cache_loaded(today, workspace_path)
+    return {
+        "date": today,
+        "input_tokens": _today_cache["input_tokens"],
+        "output_tokens": _today_cache["output_tokens"],
+        "total_tokens": _today_cache["input_tokens"] + _today_cache["output_tokens"],
+        "cost_estimate": round(_today_cache["cost_estimate"], 6),
+        "request_count": _today_cache["request_count"],
     }
 
 

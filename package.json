@@ -1,6 +1,6 @@
 
 {
-  "name": "Jarvis",
+  "name": "jarvis",
   "type": "module",
   "private": true,
   "devDependencies": {

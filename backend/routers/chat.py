@@ -1,5 +1,6 @@
 import json
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -124,6 +125,7 @@ async def _handle_message(
     session_id: str,
     content: str,
     get_claude: callable = None,
+    graph_scope: Optional[str] = None,
 ) -> None:
     api_key = get_api_key()
     if not api_key:
@@ -132,9 +134,9 @@ async def _handle_message(
 
     session_service.add_message(session_id, "user", content)
     messages = session_service.get_messages(session_id)
-    system_prompt = await build_system_prompt(content)
-    active_spec = specialist_service.get_active_specialist()
-    tools = specialist_service.filter_tools(TOOLS, active_spec)
+    system_prompt = await build_system_prompt(content, graph_scope=graph_scope)
+    active_specs = specialist_service.get_active_specialists()
+    tools = specialist_service.filter_tools(TOOLS, specialists=active_specs)
     # Check token budget before calling Claude
     budget = check_budget()
     if budget["level"] == "exceeded":
@@ -278,7 +280,8 @@ async def chat_ws(websocket: WebSocket) -> None:
                 if session_service.get_session(requested_sid):
                     session_id = requested_sid
 
-            await _handle_message(websocket, session_id, content, _get_claude)
+            graph_scope = data.get("graph_scope") or None
+            await _handle_message(websocket, session_id, content, _get_claude, graph_scope=graph_scope)
 
     except WebSocketDisconnect:
         session_service.save_session(session_id)

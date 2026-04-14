@@ -3,7 +3,7 @@ import { useApi } from '~/composables/useApi'
 
 export function useSpecialists() {
   const specialists = useState<SpecialistSummary[]>('specialists', () => [])
-  const activeSpecialist = useState<SpecialistDetail | null>('activeSpecialist', () => null)
+  const activeSpecialists = useState<SpecialistDetail[]>('activeSpecialists', () => [])
   const loading = useState<boolean>('specialistsLoading', () => false)
   const expandedId = useState<string | null>('specialistExpanded', () => null)
   const files = useState<Record<string, SpecialistFileInfo[]>>('specialistFiles', () => ({}))
@@ -14,7 +14,7 @@ export function useSpecialists() {
     loading.value = true
     try {
       specialists.value = await api.fetchSpecialists()
-      activeSpecialist.value = await api.fetchActiveSpecialist()
+      activeSpecialists.value = await api.fetchActiveSpecialist()
     } finally {
       loading.value = false
     }
@@ -22,12 +22,12 @@ export function useSpecialists() {
 
   async function activate(id: string) {
     await api.activateSpecialist(id)
-    activeSpecialist.value = await api.fetchSpecialist(id)
+    activeSpecialists.value = await api.fetchActiveSpecialist()
   }
 
-  async function deactivate() {
-    await api.deactivateSpecialist()
-    activeSpecialist.value = null
+  async function deactivate(id?: string) {
+    await api.deactivateSpecialist(id)
+    activeSpecialists.value = await api.fetchActiveSpecialist()
   }
 
   async function update(id: string, data: Partial<import('~/types').SpecialistDetail>) {
@@ -38,8 +38,8 @@ export function useSpecialists() {
   async function remove(id: string) {
     await api.deleteSpecialist(id)
     specialists.value = specialists.value.filter(s => s.id !== id)
-    if (activeSpecialist.value?.id === id) {
-      activeSpecialist.value = null
+    if (activeSpecialists.value.some(s => s.id === id)) {
+      activeSpecialists.value = activeSpecialists.value.filter(s => s.id !== id)
     }
     delete files.value[id]
   }
@@ -98,7 +98,7 @@ export function useSpecialists() {
 
   return {
     specialists,
-    activeSpecialist,
+    activeSpecialists,
     loading,
     expandedId,
     files,

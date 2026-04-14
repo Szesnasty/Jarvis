@@ -28,6 +28,11 @@ async def lifespan(app: FastAPI):
     db_path = settings.workspace_path / "app" / "jarvis.db"
     if db_path.parent.exists():
         await init_database(db_path)
+        # Reindex memory files so the DB stays in sync with files on disk
+        from services.memory_service import reindex_all
+        count = await reindex_all()
+        if count > 0:
+            logger.info("Startup reindex: %d notes indexed", count)
     yield
 
 

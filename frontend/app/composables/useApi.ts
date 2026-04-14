@@ -1,4 +1,4 @@
-import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, SpecialistSummary, SpecialistDetail, SpecialistFileInfo, UrlIngestResult } from '~/types'
+import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, GraphNodeDetail, GraphOrphan, SpecialistSummary, SpecialistDetail, SpecialistFileInfo, UrlIngestResult } from '~/types'
 import { ApiError } from '~/types'
 
 function _wrapError(error: unknown): never {
@@ -61,6 +61,15 @@ export function useApi() {
   const rebuildGraph = () =>
     _api<GraphStats>('/api/graph/rebuild', { method: 'POST' })
 
+  const fetchNodeDetail = (nodeId: string) =>
+    _api<GraphNodeDetail>(`/api/graph/nodes/${encodeURIComponent(nodeId)}/detail`)
+
+  const fetchOrphans = () =>
+    _api<GraphOrphan[]>('/api/graph/orphans')
+
+  const createEdge = (source: string, target: string, type = 'related') =>
+    _api<{ status: string; edge: { source: string; target: string; type: string } }>('/api/graph/edges', { method: 'POST', body: { source, target, type } })
+
   const fetchSpecialists = () => _api<SpecialistSummary[]>('/api/specialists')
 
   const fetchSpecialist = (id: string) =>
@@ -78,13 +87,12 @@ export function useApi() {
   const activateSpecialist = (id: string) =>
     _api<{ status: string }>(`/api/specialists/activate/${id}`, { method: 'POST' })
 
-  const deactivateSpecialist = () =>
-    _api<{ status: string }>('/api/specialists/deactivate', { method: 'POST' })
+  const deactivateSpecialist = (id?: string) =>
+    _api<{ status: string }>(id ? `/api/specialists/deactivate/${id}` : '/api/specialists/deactivate', { method: 'POST' })
 
-  async function fetchActiveSpecialist(): Promise<SpecialistDetail | null> {
-    const result = await _api<SpecialistDetail | { active: null }>('/api/specialists/active')
-    if ('active' in result && result.active === null) return null
-    return result as SpecialistDetail
+  async function fetchActiveSpecialist(): Promise<SpecialistDetail[]> {
+    const result = await _api<SpecialistDetail[]>('/api/specialists/active')
+    return Array.isArray(result) ? result : []
   }
 
   const ingestUrl = (url: string, folder = 'knowledge', summarize = false) =>
@@ -107,5 +115,5 @@ export function useApi() {
   const deleteSpecialistFile = (id: string, filename: string) =>
     _api<void>(`/api/specialists/${id}/files/${encodeURIComponent(filename)}`, { method: 'DELETE' })
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile }
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile }
 }

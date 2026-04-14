@@ -7,6 +7,7 @@ from services.token_tracking import (
     get_usage_by_day,
     get_usage_summary,
     get_usage_today,
+    invalidate_usage_cache,
     log_usage,
 )
 
@@ -22,6 +23,14 @@ def anyio_backend(request):
 def ws(tmp_path):
     (tmp_path / "app" / "logs").mkdir(parents=True)
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Reset the in-memory usage cache between tests."""
+    invalidate_usage_cache()
+    yield
+    invalidate_usage_cache()
 
 
 def test_log_usage_creates_entry(ws):

@@ -76,7 +76,12 @@ def get_session(session_id: str) -> Optional[dict]:
 
 
 def add_message(session_id: str, role: str, content: str) -> None:
-    """Add a message to session history, trimming if needed. Auto-persists."""
+    """Add a message to session history, trimming if needed.
+
+    Auto-persists only after assistant messages to halve disk I/O.
+    The user message is persisted together with the assistant reply —
+    if the server crashes between the two, the user can simply resend.
+    """
     session = _sessions.get(session_id)
     if not session:
         return
@@ -86,11 +91,12 @@ def add_message(session_id: str, role: str, content: str) -> None:
     if len(session["messages"]) > MAX_HISTORY_MESSAGES:
         session["messages"] = session["messages"][-MAX_HISTORY_MESSAGES:]
 
-    # Auto-persist after each message for crash protection
-    try:
-        _auto_persist(session_id)
-    except Exception:
-        logger.warning("Failed to auto-persist session %s", session_id)
+    # Only persist after assistant replies to avoid 2x disk writes per turn
+    if role == "assistant":
+        try:
+            _auto_persist(session_id)
+        except Exception:
+            logger.warning("Failed to auto-persist session %s", session_id)
 
 
 def _auto_persist(session_id: str) -> None:

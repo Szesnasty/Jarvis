@@ -10,7 +10,7 @@ const MOCK_SPECIALISTS = [
 
 function registerSpecialistEndpoints(specialists = MOCK_SPECIALISTS) {
   registerEndpoint('/api/specialists', () => specialists)
-  registerEndpoint('/api/specialists/active', () => ({ active: null }))
+  registerEndpoint('/api/specialists/active', () => [])
 }
 
 describe('pages/specialists.vue', () => {
@@ -33,7 +33,7 @@ describe('pages/specialists.vue', () => {
 
   it('active specialist highlighted', async () => {
     registerEndpoint('/api/specialists', () => MOCK_SPECIALISTS)
-    registerEndpoint('/api/specialists/active', () => ({
+    registerEndpoint('/api/specialists/active', () => [{
       id: 'health-guide',
       name: 'Health Guide',
       icon: '\u{1F3E5}',
@@ -45,7 +45,7 @@ describe('pages/specialists.vue', () => {
       examples: [],
       created_at: '',
       updated_at: '',
-    }))
+    }])
     const wrapper = await mountSuspended(SpecialistsPage)
     await flushPromises()
     await new Promise(r => setTimeout(r, 50))
@@ -57,7 +57,7 @@ describe('pages/specialists.vue', () => {
 
   it('empty state shows create message', async () => {
     registerSpecialistEndpoints([])
-    useState('activeSpecialist').value = null
+    useState('activeSpecialists').value = []
     const wrapper = await mountSuspended(SpecialistsPage)
     await flushPromises()
     expect(wrapper.find('.spec-page__empty').exists()).toBe(true)
@@ -75,7 +75,7 @@ describe('pages/specialists.vue', () => {
 
   it('empty state button opens wizard', async () => {
     registerSpecialistEndpoints([])
-    useState('activeSpecialist').value = null
+    useState('activeSpecialists').value = []
     const wrapper = await mountSuspended(SpecialistsPage)
     await flushPromises()
     await wrapper.find('.spec-page__empty-btn').trigger('click')

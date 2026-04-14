@@ -8,6 +8,7 @@ pyyaml==6.0.3
 python-multipart==0.0.20
 youtube-transcript-api==1.2.4
 trafilatura==2.0.0
+duckduckgo-search==7.5.1
 markdownify==1.2.2
 lxml_html_clean==0.4.4
 pdfplumber==0.11.8
