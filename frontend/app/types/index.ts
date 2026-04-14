@@ -172,6 +172,7 @@ export interface SpecialistSummary {
   source_count: number
   rule_count: number
   file_count: number
+  default_model?: { provider: string; model: string } | null
 }
 
 export interface SpecialistDetail {

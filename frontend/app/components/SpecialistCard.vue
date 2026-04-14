@@ -30,6 +30,13 @@
           <span class="spec-card__stat">{{ specialist.source_count }} sources</span>
           <span class="spec-card__stat-dot">&middot;</span>
           <span class="spec-card__stat">{{ specialist.rule_count }} rules</span>
+          <template v-if="specialist.default_model">
+            <span class="spec-card__stat-dot">&middot;</span>
+            <span class="spec-card__stat spec-card__stat--model">
+              <span class="spec-card__model-icon" v-html="providerIcon(specialist.default_model)" />
+              {{ modelLabel(specialist.default_model) }}
+            </span>
+          </template>
         </div>
       </div>
 
@@ -94,6 +101,19 @@
 
 <script setup lang="ts">
 import type { SpecialistSummary } from '~/types'
+import { MODEL_CATALOG } from '~/composables/useApiKeys'
+import { PROVIDER_ICONS } from '~/composables/providerIcons'
+
+function modelLabel(dm?: { provider: string; model: string } | null): string {
+  if (!dm) return ''
+  const catalog = MODEL_CATALOG[dm.provider]
+  return catalog?.find(m => m.id === dm.model)?.label ?? dm.model
+}
+
+function providerIcon(dm?: { provider: string; model: string } | null): string {
+  if (!dm) return ''
+  return (PROVIDER_ICONS as Record<string, string>)[dm.provider] ?? ''
+}
 
 defineProps<{
   specialist: SpecialistSummary
@@ -271,6 +291,21 @@ defineEmits<{
 .spec-card__stat-dot {
   color: var(--text-muted);
   font-size: 0.65rem;
+}
+
+.spec-card__stat--model {
+  color: var(--text-secondary);
+}
+
+.spec-card__model-icon {
+  display: inline-flex;
+  width: 11px;
+  height: 11px;
+}
+
+.spec-card__model-icon :deep(svg) {
+  width: 11px;
+  height: 11px;
 }
 
 /* --- Actions --- */

@@ -95,6 +95,7 @@ def list_specialists(workspace_path: Optional[Path] = None) -> List[Dict]:
             "source_count": len(data.get("sources", [])),
             "rule_count": len(data.get("rules", [])),
             "file_count": count_specialist_files(data["id"], workspace_path),
+            "default_model": data.get("default_model"),
         })
     return result
 

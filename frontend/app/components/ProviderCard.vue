@@ -1,7 +1,7 @@
 <template>
   <div class="provider-card" :class="{ 'provider-card--configured': configured }">
     <div class="provider-card__header">
-      <span class="provider-card__icon" :style="{ color: provider.color }" v-html="provider.icon"></span>
+      <span class="provider-card__icon" v-html="provider.icon"></span>
       <span class="provider-card__name">{{ provider.name }}</span>
       <div class="provider-card__actions">
         <span v-if="configured" class="provider-card__badge">✅ Configured</span>
@@ -87,6 +87,8 @@ function shortModel(model: string): string {
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 .provider-card__icon :deep(svg) {
   width: 100%;
