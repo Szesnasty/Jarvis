@@ -90,14 +90,21 @@ def test_workspace_path_from_settings(ws_path):
     assert workspace_exists(ws_path) is True
 
 
-def test_create_workspace_with_empty_key_raises(ws_path):
-    with pytest.raises(ValueError, match="empty"):
-        create_workspace("", ws_path)
+def test_create_workspace_with_empty_key_creates_keyless(ws_path):
+    """Empty key is treated as no key — workspace still created."""
+    create_workspace("", ws_path)
+    assert workspace_exists(ws_path) is True
+    config = json.loads((ws_path / "app" / "config.json").read_text())
+    assert config["api_key_set"] is False
+    assert config["key_storage"] == "browser"
 
 
-def test_create_workspace_with_whitespace_key_raises(ws_path):
-    with pytest.raises(ValueError, match="empty"):
-        create_workspace("   ", ws_path)
+def test_create_workspace_with_whitespace_key_creates_keyless(ws_path):
+    """Whitespace-only key is treated as no key."""
+    create_workspace("   ", ws_path)
+    assert workspace_exists(ws_path) is True
+    config = json.loads((ws_path / "app" / "config.json").read_text())
+    assert config["api_key_set"] is False
 
 
 def test_workspace_folder_permissions(ws_path):

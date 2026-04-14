@@ -9,14 +9,16 @@ class HealthResponse(BaseModel):
 
 
 class WorkspaceInitRequest(BaseModel):
-    api_key: str
+    api_key: Optional[str] = None
 
     @field_validator("api_key")
     @classmethod
-    def validate_api_key(cls, v: str) -> str:
+    def validate_api_key(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         v = v.strip()
         if not v:
-            raise ValueError("API key must not be blank")
+            return None
         return v
 
 
@@ -29,6 +31,7 @@ class WorkspaceStatusResponse(BaseModel):
     initialized: bool
     workspace_path: Optional[str] = None
     api_key_set: Optional[bool] = None
+    key_storage: Optional[str] = None
 
 
 # --- Memory ---

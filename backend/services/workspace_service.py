@@ -64,13 +64,13 @@ def get_workspace_status(workspace_path: Optional[Path] = None) -> dict:
         "initialized": True,
         "workspace_path": str(path),
         "api_key_set": key_exists,
+        "key_storage": config.get("key_storage", get_key_storage_method(path)),
     }
 
 
-def create_workspace(api_key: str, workspace_path: Optional[Path] = None) -> dict:
-    api_key = api_key.strip()
-    if not api_key:
-        raise ValueError("API key must not be empty")
+def create_workspace(api_key: Optional[str] = None, workspace_path: Optional[Path] = None) -> dict:
+    if api_key:
+        api_key = api_key.strip() or None
 
     path = workspace_path or get_settings().workspace_path
 
@@ -83,12 +83,14 @@ def create_workspace(api_key: str, workspace_path: Optional[Path] = None) -> dic
 
     # Store API key and config atomically — rollback on failure
     try:
-        _store_api_key(api_key, path)
+        if api_key:
+            _store_api_key(api_key, path)
 
         config = {
             "version": "0.1.0",
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "api_key_set": True,
+            "api_key_set": bool(api_key),
+            "key_storage": "server" if api_key else "browser",
             "workspace_path": str(path),
         }
         config_file = path / "app" / "config.json"

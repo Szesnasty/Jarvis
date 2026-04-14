@@ -6,9 +6,10 @@
       "sources": [
         "backend/routers/workspace.py",
         "backend/services/workspace_service.py",
+        "backend/models/schemas.py",
         "frontend/app/pages/onboarding.vue"
       ],
-      "depends_on": ["database", "settings-config"],
+      "depends_on": ["database", "settings-config", "api-key-management"],
       "last_updated": "2026-04-14",
       "status": "current"
     },

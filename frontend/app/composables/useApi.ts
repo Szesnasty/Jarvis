@@ -22,8 +22,11 @@ export function useApi() {
   const fetchHealth = () => _api<HealthResponse>('/api/health')
   const fetchWorkspaceStatus = () => _api<WorkspaceStatusResponse>('/api/workspace/status')
 
-  const initWorkspace = (apiKey: string) =>
-    _api<WorkspaceInitResponse>('/api/workspace/init', { method: 'POST', body: { api_key: apiKey } })
+  const initWorkspace = (apiKey?: string) =>
+    _api<WorkspaceInitResponse>('/api/workspace/init', {
+      method: 'POST',
+      body: apiKey ? { api_key: apiKey } : {},
+    })
 
   const fetchNotes = (params?: { folder?: string; search?: string; limit?: number }) =>
     _api<NoteMetadata[]>('/api/memory/notes', { params })
