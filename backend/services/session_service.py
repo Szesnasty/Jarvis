@@ -372,8 +372,8 @@ def _format_conversation_body(
         role = "**User**" if msg["role"] == "user" else "**Jarvis**"
         content = msg["content"].strip()
         # Truncate very long messages
-        if len(content) > 1000:
-            content = content[:997] + "..."
+        if len(content) > 2000:
+            content = content[:1997] + "..."
         parts.append(f"{role}: {content}\n")
 
     # Related notes section with wiki links for graph connectivity
@@ -422,8 +422,8 @@ async def save_session_to_memory(
 
     has_substance = (
         len(active_tools) > 0                   # Jarvis wrote/created something
-        or (len(messages) >= 6 and len(user_text) >= 150)  # longer meaningful conversation
-        or len(user_text) >= 300                 # substantial user input regardless
+        or len(messages) >= 4                    # at least 2 full exchanges
+        or len(user_text) >= 50                  # meaningful single question
     )
     if not has_substance:
         return None
@@ -497,11 +497,17 @@ async def save_session_to_memory(
     except Exception:
         pass  # Don't fail if indexing fails
 
-    # Update knowledge graph to include the new conversation node
-    import asyncio
+    # Update knowledge graph incrementally (cheaper than full rebuild)
     try:
-        await asyncio.to_thread(graph_service.rebuild_graph, workspace_path=ws)
+        graph_service.add_conversation_to_graph(
+            note_path=note_path,
+            title=title,
+            tags=tags,
+            topics=topics,
+            notes_accessed=notes_accessed,
+            workspace_path=ws,
+        )
     except Exception:
-        pass  # Don't fail if graph rebuild fails
+        logger.warning("Failed to add conversation to graph for session %s", session_id)
 
     return note_path

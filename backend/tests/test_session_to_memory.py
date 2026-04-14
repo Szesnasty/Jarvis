@@ -180,9 +180,9 @@ def test_format_body_includes_topics():
 
 
 def test_format_body_truncates_long_messages():
-    messages = [{"role": "user", "content": "X" * 2000}]
+    messages = [{"role": "user", "content": "X" * 3000}]
     body = _format_conversation_body(messages, [], [])
-    assert len(body) < 2000  # Should be truncated
+    assert len(body) < 3000  # Should be truncated
 
 
 # ---------------------------------------------------------------------------
@@ -355,3 +355,25 @@ async def test_save_session_to_memory_deduplicates(ws):
     # Only one file should exist in conversations/
     convos = list((ws / "memory" / "conversations").glob("*.md"))
     assert len(convos) == 1
+
+
+async def test_save_session_to_memory_saves_meaningful_question(ws):
+    """A single meaningful question (>= 50 chars) should be saved to memory."""
+    sid = create_session()
+    add_message(sid, "user", "Opowiedz mi o stoicyzmie i jak mogę go stosować w codziennym życiu")
+    add_message(sid, "assistant", "Stoicyzm to filozofia...")
+
+    note_path = await save_session_to_memory(sid, workspace_path=ws)
+    assert note_path is not None
+
+
+async def test_save_session_to_memory_saves_two_exchanges(ws):
+    """Two full exchanges (4 messages) should always be saved."""
+    sid = create_session()
+    add_message(sid, "user", "Kim jesteś?")
+    add_message(sid, "assistant", "Jestem Jarvis.")
+    add_message(sid, "user", "Co potrafisz?")
+    add_message(sid, "assistant", "Mogę pomóc z wieloma rzeczami.")
+
+    note_path = await save_session_to_memory(sid, workspace_path=ws)
+    assert note_path is not None

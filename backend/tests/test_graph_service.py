@@ -7,6 +7,7 @@ pytestmark = pytest.mark.anyio(backends=["asyncio"])
 from models.database import init_database
 from services.graph_service import (
     Graph,
+    add_conversation_to_graph,
     extract_wiki_links,
     get_neighbors,
     invalidate_cache,
@@ -205,3 +206,36 @@ def test_no_anthropic_calls(ws):
     with patch.object(anthropic, "Anthropic", side_effect=AssertionError("Should not be called")):
         with patch.object(anthropic, "AsyncAnthropic", side_effect=AssertionError("Should not be called")):
             rebuild_graph(ws)
+
+
+def test_add_conversation_to_graph(ws):
+    """Incrementally adding a conversation creates node + edges."""
+    # Start with an empty graph
+    rebuild_graph(ws)
+
+    add_conversation_to_graph(
+        note_path="conversations/2026-04-14-stoicism.md",
+        title="Stoicism discussion",
+        tags=["conversation", "philosophy"],
+        topics=["stoicism", "life"],
+        notes_accessed=["knowledge/stoicism.md"],
+        workspace_path=ws,
+    )
+
+    g = load_graph(ws)
+    assert g is not None
+
+    # Conversation node exists
+    assert "note:conversations/2026-04-14-stoicism.md" in g.nodes
+
+    # Tag edges exist
+    assert "tag:conversation" in g.nodes
+    assert "tag:philosophy" in g.nodes
+    assert "tag:stoicism" in g.nodes
+
+    # Related note edge exists
+    related_edges = [e for e in g.edges if e.target == "note:knowledge/stoicism.md"]
+    assert len(related_edges) >= 1
+
+    # Folder area
+    assert "area:conversations" in g.nodes

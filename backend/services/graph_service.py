@@ -577,3 +577,50 @@ def ingest_note(note_path: str, workspace_path: Optional[Path] = None) -> None:
 def invalidate_cache() -> None:
     global _graph_cache
     _graph_cache = None
+
+
+def add_conversation_to_graph(
+    note_path: str,
+    title: str,
+    tags: List[str],
+    topics: List[str],
+    notes_accessed: List[str],
+    workspace_path: Optional[Path] = None,
+) -> None:
+    """Incrementally add a conversation node + edges to the graph.
+
+    Much cheaper than a full rebuild — only touches the new node.
+    """
+    graph = load_graph(workspace_path)
+    if graph is None:
+        graph = Graph()
+
+    note_id = f"note:{note_path}"
+    folder = str(Path(note_path).parent) if "/" in note_path else ""
+    graph.add_node(note_id, "note", title, folder=folder)
+
+    # Tags
+    for tag in tags:
+        tag_id = f"tag:{tag}"
+        graph.add_node(tag_id, "tag", str(tag))
+        graph.add_edge(note_id, tag_id, "tagged")
+
+    # Topic tags
+    for topic in topics:
+        tag_id = f"tag:{topic}"
+        graph.add_node(tag_id, "tag", str(topic))
+        graph.add_edge(note_id, tag_id, "tagged")
+
+    # Related notes (notes accessed during conversation)
+    for related in notes_accessed:
+        rel_path = related if related.endswith(".md") else related + ".md"
+        target_id = f"note:{rel_path}"
+        graph.add_edge(note_id, target_id, "related")
+
+    # Folder membership
+    if folder:
+        area_id = f"area:{folder}"
+        graph.add_node(area_id, "area", folder)
+        graph.add_edge(note_id, area_id, "part_of")
+
+    _save_and_cache(graph, workspace_path)

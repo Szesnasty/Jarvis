@@ -38,6 +38,14 @@ async def _run_tool(event: StreamEvent, session_id: str = "", api_key: str = "")
 _MEMORY_MUTATING_TOOLS = frozenset({"write_note", "append_note", "create_plan", "update_plan"})
 
 
+async def _save_session_bg(session_id: str) -> None:
+    """Background task: save session to memory note + update graph."""
+    try:
+        await session_service.save_session_to_memory(session_id)
+    except Exception:
+        logger.warning("Background save_session_to_memory failed for %s", session_id)
+
+
 async def _emit_memory_changed(ws: WebSocket, tool_name: str, tool_input: dict) -> None:
     """Emit memory_changed event for tools that modify notes."""
     if tool_name in _MEMORY_MUTATING_TOOLS:
@@ -253,6 +261,14 @@ async def _handle_message(
         model=model or "claude-sonnet-4-20250514",
         provider=provider or "anthropic",
     )
+
+    # Periodically save conversation to memory (every 3rd assistant reply)
+    session = session_service.get_session(session_id)
+    if session:
+        msg_count = len(session.get("messages", []))
+        if msg_count >= 4 and msg_count % 6 == 0:  # every 3rd exchange (6 msgs)
+            import asyncio
+            asyncio.ensure_future(_save_session_bg(session_id))
 
 
 def _parse_message(raw: str) -> tuple:
