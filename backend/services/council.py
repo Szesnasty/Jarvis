@@ -28,6 +28,13 @@ R2_MAX_WORDS = 200
 TOTAL_TOKEN_BUDGET = 25_000
 CALL_TIMEOUT_SECONDS = 60
 
+# Language matching rule — injected into all prompts
+_LANG_RULE = (
+    "\n\nCRITICAL: You MUST respond in the SAME LANGUAGE the user used in their topic/question. "
+    "If the topic is in Polish, respond in Polish. If in English, respond in English. "
+    "Match the user's language exactly."
+)
+
 # ── Data models ──────────────────────────────────────────────────────────────
 
 
@@ -126,7 +133,7 @@ CONSTRAINTS:
 - Be direct and opinionated — this is a duel, not a committee
 - Do NOT try to be balanced — that's the judge's job
 - Do NOT use generic advice — tie everything to the user's situation
-- Argue to WIN — your opponent will try to dismantle your argument"""
+- Argue to WIN — your opponent will try to dismantle your argument""" + _LANG_RULE
 
 
 def build_round2_prompt(
@@ -171,7 +178,7 @@ CONSTRAINTS:
 - Do NOT repeat your Round 1 arguments — build on them
 - Directly engage with what the opponent said — quote or reference specifics
 - Be intellectually honest — conceding a good point shows strength
-- This is your last word — make it count"""
+- This is your last word — make it count""" + _LANG_RULE
 
 
 def build_judge_prompt(
@@ -234,7 +241,8 @@ CONSTRAINTS:
 - Output ONLY JSON — no preamble, no markdown
 - Must have a winner (no ties)
 - Reasoning must reference SPECIFIC debate points
-- Action items must be concrete and time-bound"""
+- Action items must be concrete and time-bound
+- reasoning, recommendation, and action_items MUST be in the same language as the topic"""
 
 
 # ── Verdict parsing ──────────────────────────────────────────────────────────
