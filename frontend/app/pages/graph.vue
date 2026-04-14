@@ -60,7 +60,7 @@ function handleFit(): void {
 }
 
 onMounted(async () => {
-  await rebuildGraph()
+  await loadGraph()
 })
 </script>
 

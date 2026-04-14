@@ -19,7 +19,7 @@
 
 <script setup lang="ts">
 function openInObsidian() {
-  window.open('obsidian://open?vault=Jarvis', '_self')
+  window.open('obsidian://open?vault=Jarvis', '_blank')
 }
 </script>
 

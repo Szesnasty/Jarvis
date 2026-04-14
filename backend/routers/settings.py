@@ -31,7 +31,17 @@ async def update_api_key(body: dict):
     if not key:
         raise HTTPException(status_code=422, detail="API key must not be empty")
     ws = get_settings().workspace_path
+    if not workspace_service.workspace_exists(ws):
+        raise HTTPException(status_code=400, detail="Workspace not initialized")
     workspace_service._store_api_key(key, ws)
+    # Sync config.json flag so status checks stay consistent
+    config_file = ws / "app" / "config.json"
+    try:
+        config = json.loads(config_file.read_text())
+        config["api_key_set"] = True
+        config_file.write_text(json.dumps(config, indent=2))
+    except (OSError, json.JSONDecodeError):
+        pass  # Non-critical — get_workspace_status now verifies key directly
     return {"api_key_set": True}
 
 
@@ -39,15 +49,49 @@ async def update_api_key(body: dict):
 async def update_voice_prefs(body: dict):
     ws = get_settings().workspace_path
     valid_keys = {"auto_speak", "tts_voice"}
+    # Validate all keys first before writing any
+    updates = {}
     for k, v in body.items():
         if k not in valid_keys:
             raise HTTPException(status_code=422, detail=f"Invalid voice setting: {k}")
-        preference_service.save_preference(f"voice_{k}", str(v), workspace_path=ws)
+        updates[f"voice_{k}"] = str(v)
+    # Batch write atomically: load once, apply all, save once
     prefs = preference_service.load_preferences(workspace_path=ws)
+    prefs.update(updates)
+    path = preference_service._prefs_path(workspace_path=ws)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(prefs, indent=2), encoding="utf-8")
     return {
         "auto_speak": prefs.get("voice_auto_speak", "false"),
         "tts_voice": prefs.get("voice_tts_voice", "default"),
     }
+
+
+@router.get("/budget")
+async def get_budget():
+    budget = token_tracking.check_budget()
+    return {
+        "daily_budget": budget["budget"],
+        "used_today": budget["used"],
+        "percent": budget["percent"],
+        "level": budget["level"],
+    }
+
+
+@router.patch("/budget")
+async def update_budget(body: dict):
+    value = body.get("daily_token_budget")
+    if value is None:
+        raise HTTPException(status_code=422, detail="daily_token_budget is required")
+    try:
+        budget_int = int(value)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="daily_token_budget must be an integer")
+    if budget_int < 0:
+        raise HTTPException(status_code=422, detail="daily_token_budget must be >= 0")
+    ws = get_settings().workspace_path
+    preference_service.save_preference("daily_token_budget", str(budget_int), workspace_path=ws)
+    return {"daily_token_budget": budget_int}
 
 
 @router.get("/usage")

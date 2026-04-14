@@ -2,6 +2,7 @@
 import type { ChatMessage, OrbState, UrlIngestResult } from '~/types'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { useSpecialists } from '~/composables/useSpecialists'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -9,6 +10,8 @@ function renderMarkdown(text: string): string {
   const html = marked.parse(text) as string
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
 }
+
+const { activeSpecialist, deactivate } = useSpecialists()
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -30,11 +33,12 @@ const emit = defineEmits<{
 const { ingestUrl } = useApi()
 
 const input = ref('')
+const inputEl = ref<HTMLTextAreaElement | null>(null)
 const messagesContainer = ref<HTMLElement | null>(null)
 const ingestLoading = ref(false)
 const ingestResult = ref<string | null>(null)
 
-const URL_RE = /https?:\/\/[^\s]+/
+const URL_RE = /https?:\/\/[^\s.,;!?)>\]]+/
 const YT_RE = /(?:youtube\.com\/watch\?.*v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]{11})/
 
 const detectedUrl = computed(() => {
@@ -84,6 +88,15 @@ function autoResize(event: Event): void {
 }
 
 watch(
+  () => props.isLoading,
+  (loading, wasLoading) => {
+    if (wasLoading && !loading) {
+      nextTick(() => inputEl.value?.focus())
+    }
+  },
+)
+
+watch(
   () => [props.messages.length, props.currentResponse],
   () => {
     nextTick(() => {
@@ -97,10 +110,18 @@ watch(
 
 <template>
   <div class="chat-panel">
+    <Transition name="badge-slide">
+      <div v-if="activeSpecialist" class="chat-panel__specialist-bar">
+        <SpecialistBadge
+          :specialist="activeSpecialist"
+          @deactivate="deactivate"
+        />
+      </div>
+    </Transition>
     <div ref="messagesContainer" class="chat-panel__messages">
       <div
         v-for="(msg, i) in messages"
-        :key="i"
+        :key="`${msg.role}-${i}-${msg.content.slice(0, 20)}`"
         class="chat-panel__message"
         :class="msg.role"
       >
@@ -112,7 +133,10 @@ watch(
       </div>
 
       <div v-if="currentResponse" class="chat-panel__message assistant">
-        <div class="chat-panel__bubble chat-panel__bubble--md" v-html="renderMarkdown(currentResponse) + '<span class=chat-panel__cursor>▊</span>'" />
+        <div class="chat-panel__bubble chat-panel__bubble--md">
+          <span v-html="renderMarkdown(currentResponse)" />
+          <span class="chat-panel__cursor">▊</span>
+        </div>
       </div>
 
       <!-- Typing indicator (dots) when loading but no response yet -->
@@ -154,6 +178,7 @@ watch(
 
     <div class="chat-panel__input-bar">
       <textarea
+        ref="inputEl"
         v-model="input"
         class="chat-panel__input"
         placeholder="Talk to Jarvis..."
@@ -201,6 +226,32 @@ watch(
   min-height: 0;
   width: 100%;
   max-width: 900px;
+}
+
+.chat-panel__specialist-bar {
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 1.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background:
+    linear-gradient(90deg, var(--neon-cyan-08) 0%, transparent 60%),
+    var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.badge-slide-enter-active {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.badge-slide-leave-active {
+  transition: all 0.2s ease;
+}
+.badge-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-100%);
+}
+.badge-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-100%);
 }
 
 .chat-panel__messages {

@@ -15,9 +15,10 @@
           <h3 class="confirm-dialog__title">{{ title }}</h3>
           <p class="confirm-dialog__message">{{ message }}</p>
           <div class="confirm-dialog__actions">
-            <button class="confirm-dialog__btn confirm-dialog__btn--cancel" @click="$emit('cancel')">Cancel</button>
-            <button class="confirm-dialog__btn confirm-dialog__btn--confirm" @click="$emit('confirm')">
-              {{ confirmLabel }}
+            <button class="confirm-dialog__btn confirm-dialog__btn--cancel" :disabled="loading" @click="$emit('cancel')">Cancel</button>
+            <button class="confirm-dialog__btn confirm-dialog__btn--confirm" :class="{ 'confirm-dialog__btn--loading': loading }" :disabled="loading" @click="$emit('confirm')">
+              <span v-if="loading" class="confirm-dialog__spinner" />
+              {{ loading ? 'Deleting…' : confirmLabel }}
             </button>
           </div>
         </div>
@@ -32,6 +33,7 @@ defineProps<{
   title: string
   message: string
   confirmLabel?: string
+  loading?: boolean
 }>()
 
 defineEmits<{
@@ -133,11 +135,36 @@ defineEmits<{
   color: rgba(239, 68, 68, 0.9);
 }
 
-.confirm-dialog__btn--confirm:hover {
+.confirm-dialog__btn--confirm:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.2);
   border-color: rgba(239, 68, 68, 0.5);
   box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
   text-shadow: 0 0 6px rgba(239, 68, 68, 0.3);
+}
+
+.confirm-dialog__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.confirm-dialog__btn--loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.confirm-dialog__spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(239, 68, 68, 0.2);
+  border-top-color: rgba(239, 68, 68, 0.8);
+  border-radius: 50%;
+  animation: confirm-spin 0.6s linear infinite;
+}
+
+@keyframes confirm-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* Transition */

@@ -11,9 +11,15 @@ export function useVoice(stt: STTProvider, tts: TTSProvider) {
   const isVoiceAvailable = computed(() => stt.isSupported && tts.isSupported)
 
   let _sendMessage: ((content: string) => void) | null = null
+  let _pendingText: string | null = null
 
   function bindChat(sendMessage: (content: string) => void): void {
     _sendMessage = sendMessage
+    // Flush any message that arrived before binding
+    if (_pendingText !== null) {
+      _sendMessage(_pendingText)
+      _pendingText = null
+    }
   }
 
   stt.onResult((text, isFinal) => {
@@ -21,7 +27,11 @@ export function useVoice(stt: STTProvider, tts: TTSProvider) {
     if (!isFinal) return
 
     state.value = 'thinking'
-    if (_sendMessage) _sendMessage(text)
+    if (_sendMessage) {
+      _sendMessage(text)
+    } else {
+      _pendingText = text
+    }
   })
 
   stt.onError((err) => {

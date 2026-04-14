@@ -92,6 +92,12 @@ async function buildGraph() {
   if (!containerRef.value) return
   const el = containerRef.value
 
+  // Disconnect previous ResizeObserver before rebuilding
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
+
   if (graph) {
     graph._destructor()
     graph = null
@@ -282,6 +288,17 @@ async function buildGraph() {
     return 45
   })
   graph.d3Force('center')?.strength(0.05)
+
+  // Re-attach ResizeObserver for the new graph instance
+  if (containerRef.value) {
+    resizeObserver = new ResizeObserver(() => {
+      if (graph && containerRef.value) {
+        graph.width(containerRef.value.clientWidth)
+        graph.height(containerRef.value.clientHeight)
+      }
+    })
+    resizeObserver.observe(containerRef.value)
+  }
 
   setTimeout(() => graph?.zoomToFit(600, 60), 1500)
 }

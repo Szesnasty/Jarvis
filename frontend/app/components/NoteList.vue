@@ -29,7 +29,12 @@
       </button>
     </div>
 
-    <p v-if="notes.length === 0" class="note-list__empty">No notes yet</p>
+    <div v-if="loading" class="note-list__loading">
+      <span class="note-list__spinner" />
+      <span class="note-list__loading-text">Loading notes…</span>
+    </div>
+
+    <p v-else-if="notes.length === 0" class="note-list__empty">No notes yet</p>
 
     <ul v-else class="note-list__items">
       <li
@@ -60,6 +65,7 @@
 
     <ConfirmDialog
       :visible="deleteTarget !== null"
+      :loading="deleting"
       title="Delete note?"
       :message="`&quot;${deleteTarget?.title || deleteTarget?.path || ''}&quot; will be permanently removed from memory.`"
       confirm-label="Delete"
@@ -77,25 +83,31 @@ const props = defineProps<{
   selectedPath: string | null
   folders: string[]
   activeFolder: string | null
+  loading?: boolean
+  onDelete: (path: string) => Promise<void>
 }>()
 
 const emit = defineEmits<{
   select: [path: string]
   folder: [folder: string | null]
   search: [query: string]
-  delete: [path: string]
 }>()
 
 const searchQuery = ref('')
 const deleteTarget = ref<NoteMetadata | null>(null)
+const deleting = ref(false)
 
 function confirmDelete(note: NoteMetadata) {
   deleteTarget.value = note
 }
 
-function handleDelete() {
-  if (deleteTarget.value) {
-    emit('delete', deleteTarget.value.path)
+async function handleDelete() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  try {
+    await props.onDelete(deleteTarget.value.path)
+  } finally {
+    deleting.value = false
     deleteTarget.value = null
   }
 }
@@ -273,5 +285,31 @@ function onClearSearch() {
 .note-list__item-date {
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+.note-list__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 2.5rem 0;
+}
+
+.note-list__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--neon-cyan-15);
+  border-top-color: var(--neon-cyan);
+  border-radius: 50%;
+  animation: note-spin 0.7s linear infinite;
+}
+
+.note-list__loading-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+@keyframes note-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

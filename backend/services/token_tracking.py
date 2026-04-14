@@ -121,11 +121,28 @@ def get_usage_summary(workspace_path: Optional[Path] = None) -> Dict:
     }
 
 
-def check_budget(daily_budget: int = 100000, workspace_path: Optional[Path] = None) -> Dict:
+DEFAULT_DAILY_BUDGET = 100_000
+
+
+def get_daily_budget(workspace_path: Optional[Path] = None) -> int:
+    """Read the daily token budget from preferences. 0 = unlimited."""
+    from services.preference_service import load_preferences
+    prefs = load_preferences(workspace_path)
+    try:
+        return int(prefs.get("daily_token_budget", DEFAULT_DAILY_BUDGET))
+    except (ValueError, TypeError):
+        return DEFAULT_DAILY_BUDGET
+
+
+def check_budget(daily_budget: Optional[int] = None, workspace_path: Optional[Path] = None) -> Dict:
     """Check if daily usage is within budget. Returns warning level."""
+    if daily_budget is None:
+        daily_budget = get_daily_budget(workspace_path)
     usage = get_usage_today(workspace_path)
     total = usage["total_tokens"]
-    pct = (total / daily_budget * 100) if daily_budget > 0 else 0
+    if daily_budget <= 0:
+        return {"level": "ok", "percent": 0, "used": total, "budget": 0}
+    pct = (total / daily_budget * 100)
     level = "ok"
     if pct >= 100:
         level = "exceeded"

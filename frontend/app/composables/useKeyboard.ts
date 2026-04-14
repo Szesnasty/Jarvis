@@ -3,7 +3,6 @@ import { onMounted, onUnmounted } from 'vue'
 export interface KeyboardOptions {
   onToggleVoice?: () => void
   onCancel?: () => void
-  onSend?: () => void
   enabled?: () => boolean
 }
 
