@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -m pytest tests/test_planning_api.py::test_get_sessions_200 -x -q)",
+      "Read(//c/Users/jacob/Jarvis/memory/**)",
+      "Read(//c/Users/jacob/Jarvis/app/sessions/**)",
+      "Bash(for f:*)",
+      "Bash(do python:*)",
+      "Bash(done)",
+      "Read(//c/Users/jacob/Jarvis/.trash/**)",
+      "Read(//c/Users/jacob/Jarvis/agents/**)",
+      "Read(//c/Users/jacob/Jarvis/app/logs/**)",
+      "Read(//c/Users/jacob/Jarvis/graph/**)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\jacob\\Jarvis\\memory\\conversations",
+      "C:\\Users\\jacob\\Jarvis\\app\\sessions"
+    ]
+  }
+}

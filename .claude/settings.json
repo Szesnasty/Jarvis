@@ -9,7 +9,29 @@
   },
   "permissions": {
     "allow": [
-      "Bash(wc -l g:/Projects/Jarvis/docs/features/*.md g:/Projects/Jarvis/docs/concepts/*.md)"
+      "Bash(wc -l g:/Projects/Jarvis/docs/features/*.md g:/Projects/Jarvis/docs/concepts/*.md)",
+      "Bash(python -m pytest tests/ -x -q --tb=short)",
+      "Bash(pip install:*)",
+      "Bash(npx vitest:*)",
+      "Bash(grep -n \"spec_id\\\\|specialist.*id\\\\|../\\\\|slash\" /g/Projects/Jarvis/backend/tests/test_specialist_*.py)",
+      "Bash(grep -n \"validate.*spec\\\\|valid.*id\\\\|C:\" /g/Projects/Jarvis/backend/services/*.py)",
+      "Bash(grep -n \"test.*path\\\\|test.*traversal\\\\|test.*C:\\\\|test.*invalid.*id\" /g/Projects/Jarvis/backend/tests/test_*.py)",
+      "Bash(python -m pytest tests/test_security_validations.py -x -q --tb=short)",
+      "Bash(python -m pytest tests/ -q --tb=short)",
+      "Bash(node -e \"const p = require.resolve\\(''@vue/test-utils''\\); console.log\\(p\\)\")",
+      "Bash(ls g:/Projects/Jarvis/frontend/node_modules/@vue/compiler-core/dist/*.mjs g:/Projects/Jarvis/frontend/node_modules/@vue/compiler-dom/dist/*.mjs g:/Projects/Jarvis/frontend/node_modules/@vue/server-renderer/dist/*.mjs)",
+      "Bash(node -e \":*)",
+      "Bash(node -e \"console.log\\(process.version\\)\")",
+      "Bash(node --experimental-vm-modules node_modules/.bin/vitest run tests/components/Orb.test.ts)",
+      "Bash(NODE_OPTIONS=\"--experimental-vm-modules\" npx vitest run tests/components/Orb.test.ts)",
+      "Bash(npm view:*)",
+      "Bash(python -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\(''''exports'''', {}\\), indent=2\\)\\)\")",
+      "Bash(grep -l \"mountSuspended\\\\|registerEndpoint\" node_modules/@nuxt/test-utils/dist/*.mjs)",
+      "Bash(grep \"mountSuspended\\\\|registerEndpoint\" node_modules/@nuxt/test-utils/dist/runtime*.mjs)",
+      "Bash(npm ls:*)",
+      "Bash(find /g/Projects/Jarvis -type f -name *.md ! -path */.git/* ! -path */node_modules/* ! -path */.venv/*)",
+      "Bash(xargs grep:*)",
+      "Bash(grep -r \"create_note\\\\|write_text\\\\|\"\"hi\"\"\\\\|''hi''\" /g/Projects/Jarvis/backend/routers --include=\"*.py\" ! -path \"*/.venv/*\")"
     ]
   }
 }
