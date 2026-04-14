@@ -153,11 +153,17 @@ class ClaudeService:
     ) -> AsyncIterator[StreamEvent]:
         tool = _ToolAccumulator()
 
+        # Strip non-API fields (timestamp, model, provider) that session storage adds
+        clean_messages = [
+            {k: v for k, v in m.items() if k in ("role", "content")}
+            for m in messages
+        ]
+
         kwargs: dict[str, Any] = dict(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             system=system_prompt,
-            messages=messages,
+            messages=clean_messages,
         )
         if tools:
             kwargs["tools"] = tools
