@@ -194,12 +194,14 @@
             <div class="wiz__tools-grid">
               <label
                 v-for="tool in availableTools"
-                :key="tool"
+                :key="tool.id"
                 class="wiz__tool"
-                :class="{ 'wiz__tool--checked': form.tools.includes(tool) }"
+                :class="{ 'wiz__tool--checked': form.tools.includes(tool.id) }"
+                :title="tool.desc"
               >
-                <input type="checkbox" :value="tool" v-model="form.tools" class="wiz__tool-input" />
-                <span class="wiz__tool-name">{{ tool }}</span>
+                <input type="checkbox" :value="tool.id" v-model="form.tools" class="wiz__tool-input" />
+                <span class="wiz__tool-name">{{ tool.id }}</span>
+                <span class="wiz__tool-tooltip">{{ tool.desc }}</span>
               </label>
             </div>
           </div>
@@ -375,15 +377,15 @@ const iconOptions = [
 ]
 
 const availableTools = [
-  'search_notes',
-  'read_note',
-  'write_note',
-  'append_note',
-  'create_plan',
-  'update_plan',
-  'summarize_context',
-  'save_preference',
-  'query_graph',
+  { id: 'search_notes', desc: 'Search your memory by keyword, tag, folder, or date. Lets the specialist find relevant notes to answer questions or build context.' },
+  { id: 'read_note', desc: 'Open and read a specific note in full. Used when the specialist needs the complete content of a file, not just search snippets.' },
+  { id: 'write_note', desc: 'Create a new note or overwrite an existing one. Enables the specialist to save plans, summaries, or organized outputs to your memory.' },
+  { id: 'append_note', desc: 'Add content to the end of an existing note without replacing it. Great for logs, journals, or incremental updates.' },
+  { id: 'create_plan', desc: 'Generate a structured plan with steps and timelines. The specialist can break down goals into actionable checklists.' },
+  { id: 'update_plan', desc: 'Modify an existing plan — mark steps done, add new ones, or adjust priorities. Keeps your plans alive and up to date.' },
+  { id: 'summarize_context', desc: 'Condense long notes or multiple sources into a brief summary. Saves tokens and helps the specialist focus on what matters.' },
+  { id: 'save_preference', desc: 'Remember a personal rule or preference (e.g. "always respond in Polish"). Stored in memory so it persists across conversations.' },
+  { id: 'query_graph', desc: 'Explore your knowledge graph — find connections between people, topics, projects, and notes that simple search might miss.' },
 ]
 
 const stepLabels = [
@@ -816,6 +818,7 @@ defineExpose({ resetSubmitting })
 }
 
 .wiz__tool {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -849,6 +852,43 @@ defineExpose({ resetSubmitting })
 
 .wiz__tool--checked .wiz__tool-name {
   color: var(--neon-cyan);
+}
+
+/* Hover tooltip */
+.wiz__tool-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 280px;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  font-family: inherit;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  pointer-events: none;
+  white-space: normal;
+}
+
+.wiz__tool-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--border-default);
+}
+
+.wiz__tool:hover .wiz__tool-tooltip {
+  display: block;
 }
 
 /* --- Model picker (Step 4) --- */
