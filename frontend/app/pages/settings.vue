@@ -7,7 +7,7 @@
       <div class="providers-header">
         <h2 class="settings-page__section-title">AI Providers</h2>
         <div class="providers-badge">
-          <span class="providers-badge__icon">🔒</span>
+          <span class="providers-badge__icon" v-html="lockIcon"></span>
           <span class="providers-badge__label">Keys handled locally</span>
         </div>
       </div>
@@ -208,6 +208,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { ProviderConfig } from '~/types'
+import { ICON_LOCK } from '~/composables/providerIcons'
+
+const lockIcon = ICON_LOCK
 
 const settingsLoaded = ref(false)
 const serverKeyConfigured = ref(false)
@@ -331,7 +334,7 @@ async function rebuildGraphAction() {
 
 <style scoped>
 .settings-page {
-  max-width: 700px;
+  max-width: 860px;
   margin: 0 auto;
   padding: 2rem;
   height: calc(100vh - 40px);
@@ -456,7 +459,12 @@ async function rebuildGraphAction() {
   border: 1px solid rgba(52, 211, 153, 0.25);
 }
 .providers-badge__icon {
-  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+}
+.providers-badge__icon :deep(svg) {
+  width: 12px;
+  height: 12px;
 }
 .providers-list {
   border: 1px solid var(--border-subtle);

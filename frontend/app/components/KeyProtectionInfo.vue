@@ -1,7 +1,7 @@
 <template>
   <div class="key-info">
     <div class="key-info__header">
-      <span class="key-info__icon">{{ icon }}</span>
+      <span class="key-info__icon" v-html="iconSvg"></span>
       <span class="key-info__title">{{ title }}</span>
     </div>
     <ul class="key-info__list">
@@ -14,13 +14,15 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
+import { ICON_LOCK } from '~/composables/providerIcons'
+
+const props = withDefaults(defineProps<{
   title?: string
-  icon?: string
 }>(), {
   title: 'How we protect your keys',
-  icon: 'ℹ️',
 })
+
+const iconSvg = ICON_LOCK
 </script>
 
 <style scoped>
@@ -38,8 +40,14 @@ withDefaults(defineProps<{
   margin-bottom: 0.4rem;
 }
 .key-info__icon {
-  font-size: 0.9rem;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--neon-cyan-60);
+}
+.key-info__icon :deep(svg) {
+  width: 14px;
+  height: 14px;
 }
 .key-info__title {
   font-size: 0.82rem;

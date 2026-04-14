@@ -25,6 +25,10 @@
 
         <p v-if="error" class="onboarding__error">{{ error }}</p>
       </form>
+
+      <p class="onboarding__hint">
+        You can add or change API keys anytime in <strong>Settings</strong>.
+      </p>
     </div>
   </div>
 </template>
@@ -129,5 +133,15 @@ async function handleSubmit() {
   color: #ef4444;
   font-size: 0.8125rem;
   margin-top: 0.25rem;
+}
+
+.onboarding__hint {
+  font-size: 0.78rem;
+  color: #666;
+  margin-top: 1.5rem;
+}
+
+.onboarding__hint strong {
+  color: #6ab0f3;
 }
 </style>

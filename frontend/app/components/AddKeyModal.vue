@@ -3,12 +3,12 @@
     <div v-if="show" class="modal-overlay" @click.self="$emit('close')" @keydown.escape="$emit('close')">
       <div class="modal-card" role="dialog" aria-modal="true" ref="modalRef">
         <h2 class="modal-card__title">
-          <span class="modal-card__icon" :style="{ color: provider.color }">{{ provider.icon }}</span>
+          <span class="modal-card__icon" :style="{ color: provider.color }" v-html="provider.icon"></span>
           Add {{ provider.name }} Key
         </h2>
 
         <div class="modal-card__info">
-          <span class="modal-card__info-icon">ℹ️</span>
+          <span class="modal-card__info-icon" v-html="ICON_INFO"></span>
           <span>Stored locally in your browser. Never sent to our server.</span>
         </div>
 
@@ -26,7 +26,7 @@
             @keydown.enter="save"
           />
           <button class="modal-card__toggle" type="button" @click="showKey = !showKey" :title="showKey ? 'Hide' : 'Show'">
-            {{ showKey ? '🙈' : '👁️' }}
+            <span v-html="showKey ? ICON_EYE_CLOSED : ICON_EYE_OPEN"></span>
           </button>
         </div>
 
@@ -58,6 +58,7 @@
 
 <script setup lang="ts">
 import type { ProviderConfig } from '~/types'
+import { ICON_EYE_OPEN, ICON_EYE_CLOSED, ICON_INFO } from '~/composables/providerIcons'
 
 const props = defineProps<{
   provider: ProviderConfig
@@ -133,7 +134,14 @@ watch(() => props.show, (val) => {
   margin-bottom: 1rem;
 }
 .modal-card__icon {
-  font-size: 1.25rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+}
+.modal-card__icon :deep(svg) {
+  width: 100%;
+  height: 100%;
 }
 .modal-card__info {
   display: flex;
@@ -149,6 +157,13 @@ watch(() => props.show, (val) => {
 }
 .modal-card__info-icon {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--neon-cyan-60);
+}
+.modal-card__info-icon :deep(svg) {
+  width: 14px;
+  height: 14px;
 }
 .modal-card__label {
   font-size: 0.82rem;
@@ -182,8 +197,15 @@ watch(() => props.show, (val) => {
   border-radius: 4px;
   background: var(--bg-base);
   cursor: pointer;
-  font-size: 0.9rem;
-  transition: border-color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: border-color 0.15s, color 0.15s;
+}
+.modal-card__toggle :deep(svg) {
+  width: 18px;
+  height: 18px;
 }
 .modal-card__toggle:hover {
   border-color: var(--border-strong);

@@ -1,7 +1,7 @@
 <template>
   <div class="provider-card" :class="{ 'provider-card--configured': configured }">
     <div class="provider-card__header">
-      <span class="provider-card__icon" :style="{ color: provider.color }">{{ provider.icon }}</span>
+      <span class="provider-card__icon" :style="{ color: provider.color }" v-html="provider.icon"></span>
       <span class="provider-card__name">{{ provider.name }}</span>
       <div class="provider-card__actions">
         <span v-if="configured" class="provider-card__badge">✅ Configured</span>
@@ -81,10 +81,16 @@ function shortModel(model: string): string {
   gap: 0.6rem;
 }
 .provider-card__icon {
-  font-size: 1.2rem;
-  width: 1.6rem;
-  text-align: center;
+  width: 1.5rem;
+  height: 1.5rem;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.provider-card__icon :deep(svg) {
+  width: 100%;
+  height: 100%;
 }
 .provider-card__name {
   font-size: 0.9rem;

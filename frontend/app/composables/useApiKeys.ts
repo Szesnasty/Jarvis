@@ -1,10 +1,11 @@
 import type { ProviderConfig, StoredKeyMeta } from '~/types'
+import { PROVIDER_ICONS } from '~/composables/providerIcons'
 
 const PROVIDERS: ProviderConfig[] = [
   {
     id: 'anthropic',
     name: 'Anthropic',
-    icon: '🤖',
+    icon: PROVIDER_ICONS.anthropic,
     keyPrefix: 'sk-ant-',
     docsUrl: 'https://console.anthropic.com/settings/keys',
     models: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250514'],
@@ -13,7 +14,7 @@ const PROVIDERS: ProviderConfig[] = [
   {
     id: 'openai',
     name: 'OpenAI',
-    icon: '✨',
+    icon: PROVIDER_ICONS.openai,
     keyPrefix: 'sk-',
     docsUrl: 'https://platform.openai.com/api-keys',
     models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
@@ -22,7 +23,7 @@ const PROVIDERS: ProviderConfig[] = [
   {
     id: 'google',
     name: 'Google AI',
-    icon: 'G',
+    icon: PROVIDER_ICONS.google,
     keyPrefix: 'AI',
     docsUrl: 'https://aistudio.google.com/apikey',
     models: ['gemini-2.5-flash', 'gemini-2.5-pro'],
