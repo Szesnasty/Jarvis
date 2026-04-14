@@ -179,6 +179,7 @@ export interface SpecialistDetail {
   tools: string[]
   examples: { user: string; assistant: string }[]
   icon: string
+  default_model?: { provider: string; model: string } | null
   created_at: string
   updated_at: string
 }

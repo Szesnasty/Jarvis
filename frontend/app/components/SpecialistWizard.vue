@@ -141,6 +141,36 @@
             <label class="wiz__label wiz__label--small">Length</label>
             <input v-model="form.style.length" class="wiz__input" placeholder="e.g. concise, detailed" />
           </div>
+
+          <!-- Default model -->
+          <div class="wiz__field wiz__field--model">
+            <label class="wiz__label">Default Model</label>
+            <p class="wiz__hint">Which model should this specialist use? Leave on "Use global" to follow the chat selector.</p>
+            <div class="wiz__model-options">
+              <button
+                type="button"
+                class="wiz__model-option"
+                :class="{ 'wiz__model-option--active': !form.default_model }"
+                @click="form.default_model = null"
+              >
+                <span class="wiz__model-option-label">Use global default</span>
+              </button>
+              <template v-for="provider in configuredProviders()" :key="provider.id">
+                <button
+                  v-for="model in MODEL_CATALOG[provider.id]"
+                  :key="model.id"
+                  type="button"
+                  class="wiz__model-option"
+                  :class="{ 'wiz__model-option--active': form.default_model?.provider === provider.id && form.default_model?.model === model.id }"
+                  @click="form.default_model = { provider: provider.id, model: model.id }"
+                >
+                  <span class="wiz__model-option-icon" v-html="provider.icon" />
+                  <span class="wiz__model-option-label">{{ model.label }}</span>
+                  <span class="wiz__model-option-cost" :class="'wiz__cost--' + model.cost">{{ model.cost === 1 ? '$' : model.cost === 2 ? '$$' : '$$$' }}</span>
+                </button>
+              </template>
+            </div>
+          </div>
         </div>
 
         <!-- Step 5: Rules -->
@@ -202,6 +232,10 @@
                 <span class="wiz__review-stat-val">{{ form.tools.length || 'All' }}</span>
                 <span class="wiz__review-stat-label">tools</span>
               </div>
+              <div class="wiz__review-stat">
+                <span class="wiz__review-stat-val">{{ form.default_model ? getModelLabel(form.default_model.provider, form.default_model.model) : 'Global' }}</span>
+                <span class="wiz__review-stat-label">model</span>
+              </div>
             </div>
             <p v-if="stagedFiles.length && !isEditMode" class="wiz__review-note">
               Files will be uploaded after the specialist is created.
@@ -244,6 +278,9 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 import type { SpecialistDetail } from '~/types'
+import { useApiKeys, MODEL_CATALOG, type ModelInfo } from '~/composables/useApiKeys'
+
+const { configuredProviders, providers: allProviders } = useApiKeys()
 
 const props = defineProps<{
   initialData?: SpecialistDetail | null
@@ -272,6 +309,7 @@ const form = reactive({
   rules: [] as string[],
   tools: [] as string[],
   examples: [] as { user: string; assistant: string }[],
+  default_model: null as { provider: string; model: string } | null,
 })
 
 const sourcesText = ref('')
@@ -293,6 +331,7 @@ onMounted(() => {
     form.rules = [...(d.rules || [])]
     form.tools = [...(d.tools || [])]
     form.examples = [...(d.examples || [])]
+    form.default_model = d.default_model ? { ...d.default_model } : null
     sourcesText.value = form.sources.join('\n')
     rulesText.value = form.rules.join('\n')
   }
@@ -403,6 +442,11 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function getModelLabel(provider: string, model: string): string {
+  const catalog = MODEL_CATALOG[provider]
+  return catalog?.find((m: ModelInfo) => m.id === model)?.label ?? model
 }
 
 function submit() {
@@ -805,6 +849,81 @@ defineExpose({ resetSubmitting })
 
 .wiz__tool--checked .wiz__tool-name {
   color: var(--neon-cyan);
+}
+
+/* --- Model picker (Step 4) --- */
+.wiz__field--model {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.wiz__model-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.wiz__model-option {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.15s;
+}
+
+.wiz__model-option:hover {
+  border-color: var(--neon-cyan-30);
+  background: var(--bg-elevated);
+}
+
+.wiz__model-option--active {
+  border-color: var(--neon-cyan);
+  background: var(--neon-cyan-08);
+  color: var(--neon-cyan);
+}
+
+.wiz__model-option-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wiz__model-option-icon :deep(svg) {
+  width: 12px;
+  height: 12px;
+}
+
+.wiz__model-option-cost {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.05rem 0.25rem;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.wiz__cost--1 {
+  color: rgba(74, 222, 128, 0.9);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.wiz__cost--2 {
+  color: rgba(251, 191, 36, 0.9);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.wiz__cost--3 {
+  color: rgba(251, 146, 60, 0.9);
+  background: rgba(251, 146, 60, 0.1);
 }
 
 /* --- Review (Step 7) --- */

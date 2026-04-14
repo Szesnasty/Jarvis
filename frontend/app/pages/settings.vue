@@ -339,6 +339,7 @@ async function rebuildGraphAction() {
   padding: 2rem;
   height: calc(100vh - 40px);
   overflow-y: auto;
+  width: 640px;
 }
 .settings-page__title {
   font-size: 1.5rem;

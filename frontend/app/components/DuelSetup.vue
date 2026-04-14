@@ -129,6 +129,8 @@ watch(() => props.prefillTopic, (v) => {
   flex-direction: column;
   gap: 0.75rem;
   animation: slideUp 0.25s ease-out;
+  position: relative;
+  z-index: 210;
 }
 
 @keyframes slideUp {
