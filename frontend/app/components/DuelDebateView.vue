@@ -333,7 +333,8 @@ const roundLabel = computed(() => {
   padding: 1.25rem 1.5rem;
   flex: 1;
   width: 100%;
-  align-self: stretch;
+  max-width: 900px;
+  min-height: 0;
   overflow-y: auto;
   min-height: 0;
   animation: fadeIn 0.3s ease-out;
