@@ -71,17 +71,25 @@
 |------|-------|--------|-------|
 | [12](step-12-graph-interactive.md) | Interactive graph UX (preview, ask, filter, orphans, manual edges) | ✅ | — |
 | [13](step-13-graph-retrieval.md) | Graph-guided retrieval (weighted edges, IDF, path scoring) | ✅ | — |
-| [14a](step-14a-entity-extraction.md) | Entity extraction + bidirectional wiki-links | ⬜ | → 1st |
-| [15](step-15-feedback-loops.md) | Feedback loops (auto-graph, attribution, session→memory, realtime refresh) | ⬜ | → 2nd |
-| [14b](step-14b-graph-refinement.md) | Similarity edges, temporal edges, pruning, rebuild pipeline | ⬜ | → 3rd |
+| [14a](step-14a-entity-extraction.md) | Entity extraction + bidirectional wiki-links | ✅ | → 1st |
+| [15](step-15-feedback-loops.md) | Feedback loops (auto-graph, attribution, session→memory, realtime refresh) | ✅ | → 2nd |
+| [14b](step-14b-graph-refinement.md) | Similarity edges, temporal edges, pruning, rebuild pipeline | ✅ | → 3rd |
 
 ## Phase 11 — Duel & Council Mode
 
 | Step | Title | Status | Order |
 |------|-------|--------|-------|
-| [16a](step-16a-duel-backend.md) | Duel Mode backend (orchestrator, prompts, scoring, WS events, memory save) | ⬜ | → 4th |
-| [16b](step-16b-duel-frontend.md) | Duel Mode frontend (setup, debate view, score bar, chat integration) | ⬜ | → 5th |
+| [16a](step-16a-duel-backend.md) | Duel Mode backend (orchestrator, prompts, scoring, WS events, memory save) | ✅ | → 4th |
+| [16b](step-16b-duel-frontend.md) | Duel Mode frontend (setup, debate view, score bar, chat integration) | ✅ | → 5th |
 | [17](step-17-council-full.md) | Council Full (3-4 specialists, compression, alliance map, learning extraction) | ⬜ | v2 |
+
+## Phase 12 — Multi-Provider LLM Support
+
+| Step | Title | Status |
+|------|-------|--------|
+| [18a](step-18a-multi-provider-keys-frontend.md) | Multi-provider API keys: frontend (browser storage, Settings UI, provider cards) | ⬜ |
+| [18b](step-18b-multi-provider-backend.md) | Multi-provider backend: LiteLLM integration (unified streaming, per-request keys) | ⬜ |
+| [18c](step-18c-model-selector.md) | Model selector UI + per-specialist model config + persistence | ⬜ |
 
 ---
 
