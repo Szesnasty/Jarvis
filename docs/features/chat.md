@@ -1,25 +1,26 @@
 ---
-title: Chat & Claude Integration
+title: Chat & LLM Integration
 status: active
 type: feature
 sources:
   - backend/routers/chat.py
   - backend/services/claude.py
+  - backend/services/llm_service.py
   - backend/services/_anthropic_client.py
   - backend/services/tools.py
   - backend/services/token_tracking.py
   - frontend/app/composables/useChat.ts
   - frontend/app/composables/useWebSocket.ts
   - frontend/app/components/ChatPanel.vue
-depends_on: [retrieval, sessions, specialists]
+depends_on: [retrieval, sessions, specialists, api-key-management]
 last_updated: 2026-04-14
 ---
 
-# Chat & Claude Integration
+# Chat & LLM Integration
 
 ## Summary
 
-This is the core conversation loop of Jarvis: a WebSocket channel carries user messages to the backend, which retrieves relevant memory context, calls Claude (claude-sonnet-4-20250514) with streaming enabled, and forwards response tokens back to the browser in real time. Claude can also invoke tools during a response — reading or writing notes, querying the graph, creating plans — with the tool call chain completing before the browser finalises the message.
+This is the core conversation loop of Jarvis: a WebSocket channel carries user messages to the backend, which retrieves relevant memory context, calls a LLM provider with streaming enabled, and forwards response tokens back to the browser in real time. The backend supports multiple LLM providers (Anthropic, OpenAI, Google AI) via LiteLLM, with Anthropic as the native default. Claude can also invoke tools during a response — reading or writing notes, querying the graph, creating plans — with the tool call chain completing before the browser finalises the message.
 
 ## How It Works
 
@@ -33,13 +34,14 @@ A heartbeat ping is sent from the frontend every 25 seconds to keep the connecti
 
 For each user message the backend (`_handle_message` in `chat.py`) runs the following sequence:
 
-1. **Context retrieval** — `build_system_prompt` calls `build_context` (from `context_builder`) to find relevant notes and appends them to the base system prompt. If a specialist is active, its prompt fragment is injected first.
-2. **Tool filtering** — `specialist_service.filter_tools` narrows the full `TOOLS` list to those permitted by the active specialist (or all tools if none is active).
-3. **First Claude stream** — `ClaudeService.stream_response` opens a streaming request to the Anthropic Messages API. `text_delta` events are forwarded to the WebSocket immediately as they arrive.
-4. **Tool call handling** — If Claude emits a `tool_use` block, its JSON input is accumulated across streaming deltas by `_ToolAccumulator` and yielded as a single `StreamEvent` only when the `content_block_stop` event arrives. The router then executes the tool, appends both the assistant tool-use block and the tool result to the message list, and calls `_stream_follow_up` to get Claude's next response.
-5. **Recursive tool rounds** — `_stream_follow_up` is recursive. Each recursive call increments a `depth` counter. The chain is cut off at `MAX_TOOL_ROUNDS = 5` to prevent runaway loops.
-6. **Session save** — `add_message` auto-persists after each append (crash protection). If Claude responds with text, the assistant message triggers another auto-save. If Claude returns only tool calls with no text, no redundant save is triggered since the user message already persisted. On WebSocket disconnect the session is additionally written to `memory/` as a Markdown note.
-7. **Token logging** — Accumulated `input_tokens` + `output_tokens` from all rounds in a turn are written to `app/logs/token_usage.jsonl` via `log_usage`.
+1. **Provider routing** — The WS message may include `provider`, `model`, and `api_key` fields. If `provider` is non-Anthropic (e.g. "openai" or "google"), an `LLMService` is created wrapping LiteLLM. If provider is "anthropic" or absent, the native `ClaudeService` is used for best streaming fidelity. Client-provided keys are used per-request and never persisted; if no key is provided, the server-stored Anthropic key is used as fallback.
+2. **Context retrieval** — `build_system_prompt` calls `build_context` (from `context_builder`) to find relevant notes and appends them to the base system prompt. If a specialist is active, its prompt fragment is injected first.
+3. **Tool filtering** — `specialist_service.filter_tools` narrows the full `TOOLS` list to those permitted by the active specialist (or all tools if none is active).
+4. **First LLM stream** — The service's `stream_response` opens a streaming request. `text_delta` events are forwarded to the WebSocket immediately as they arrive. For non-Anthropic providers, `LLMService` converts Anthropic-format tools to OpenAI format and handles message format conversion automatically.
+5. **Tool call handling** — If the LLM emits a `tool_use` block, its JSON input is accumulated across streaming deltas by `_ToolAccumulator` (ClaudeService) or `_LiteLLMToolAccumulator` (LLMService) and yielded as a single `StreamEvent` only when complete. The router then executes the tool, appends both the assistant tool-use block and the tool result to the message list, and calls `_stream_follow_up` to get the LLM's next response.
+6. **Recursive tool rounds** — `_stream_follow_up` is recursive. Each recursive call increments a `depth` counter. The chain is cut off at `MAX_TOOL_ROUNDS = 5` to prevent runaway loops.
+7. **Session save** — `add_message` auto-persists after each append (crash protection). On WebSocket disconnect the session is additionally written to `memory/` as a Markdown note.
+8. **Token logging** — Accumulated `input_tokens` + `output_tokens` from all rounds in a turn are written to `app/logs/token_usage.jsonl` via `log_usage` with `provider` and `model` fields for accurate cost tracking. Non-Anthropic providers use LiteLLM's `model_cost` for pricing estimates.
 
 ### Error handling in ClaudeService
 
@@ -67,11 +69,12 @@ All Anthropic SDK exceptions are caught and converted to `StreamEvent(type="erro
 
 ## Key Files
 
-- `backend/routers/chat.py` — WebSocket endpoint, per-message orchestration, recursive tool chain loop, session save-on-disconnect
+- `backend/routers/chat.py` — WebSocket endpoint, per-message orchestration, multi-provider routing (`_make_llm`), recursive tool chain loop, session save-on-disconnect
 - `backend/services/claude.py` — `ClaudeService` wrapping the Anthropic streaming API; `_ToolAccumulator` for reassembling fragmented tool-input JSON; `build_system_prompt` for context injection
+- `backend/services/llm_service.py` — `LLMService` wrapping LiteLLM for OpenAI/Google AI/any LiteLLM-supported provider; `LLMConfig` dataclass; `_LiteLLMToolAccumulator` for OpenAI-format streamed tool calls; format converters (`convert_tools_anthropic_to_openai`, `convert_messages_for_litellm`)
 - `backend/services/_anthropic_client.py` — Sync `anthropic.Anthropic` factory, present for test-mocking intent but unused by the codebase (all live paths use `AsyncAnthropic` directly in `ClaudeService`)
-- `backend/services/tools.py` — `TOOLS` list (Claude-facing schemas) and `execute_tool` dispatcher mapping tool names to service calls
-- `backend/services/token_tracking.py` — Append-only JSONL usage log with per-day and all-time aggregation helpers; defines token budget constants (not yet enforced)
+- `backend/services/tools.py` — `TOOLS` list (Anthropic-format input schemas) and `execute_tool` dispatcher mapping tool names to service calls
+- `backend/services/token_tracking.py` — Append-only JSONL usage log with per-day and all-time aggregation helpers; records `provider` and `model` per entry; uses LiteLLM pricing for non-Anthropic providers
 - `frontend/app/composables/useWebSocket.ts` — Persistent WebSocket with heartbeat, exponential-backoff reconnect, and multi-listener message dispatch
 - `frontend/app/composables/useChat.ts` — Conversation state manager; maps raw WebSocket events to UI state; handles retry logic
 - `frontend/app/components/ChatPanel.vue` — Message list, streaming cursor, typing indicator, tool activity label, error bar with retry, URL ingest toolbar
@@ -86,13 +89,20 @@ All frames are JSON. The client sends; the server sends back a stream of events 
 
 ```
 // Start or resume a conversation turn
-{ "type": "message", "content": string, "session_id"?: string }
+{
+  "type": "message",
+  "content": string,
+  "session_id"?: string,
+  "provider"?: "anthropic" | "openai" | "google",
+  "model"?: string,           // e.g. "gpt-4o", "gemini-2.5-flash"
+  "api_key"?: string          // per-request key from browser storage
+}
 
 // Keep-alive (silently ignored by server)
 { "type": "ping" }
 ```
 
-`session_id` is optional on the first message. If omitted the server uses the session it created at connect time. Pass it on subsequent messages to keep the conversation continuous. Passing an unknown `session_id` is ignored — the server falls back to its own session.
+`session_id` is optional on the first message. `provider`, `model`, and `api_key` are optional — if omitted the server uses the stored Anthropic key with `ClaudeService`. If `provider` is set to a non-Anthropic value, `api_key` must be provided (there is no server-stored key for OpenAI/Google).
 
 **Server → Client**
 

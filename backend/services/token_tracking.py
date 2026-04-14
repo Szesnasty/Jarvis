@@ -41,12 +41,27 @@ def log_usage(
     output_tokens: int,
     model: str = "claude-sonnet-4-20250514",
     context_tokens: int = 0,
+    provider: str = "anthropic",
     workspace_path: Optional[Path] = None,
 ) -> Dict:
     """Log a single usage entry."""
     cost_per_input = 3.0 / 1_000_000   # $3/MTok input
     cost_per_output = 15.0 / 1_000_000  # $15/MTok output
-    cost_estimate = input_tokens * cost_per_input + output_tokens * cost_per_output
+
+    # Try to use LiteLLM's model cost for non-Anthropic providers
+    if provider != "anthropic":
+        try:
+            import litellm
+            cost_estimate = litellm.completion_cost(
+                model=model,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+            )
+        except Exception:
+            # Fallback to default pricing
+            cost_estimate = input_tokens * cost_per_input + output_tokens * cost_per_output
+    else:
+        cost_estimate = input_tokens * cost_per_input + output_tokens * cost_per_output
 
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -55,6 +70,7 @@ def log_usage(
         "total_tokens": input_tokens + output_tokens,
         "context_tokens": context_tokens,
         "model": model,
+        "provider": provider,
         "cost_estimate": round(cost_estimate, 6),
     }
 

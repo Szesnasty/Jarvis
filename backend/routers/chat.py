@@ -7,6 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from services import session_service
 from services import specialist_service
 from services.claude import ClaudeService, StreamEvent, build_system_prompt
+from services.llm_service import LLMConfig, LLMService, DEFAULT_MODELS
 from services.tools import TOOLS, ToolNotFoundError, execute_tool
 from services.token_tracking import check_budget, log_usage
 from services.workspace_service import get_api_key
@@ -79,7 +80,7 @@ MAX_TOOL_ROUNDS = 5
 
 async def _stream_follow_up(
     ws: WebSocket,
-    claude: ClaudeService,
+    claude,  # ClaudeService | LLMService
     tool_messages: list[dict],
     system_prompt: str,
     tools: list[dict],
@@ -131,13 +132,28 @@ async def _stream_follow_up(
     return text
 
 
+def _make_llm(provider: Optional[str], model: Optional[str], api_key: str):
+    """Create an LLMService for the given provider, or ClaudeService as fallback."""
+    if provider and provider != "anthropic":
+        config = LLMConfig(
+            provider=provider,
+            model=model or DEFAULT_MODELS.get(provider, "gpt-4o"),
+            api_key=api_key,
+        )
+        return LLMService(config)
+    # Anthropic — use native ClaudeService for best streaming fidelity
+    return ClaudeService(api_key=api_key)
+
+
 async def _handle_message(
     ws: WebSocket,
     session_id: str,
     content: str,
-    get_claude: callable = None,
+    get_llm: callable = None,
     graph_scope: Optional[str] = None,
     client_api_key: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> None:
     api_key = client_api_key or get_api_key()
     if not api_key:
@@ -158,7 +174,7 @@ async def _handle_message(
     if budget["level"] == "warning":
         await _send_event(ws, "warning", content=f"Approaching daily token budget ({budget['percent']:.0f}% used).")
 
-    claude = get_claude(api_key) if get_claude else ClaudeService(api_key=api_key)
+    claude = get_llm(api_key, provider, model) if get_llm else _make_llm(provider, model, api_key)
     assistant_text = ""
     # Specialist attribution: prefix first text_delta with specialist names
     attribution_prefix = ""
@@ -219,7 +235,11 @@ async def _handle_message(
     # Log token usage if we got any
     if usage_acc[0] > 0 or usage_acc[1] > 0:
         try:
-            log_usage(usage_acc[0], usage_acc[1])
+            log_usage(
+                usage_acc[0], usage_acc[1],
+                model=model or "claude-sonnet-4-20250514",
+                provider=provider or "anthropic",
+            )
         except Exception:
             logger.warning("Failed to log token usage")
 
@@ -254,8 +274,10 @@ async def _handle_duel(
     ws: WebSocket,
     data: dict,
     session_id: str,
-    get_claude: callable,
+    get_llm: callable,
     client_api_key: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> None:
     """Handle a duel_start WS message."""
     from services.council import DuelConfig, DuelOrchestrator, validate_duel_config
@@ -275,7 +297,7 @@ async def _handle_duel(
         await _send_event(ws, "error", content=str(exc))
         return
 
-    claude = get_claude(api_key)
+    claude = get_llm(api_key, provider, model)
     orchestrator = DuelOrchestrator(claude)
 
     try:
@@ -333,17 +355,18 @@ async def chat_ws(websocket: WebSocket) -> None:
     if existing:
         await _send_event(websocket, "session_history", messages=existing)
 
-    # Reuse a single ClaudeService per connection to avoid per-message HTTP pool churn.
-    # If the client sends an api_key, we use that; otherwise fall back to server-stored key.
-    _connection_claude: ClaudeService | None = None
-    _connection_claude_key: str | None = None
+    # Reuse a single LLM service per connection to avoid per-message HTTP pool churn.
+    # Cache is keyed on (api_key, provider, model) — changed key/provider creates new instance.
+    _connection_llm = None
+    _connection_llm_key: tuple = (None, None, None)  # (api_key, provider, model)
 
-    def _get_claude(api_key: str) -> ClaudeService:
-        nonlocal _connection_claude, _connection_claude_key
-        if _connection_claude is None or _connection_claude_key != api_key:
-            _connection_claude = ClaudeService(api_key=api_key)
-            _connection_claude_key = api_key
-        return _connection_claude
+    def _get_llm(api_key: str, provider: Optional[str] = None, model: Optional[str] = None):
+        nonlocal _connection_llm, _connection_llm_key
+        cache_key = (api_key, provider, model)
+        if _connection_llm is None or _connection_llm_key != cache_key:
+            _connection_llm = _make_llm(provider, model, api_key)
+            _connection_llm_key = cache_key
+        return _connection_llm
 
     try:
         while True:
@@ -358,12 +381,18 @@ async def chat_ws(websocket: WebSocket) -> None:
                 await _send_event(websocket, "error", content=error)
                 continue
 
-            # Extract client-provided API key (browser-only storage)
+            # Extract client-provided API key + provider + model (browser-only storage)
             client_api_key = data.get("api_key") or None
+            client_provider = data.get("provider") or None
+            client_model = data.get("model") or None
 
             # Route duel messages
             if data.get("type") == "duel_start":
-                await _handle_duel(websocket, data, session_id, _get_claude, client_api_key=client_api_key)
+                await _handle_duel(
+                    websocket, data, session_id, _get_llm,
+                    client_api_key=client_api_key,
+                    provider=client_provider, model=client_model,
+                )
                 continue
 
             content = data.get("content", "").strip()
@@ -374,7 +403,11 @@ async def chat_ws(websocket: WebSocket) -> None:
                     session_id = requested_sid
 
             graph_scope = data.get("graph_scope") or None
-            await _handle_message(websocket, session_id, content, _get_claude, graph_scope=graph_scope, client_api_key=client_api_key)
+            await _handle_message(
+                websocket, session_id, content, _get_llm,
+                graph_scope=graph_scope, client_api_key=client_api_key,
+                provider=client_provider, model=client_model,
+            )
 
     except WebSocketDisconnect:
         session_service.save_session(session_id)
@@ -386,8 +419,8 @@ async def chat_ws(websocket: WebSocket) -> None:
         # Sessions are cleaned up when a new session is explicitly created or
         # the server restarts.
     finally:
-        if _connection_claude is not None:
+        if _connection_llm is not None:
             try:
-                await _connection_claude.close()
+                await _connection_llm.close()
             except Exception:
                 pass

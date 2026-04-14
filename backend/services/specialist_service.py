@@ -63,6 +63,7 @@ def create_specialist(data: Dict, workspace_path: Optional[Path] = None) -> Dict
         "tools": data.get("tools", []),
         "examples": data.get("examples", []),
         "icon": data.get("icon", "🤖"),
+        "default_model": data.get("default_model"),
         "created_at": now,
         "updated_at": now,
     }
@@ -100,7 +101,7 @@ def list_specialists(workspace_path: Optional[Path] = None) -> List[Dict]:
 
 def update_specialist(spec_id: str, data: Dict, workspace_path: Optional[Path] = None) -> Dict:
     existing = get_specialist(spec_id, workspace_path)
-    for key in ("name", "role", "sources", "style", "rules", "tools", "examples", "icon"):
+    for key in ("name", "role", "sources", "style", "rules", "tools", "examples", "icon", "default_model"):
         if key in data:
             existing[key] = data[key]
     existing["updated_at"] = datetime.now(timezone.utc).isoformat()

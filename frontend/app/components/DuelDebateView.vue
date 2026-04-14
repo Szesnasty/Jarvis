@@ -536,7 +536,6 @@ const roundLabel = computed(() => {
     inset 0 1px 0 var(--neon-cyan-15),
     inset 0 -1px 0 rgba(2, 254, 255, 0.05);
   animation: verdict-appear 0.5s ease-out;
-  overflow: hidden;
 }
 
 /* Soft edge glow shimmer */

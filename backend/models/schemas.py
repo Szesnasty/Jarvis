@@ -135,6 +135,11 @@ class GraphStatsResponse(BaseModel):
 
 # --- Specialists ---
 
+class SpecialistDefaultModel(BaseModel):
+    provider: str
+    model: str
+
+
 class SpecialistCreateRequest(BaseModel):
     name: str
     role: str = ""
@@ -144,6 +149,7 @@ class SpecialistCreateRequest(BaseModel):
     tools: list[str] = []
     examples: list[dict[str, str]] = []
     icon: str = "\U0001f916"
+    default_model: Optional[SpecialistDefaultModel] = None
 
 
 # --- URL Ingest ---
@@ -180,6 +186,7 @@ class SpecialistDetailResponse(BaseModel):
     tools: list[str] = []
     examples: list[dict[str, str]] = []
     icon: str = "\U0001f916"
+    default_model: Optional[dict] = None
     created_at: str = ""
     updated_at: str = ""
 

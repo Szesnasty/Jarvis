@@ -1,6 +1,40 @@
 import type { ProviderConfig, StoredKeyMeta } from '~/types'
 import { PROVIDER_ICONS } from '~/composables/providerIcons'
 
+/**
+ * Model metadata for the selector UI.
+ * `cost`: 1 = budget, 2 = standard, 3 = premium
+ */
+export interface ModelInfo {
+  id: string
+  label: string
+  cost: 1 | 2 | 3
+}
+
+/** Full model catalog per provider. */
+export const MODEL_CATALOG: Record<string, ModelInfo[]> = {
+  anthropic: [
+    { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', cost: 2 },
+    { id: 'claude-haiku-4-20250514', label: 'Claude Haiku 4.5', cost: 1 },
+    { id: 'claude-opus-4-20250514', label: 'Claude Opus 4', cost: 3 },
+  ],
+  openai: [
+    { id: 'gpt-4o', label: 'GPT-4o', cost: 2 },
+    { id: 'gpt-4o-mini', label: 'GPT-4o mini', cost: 1 },
+    { id: 'gpt-4-turbo', label: 'GPT-4 Turbo', cost: 3 },
+    { id: 'gpt-4', label: 'GPT-4', cost: 3 },
+    { id: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', cost: 1 },
+    { id: 'o1', label: 'o1', cost: 3 },
+    { id: 'o1-mini', label: 'o1 mini', cost: 2 },
+    { id: 'o3-mini', label: 'o3 mini', cost: 2 },
+  ],
+  google: [
+    { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', cost: 2 },
+    { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', cost: 1 },
+    { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash', cost: 1 },
+  ],
+}
+
 const PROVIDERS: ProviderConfig[] = [
   {
     id: 'anthropic',
@@ -8,7 +42,7 @@ const PROVIDERS: ProviderConfig[] = [
     icon: PROVIDER_ICONS.anthropic,
     keyPrefix: 'sk-ant-',
     docsUrl: 'https://console.anthropic.com/settings/keys',
-    models: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250514'],
+    models: MODEL_CATALOG.anthropic.map(m => m.id),
     color: '#D97706',
   },
   {
@@ -17,7 +51,7 @@ const PROVIDERS: ProviderConfig[] = [
     icon: PROVIDER_ICONS.openai,
     keyPrefix: 'sk-',
     docsUrl: 'https://platform.openai.com/api-keys',
-    models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+    models: MODEL_CATALOG.openai.map(m => m.id),
     color: '#10A37F',
   },
   {
@@ -26,7 +60,7 @@ const PROVIDERS: ProviderConfig[] = [
     icon: PROVIDER_ICONS.google,
     keyPrefix: 'AI',
     docsUrl: 'https://aistudio.google.com/apikey',
-    models: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+    models: MODEL_CATALOG.google.map(m => m.id),
     color: '#4285F4',
   },
 ]
@@ -59,6 +93,12 @@ function _readMeta(providerId: string): StoredKeyMeta | null {
   }
 }
 
+const _DEFAULT_MODELS: Record<string, string> = {
+  anthropic: 'claude-sonnet-4-20250514',
+  openai: 'gpt-4o',
+  google: 'gemini-2.5-flash',
+}
+
 // Shared reactive state via useState (survives across components)
 const _keyVersions = () => useState<number>('apiKeyVersion', () => 0)
 
@@ -70,6 +110,21 @@ export function useApiKeys() {
       if (_readKey(p.id)) return p.id
     }
     return 'anthropic'
+  })
+
+  const activeModel = useState<string>('activeModel', () => {
+    try {
+      const saved = localStorage.getItem('jarvis_active_model')
+      const savedProvider = localStorage.getItem('jarvis_active_provider')
+      // Verify saved model belongs to a provider with a configured key
+      if (saved && savedProvider && _readKey(savedProvider)) {
+        const catalog = MODEL_CATALOG[savedProvider]
+        if (catalog?.some(m => m.id === saved)) return saved
+      }
+    } catch { /* ignore */ }
+    // Fallback: default model for the active provider
+    const prov = activeProvider.value
+    return _DEFAULT_MODELS[prov] ?? 'claude-sonnet-4-20250514'
   })
 
   function getKey(providerId: string): string | null {
@@ -141,6 +196,27 @@ export function useApiKeys() {
     return PROVIDERS.some(p => isConfigured(p.id))
   }
 
+  function selectModel(providerId: string, modelId: string): void {
+    const catalog = MODEL_CATALOG[providerId]
+    if (!catalog?.some(m => m.id === modelId)) return
+    activeProvider.value = providerId
+    activeModel.value = modelId
+    try {
+      localStorage.setItem('jarvis_active_model', modelId)
+      localStorage.setItem('jarvis_active_provider', providerId)
+    } catch { /* ignore */ }
+  }
+
+  function getActiveModelInfo(): ModelInfo | undefined {
+    const catalog = MODEL_CATALOG[activeProvider.value]
+    return catalog?.find(m => m.id === activeModel.value)
+  }
+
+  /** Configured providers with at least one model available. */
+  function configuredProviders(): ProviderConfig[] {
+    return PROVIDERS.filter(p => isConfigured(p.id))
+  }
+
   const activeKey = computed(() => getKey(activeProvider.value))
 
   return {
@@ -153,6 +229,10 @@ export function useApiKeys() {
     isRemembered,
     hasAnyKey,
     activeProvider,
+    activeModel,
     activeKey,
+    selectModel,
+    getActiveModelInfo,
+    configuredProviders,
   }
 }

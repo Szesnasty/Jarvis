@@ -213,22 +213,8 @@ watch(
         @keydown="handleKeydown"
         @input="autoResize"
       />
-      <button
-        v-if="voiceSupported"
-        class="chat-panel__icon-btn"
-        :class="{ 'chat-panel__icon-btn--active': voiceState === 'listening' }"
-        :aria-label="voiceState === 'listening' ? 'Stop listening' : 'Start voice'"
-        @click="emit('toggleVoice')"
-      >
-        <svg v-if="voiceState !== 'listening'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-          <line x1="12" y1="19" x2="12" y2="22"/>
-        </svg>
-        <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="6" y="6" width="12" height="12" rx="2"/>
-        </svg>
-      </button>
+      <ModelSelector />
+      <!-- Voice button hidden for now -->
       <button
         class="chat-panel__icon-btn chat-panel__icon-btn--duel"
         aria-label="Duel Mode"
@@ -549,9 +535,9 @@ watch(
 
 .chat-panel__input-bar {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 0.6rem;
-  padding: 1rem 1.5rem;
+  padding: 1.2rem 1.5rem;
   border-top: 1px solid var(--border-default);
   background: var(--bg-base);
   flex-shrink: 0;

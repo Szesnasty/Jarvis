@@ -372,8 +372,9 @@ async def save_duel_to_memory(
 class DuelOrchestrator:
     """Runs a 2-round duel between 2 specialists with a judge verdict."""
 
-    def __init__(self, claude: ClaudeService):
-        self.claude = claude
+    def __init__(self, llm):
+        """Accept any LLM service (ClaudeService or LLMService) — duck-typed."""
+        self.claude = llm
 
     async def run(
         self,

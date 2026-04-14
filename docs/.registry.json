@@ -19,15 +19,18 @@
       "sources": [
         "backend/routers/chat.py",
         "backend/services/claude.py",
+        "backend/services/llm_service.py",
         "backend/services/_anthropic_client.py",
         "backend/services/tools.py",
         "backend/services/token_tracking.py",
         "frontend/app/composables/useChat.ts",
         "frontend/app/composables/useWebSocket.ts",
-        "frontend/app/components/ChatPanel.vue"
+        "frontend/app/composables/useApiKeys.ts",
+        "frontend/app/components/ChatPanel.vue",
+        "frontend/app/components/ModelSelector.vue"
       ],
       "depends_on": ["retrieval", "sessions", "specialists", "api-key-management"],
-      "last_updated": "2026-04-16",
+      "last_updated": "2026-04-15",
       "status": "current"
     },
     "memory": {

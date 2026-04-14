@@ -12,6 +12,7 @@ duckduckgo-search==7.5.1
 markdownify==1.2.2
 lxml_html_clean==0.4.4
 pdfplumber==0.11.8
+litellm==1.83.7
 
 # testing
 pytest==8.4.2

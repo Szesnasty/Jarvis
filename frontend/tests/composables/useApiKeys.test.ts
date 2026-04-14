@@ -113,4 +113,49 @@ describe('useApiKeys', () => {
     mockSession.setItem('jarvis_key_anthropic', 'session-key')
     expect(getKey('anthropic')).toBe('remembered-key')
   })
+
+  // --- Model selection ---
+
+  it('selectModel updates activeProvider and activeModel', () => {
+    const { selectModel, activeProvider, activeModel, setKey } = useApiKeys()
+    setKey('openai', 'sk-test', false)
+    selectModel('openai', 'gpt-4o')
+    expect(activeProvider.value).toBe('openai')
+    expect(activeModel.value).toBe('gpt-4o')
+  })
+
+  it('selectModel persists to localStorage', () => {
+    const { selectModel, setKey } = useApiKeys()
+    setKey('google', 'AIza-test', false)
+    selectModel('google', 'gemini-2.5-flash')
+    expect(mockLocal.getItem('jarvis_active_model')).toBe('gemini-2.5-flash')
+    expect(mockLocal.getItem('jarvis_active_provider')).toBe('google')
+  })
+
+  it('selectModel ignores unknown model', () => {
+    const { selectModel, activeModel } = useApiKeys()
+    const before = activeModel.value
+    selectModel('anthropic', 'nonexistent-model')
+    expect(activeModel.value).toBe(before)
+  })
+
+  it('getActiveModelInfo returns current model info', () => {
+    const { selectModel, getActiveModelInfo, setKey } = useApiKeys()
+    setKey('anthropic', 'sk-ant-test', false)
+    selectModel('anthropic', 'claude-sonnet-4-20250514')
+    const info = getActiveModelInfo()
+    expect(info).toBeDefined()
+    expect(info!.label).toBe('Claude Sonnet 4')
+    expect(info!.cost).toBe(2)
+  })
+
+  it('configuredProviders returns only providers with keys', () => {
+    const { configuredProviders, setKey } = useApiKeys()
+    expect(configuredProviders()).toHaveLength(0)
+    setKey('anthropic', 'sk-ant-test', false)
+    expect(configuredProviders()).toHaveLength(1)
+    expect(configuredProviders()[0].id).toBe('anthropic')
+    setKey('openai', 'sk-test', false)
+    expect(configuredProviders()).toHaveLength(2)
+  })
 })
