@@ -13,7 +13,7 @@ sources:
   - frontend/app/composables/useGraph.ts
 depends_on: [memory]
 last_reviewed: 2026-04-15
-last_updated: 2026-04-15
+last_updated: 2026-04-14
 ---
 
 # Knowledge Graph
@@ -43,8 +43,14 @@ For each file, the service:
 **Pass 3 — Bidirectional wiki-link resolution.**
 `_resolve_bidirectional_links()` ensures that for every `linked` edge A→B, a reverse edge B→A is also present (with reduced weight 0.6).
 
-**Pass 4 — Keyword similarity edges.**
-`_compute_similarity_edges()` compares notes by title + first 200 characters. For each pair with Jaccard keyword overlap ≥ 0.25 and at least 4 shared keywords, a `similar_to` edge is added. Each note is capped at 3 similarity edges. Skipped entirely for workspaces with >500 notes.
+**Pass 4 — Semantic similarity edges.**
+`_compute_similarity_edges()` builds `similar_to` edges using embeddings when available, falling back to keyword Jaccard when not.
+
+- **Embedding path (preferred).** `_compute_embedding_similarity_edges()` reads all per-note vectors from the `note_embeddings` table, computes pairwise cosine similarity between notes that appear in the graph, and emits a `similar_to` edge for each pair with `sim ≥ 0.65`. Edge weight is mapped from the similarity range `[0.65, 1.0]` to `[0.3, 1.0]` via `round(0.3 + (sim − 0.65) × 2.0, 3)`, capped at `1.0`. Each note is limited to 5 semantic edges to avoid hub inflation.
+- **Keyword fallback.** If embeddings are unavailable (fastembed not installed, `note_embeddings` empty, or any exception during the embedding path), the service falls back to `_compute_keyword_similarity_edges()` which compares notes by title + first 200 characters using Jaccard overlap (`≥ 0.25` with at least 4 shared keywords, cap 3 edges per note).
+- Both paths are skipped entirely for workspaces with >500 notes to bound `O(n²)` cost.
+
+The embedding path produces edges that reflect meaning rather than shared vocabulary — two notes titled "Morning routine" and "Evening wind-down" will connect if their contents are semantically related, even without shared keywords. This is the graph-semantic integration delivered by step 19c.
 
 **Pass 5 — Temporal edges.**
 `_compute_temporal_edges()` groups notes by `created_at` or `date` frontmatter field. Notes created on the same day receive `temporal` edges (weight 0.2). Day groups with >10 notes are skipped.
@@ -103,7 +109,7 @@ The `/api/graph/rebuild` endpoint clears the cache and triggers a full re-scan o
 
 ### Visualisation
 
-The frontend renders the graph using `force-graph` (a D3-force-backed Canvas library loaded via dynamic import). Node size scales with connection degree. Edge appearance is type-specific: `linked`/`related` edges carry directional arrows; `part_of` edges use a dashed line; `tagged` and `linked` edges emit animated particles; `similar_to` edges are gray dashed lines; `temporal` edges are yellow dotted lines. Area nodes use a stronger repulsive force to push themselves to the periphery of the layout.
+The frontend renders the graph using `force-graph` (a D3-force-backed Canvas library loaded via dynamic import). Node size scales with connection degree. Edge appearance is type-specific: `linked`/`related` edges carry directional arrows; `part_of` edges use a dashed line; `tagged` and `linked` edges emit animated particles; `similar_to` edges are indigo dashed lines (semantic similarity); `temporal` edges are yellow dotted lines. Area nodes use a stronger repulsive force to push themselves to the periphery of the layout.
 
 Labels are shown selectively: always for `area` nodes, always for nodes with 4+ connections, and for any hovered or highlighted node. At zoom levels above 1.2 all labels appear. Labels longer than 25 characters are truncated with an ellipsis unless the node is hovered.
 
@@ -272,7 +278,9 @@ defineExpose({
 
 **`rebuild_graph` is synchronous but wrapped in `asyncio.to_thread`.** It calls `Path.rglob()` and reads every `.md` file before returning. All async call sites (the `/api/graph/rebuild` endpoint, `POST /api/graph/edges`, and `session_service.save_conversation`) run it via `asyncio.to_thread` so the file scan executes in a thread pool worker rather than blocking the event loop. On very large workspaces it will still occupy a thread for the duration of the scan.
 
-**Similarity edge computation is O(n²) and capped at 500 notes.** `_compute_similarity_edges` compares every pair of notes. For workspaces with >500 notes the entire pass is skipped to avoid latency. Each note is also capped at 3 similarity edges.
+**Similarity edge computation is O(n²) and capped at 500 notes.** `_compute_similarity_edges` compares every pair of notes (embedding cosine when available, keyword Jaccard otherwise). For workspaces with >500 notes the entire pass is skipped to avoid latency. Embedding-based edges are capped at 5 per note; keyword fallback edges at 3.
+
+**Semantic similarity depends on embeddings being populated.** The embedding path walks `note_embeddings` directly. On a fresh install with fastembed missing, or before any note has been written (or reindexed) with embeddings enabled, the graph will silently fall back to keyword similarity. Running `POST /api/memory/reindex-embeddings` followed by `POST /api/graph/rebuild` is the recipe to upgrade an existing workspace to semantic edges.
 
 **Entity extraction is regex-based and English-centric.** The person-name regexes expect capitalized multi-word Latin names. They will miss names in non-Latin scripts and produce false positives for capitalized common phrases not in the skiplist.
 

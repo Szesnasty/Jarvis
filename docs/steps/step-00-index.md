@@ -92,6 +92,17 @@
 | [18c](step-18c-model-selector.md) | Model selector UI + per-specialist model config + persistence | ✅ |
 | [18d](step-18d-onboarding-multi-provider.md) | Onboarding redesign: multi-provider welcome flow + keyless workspace init | ✅ |
 
+## Phase 13 — Semantic Search & Hybrid Retrieval
+
+> **Execution order**: 19a → 19b → 19c
+> Fix BM25 first (free win), then add embeddings, then wire everything together.
+
+| Step | Title | Status | Order |
+|------|-------|--------|-------|
+| [19a](step-19a-fts5-bm25-ranking.md) | Fix FTS5 BM25 ranking (column weights, OR fallback, real scores) | ✅ | → 1st |
+| [19b](step-19b-local-embedding-service.md) | Local embedding service (fastembed, SQLite storage, embed on write) | ✅ | → 2nd |
+| [19c](step-19c-hybrid-retrieval-graph-semantic.md) | Hybrid retrieval + graph-semantic integration (3-signal fusion, semantic edges) | ✅ | → 3rd |
+
 ---
 
 ## Execution Rule

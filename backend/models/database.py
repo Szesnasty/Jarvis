@@ -52,6 +52,18 @@ CREATE TRIGGER IF NOT EXISTS notes_au AFTER UPDATE ON notes BEGIN
 END;
 """
 
+EMBEDDINGS_SQL = """
+CREATE TABLE IF NOT EXISTS note_embeddings (
+    note_id INTEGER PRIMARY KEY,
+    path TEXT UNIQUE NOT NULL,
+    embedding BLOB NOT NULL,
+    content_hash TEXT NOT NULL,
+    model_name TEXT NOT NULL,
+    dimensions INTEGER NOT NULL,
+    embedded_at TEXT NOT NULL
+);
+"""
+
 
 _VALID_TABLES = {"notes"}
 
@@ -98,4 +110,6 @@ async def init_database(db_path: Path) -> None:
             await db.executescript(FTS_SQL + "\n" + TRIGGER_SQL)
         except Exception as exc:
             logger.error("Failed to create FTS table/triggers: %s", exc)
+
+        await db.executescript(EMBEDDINGS_SQL)
         await db.commit()

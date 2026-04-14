@@ -7,6 +7,7 @@ sources:
   - backend/services/memory_service.py
   - backend/services/ingest.py
   - backend/services/url_ingest.py
+  - backend/services/embedding_service.py
   - backend/utils/markdown.py
   - frontend/app/pages/memory.vue
   - frontend/app/components/NoteList.vue
@@ -34,7 +35,25 @@ Every note carries a YAML frontmatter block with `title`, `created_at`, `updated
 
 ### Search
 
-`list_notes` queries SQLite directly. When a search string is present, the service tokenizes it into individual words (stripping punctuation to avoid FTS5 syntax errors) and constructs a prefix-match query like `word1* word2*` against the `notes_fts` virtual table. Without a search string it falls back to a plain ordered scan. The result set is capped at a configurable `limit` (default 50, max 200).
+`list_notes` queries SQLite directly. When a search string is present, the service tokenizes it into individual words (stripping punctuation to avoid FTS5 syntax errors) and constructs a BM25-ranked FTS5 query against the `notes_fts` virtual table. Each candidate carries a `_bm25_score` pulled from SQLite's built-in `bm25()` function so callers can fuse this with other signals. Without a search string it falls back to a plain ordered scan. The result set is capped at a configurable `limit` (default 50, max 200).
+
+### Semantic search (local embeddings)
+
+`embedding_service.py` provides local, on-device semantic search via **fastembed** (ONNX Runtime). No API calls, no keys, no data leaving the machine. The model — `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (384 dims, ~220MB) — is multilingual and handles Polish alongside English. It is lazy-loaded on first use (~3–4s cold start, ~400MB RAM).
+
+- **On-write embedding.** `memory_service._index_note()` calls `embed_note()` after writing a Markdown file. The note's title, tags, and body are combined (title weighted by repetition) and passed to the model. Output vectors are packed as float32 BLOBs and stored in the `note_embeddings` table alongside a content-SHA256 hash. If the hash hasn't changed, `embed_note()` skips re-embedding — a cheap no-op for unchanged notes.
+- **Graceful degradation.** The embed call is wrapped in a try/except and guarded by the `JARVIS_DISABLE_EMBEDDINGS` env var. If `fastembed` isn't installed (ImportError) or the call fails, indexing still succeeds — only the embedding step is skipped. Tests set `JARVIS_DISABLE_EMBEDDINGS=1` in `conftest.py` to avoid loading the model for every run.
+- **Query path.** `search_similar(query, limit)` embeds the query at call time, loads all stored vectors, scores them by cosine similarity, and returns `(path, score)` tuples sorted descending. For large workspaces this is linear in the embedding count, which is fine for the MVP scale.
+- **Reindex.** `reindex_all()` walks `memory/` and re-embeds every Markdown file. The content-hash check means the first run embeds everything while subsequent runs only embed changed notes.
+- **Availability check.** `is_available()` returns `True` if `fastembed` can be imported. Callers use this to decide whether to attempt semantic features or fall back to BM25.
+
+### Frontend search modes
+
+`NoteList.vue` exposes a three-way toggle — **Keyword**, **Semantic**, **Hybrid** — above the search input. The parent `memory.vue` page dispatches each mode to a different backend endpoint:
+
+- **Keyword** — `GET /api/memory/notes?search=...` (BM25 FTS ranking).
+- **Semantic** — `GET /api/memory/semantic-search?q=...` followed by a metadata fetch to hydrate the result set. If the service returns `mode: "unavailable"` (fastembed not installed), the list is shown empty rather than falling through to keyword search.
+- **Hybrid** — currently falls through to keyword search in the memory page; the hybrid fusion path is used by the chat pipeline via `retrieval.py`, not the UI list view. The toggle exists in the list UI for future wiring.
 
 ### Deletion (soft)
 
@@ -80,10 +99,11 @@ The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/se
 
 ## Key Files
 
-- `backend/routers/memory.py` — HTTP endpoints for note CRUD, file ingest, URL ingest, reindex, and AI enrichment
-- `backend/services/memory_service.py` — Core note operations: create, read, list, append, delete, reindex; manages Markdown files and SQLite index together
+- `backend/routers/memory.py` — HTTP endpoints for note CRUD, file ingest, URL ingest, reindex, AI enrichment, embedding reindex, and semantic search
+- `backend/services/memory_service.py` — Core note operations: create, read, list, append, delete, reindex; manages Markdown files and SQLite index together; triggers on-write embedding
 - `backend/services/ingest.py` — File ingest pipeline for `.md`, `.txt`, `.pdf`; AI enrichment via `smart_enrich`
 - `backend/services/url_ingest.py` — URL ingest for YouTube videos (transcript + oEmbed metadata) and general web articles (trafilatura + markdownify)
+- `backend/services/embedding_service.py` — Local fastembed wrapper: lazy model loading, `embed_note` (with content-hash skip), `search_similar`, `reindex_all`, `delete_embedding`, `is_available`, vector blob packing, and cosine similarity helper
 - `backend/utils/markdown.py` — YAML frontmatter parsing (`parse_frontmatter`) and serialization (`add_frontmatter`) used throughout the backend
 - `frontend/app/pages/memory.vue` — Memory page: sidebar/viewer layout, note selection state, folder/search coordination, and import dialog orchestration
 - `frontend/app/components/NoteList.vue` — Sidebar list with FTS search input, folder filter pills, and per-note delete with confirmation
@@ -121,6 +141,15 @@ DELETE /notes/{note_path}
 POST   /reindex
   Returns: ReindexResponse  { indexed: number }
 
+POST   /reindex-embeddings
+  Returns: { status: "ok", notes_embedded: number }
+  Errors: 503 if fastembed is not installed
+
+GET    /semantic-search
+  Query params: q: string (required), limit?: number (1–50, default 10)
+  Returns: { results: [{ path, similarity }], mode: "semantic" | "unavailable", error?: string }
+  Notes: returns mode="unavailable" (not a 503) when fastembed is missing, so the UI can fall back silently
+
 POST   /ingest                                    multipart/form-data
   Fields: file (UploadFile), folder?: string (default "knowledge")
   Returns: { path, title, folder, source, size }
@@ -145,6 +174,10 @@ POST   /enrich/{note_path}
 **`list_notes` reads from SQLite only.** Notes that exist on disk but have not been indexed (e.g. placed there manually outside of Jarvis) will not appear in the list until `/api/memory/reindex` is called. Conversely, if a file is removed from disk but the SQLite entry remains, the note will still appear in the list — however, deleting it via the UI will clean up the orphaned index entry. The frontend has no automatic trigger for reindex; it must be called explicitly.
 
 **Search tokenization strips all non-word characters.** A search for `C++` becomes `C` — the `+` signs are removed before the FTS query is built. This is intentional to avoid FTS5 query syntax errors, but it means searches containing punctuation will silently broaden.
+
+**Embedding is best-effort and silent on failure.** `_index_note()` wraps `embed_note()` in try/except and only logs at WARNING on unexpected errors; `ImportError` is swallowed entirely. If fastembed is not installed or the model fails to load, notes will still be created and indexed but won't carry embeddings — semantic search will simply return no results for those notes until a successful reindex.
+
+**Embedding reindex is not triggered automatically.** The `/api/memory/reindex-embeddings` endpoint must be called explicitly. After upgrading or installing fastembed for the first time on an existing workspace, users must hit this endpoint to backfill embeddings for all existing notes.
 
 **FTS search clears the active folder filter, and folder filter clears the search.** In `memory.vue`, `onSearch` sets `activeFolder` to `null` and `onFolderChange` sets `searchQuery` to `''`. These are mutually exclusive UI modes — you cannot search within a folder from the current interface.
 

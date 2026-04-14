@@ -210,7 +210,98 @@ def _resolve_bidirectional_links(graph: Graph) -> None:
 
 
 def _compute_similarity_edges(graph: Graph, memory_path: Path) -> List[Edge]:
-    """Compare notes by title + first 200 chars. Add similar_to edges for strong overlap."""
+    """Add ``similar_to`` edges between semantically similar notes.
+
+    Primary strategy: stored embeddings (cosine similarity). If embeddings
+    are unavailable or empty, fall back to keyword Jaccard similarity so
+    the graph still gains some structural connections.
+    """
+    note_nodes = [n for n in graph.nodes.values() if n.type == "note"]
+    if not note_nodes:
+        return []
+
+    try:
+        embedding_edges = _compute_embedding_similarity_edges(graph, memory_path)
+        if embedding_edges:
+            return embedding_edges
+    except Exception:
+        pass
+
+    return _compute_keyword_similarity_edges(graph, memory_path)
+
+
+def _compute_embedding_similarity_edges(
+    graph: Graph, memory_path: Path
+) -> List[Edge]:
+    """Use stored embeddings to find semantically similar notes."""
+    import sqlite3
+
+    from services.embedding_service import blob_to_vector, cosine_similarity
+
+    ws = memory_path.parent  # memory_path = <workspace>/memory
+    db_path = ws / "app" / "jarvis.db"
+    if not db_path.exists():
+        return []
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        cursor = conn.execute("SELECT path, embedding FROM note_embeddings")
+        rows = cursor.fetchall()
+    except sqlite3.OperationalError:
+        # Table may not exist on a fresh workspace
+        conn.close()
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    if len(rows) < 2:
+        return []
+
+    graph_paths = {n.id[5:] for n in graph.nodes.values() if n.type == "note"}
+    relevant: List[tuple] = [
+        (path, blob_to_vector(blob))
+        for path, blob in rows
+        if path in graph_paths
+    ]
+    if len(relevant) < 2:
+        return []
+
+    new_edges: List[Edge] = []
+    edge_count: Dict[str, int] = {}
+
+    for i in range(len(relevant)):
+        for j in range(i + 1, len(relevant)):
+            path_a, vec_a = relevant[i]
+            path_b, vec_b = relevant[j]
+            sim = cosine_similarity(vec_a, vec_b)
+
+            if sim < 0.65:
+                continue
+
+            node_a = f"note:{path_a}"
+            node_b = f"note:{path_b}"
+
+            if edge_count.get(node_a, 0) >= 5 or edge_count.get(node_b, 0) >= 5:
+                continue
+
+            # Map [0.65, 1.0] -> [0.3, 1.0]
+            weight = min(round(0.3 + (sim - 0.65) * 2.0, 3), 1.0)
+            new_edges.append(
+                Edge(source=node_a, target=node_b, type="similar_to", weight=weight)
+            )
+            edge_count[node_a] = edge_count.get(node_a, 0) + 1
+            edge_count[node_b] = edge_count.get(node_b, 0) + 1
+
+    return new_edges
+
+
+def _compute_keyword_similarity_edges(
+    graph: Graph, memory_path: Path
+) -> List[Edge]:
+    """Legacy fallback: keyword Jaccard similarity."""
     from services.context_builder import _extract_keywords
 
     note_nodes = [n for n in graph.nodes.values() if n.type == "note"]
@@ -241,7 +332,7 @@ def _compute_similarity_edges(graph: Graph, memory_path: Path) -> List[Edge]:
             a, b = node_ids[i], node_ids[j]
             overlap = note_keywords[a] & note_keywords[b]
             union = note_keywords[a] | note_keywords[b]
-            if len(union) == 0:
+            if not union:
                 continue
             jaccard = len(overlap) / len(union)
             if jaccard >= 0.25 and len(overlap) >= 4:

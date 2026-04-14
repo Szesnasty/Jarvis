@@ -1,6 +1,23 @@
-from typing import Dict, List, Optional
+"""Hybrid retrieval pipeline combining BM25, cosine similarity and graph scoring.
+
+Each signal contributes a normalized [0,1] score. Weights are re-normalized
+when a signal is unavailable so the pipeline degrades gracefully. Results
+include a ``_signals`` dict for transparency/debugging.
+"""
+
+import json
+import logging
+import os
+from typing import Dict, List, Optional, Set
 
 from services import graph_service, memory_service
+
+logger = logging.getLogger(__name__)
+
+# Default fusion weights
+WEIGHT_BM25 = 0.35
+WEIGHT_COSINE = 0.35
+WEIGHT_GRAPH = 0.30
 
 
 def _extract_query_entities(query: str, graph: graph_service.Graph) -> List[str]:
@@ -69,85 +86,217 @@ def _score_by_path(
     return total
 
 
-async def retrieve(
-    query: str,
-    limit: int = 5,
-    workspace_path=None,
-) -> List[Dict]:
-    """Weighted hybrid retrieval: FTS + graph scoring + cluster dedup."""
-    if not query or not query.strip():
-        return []
+def _compute_graph_score(
+    node_id: str,
+    graph: graph_service.Graph,
+    anchors: List[str],
+    candidate_ids: Set[str],
+) -> float:
+    """Combined graph score: edge connectivity + path distance + cluster bonus.
 
-    # 1. FTS search (get more candidates than needed)
-    candidates = await memory_service.list_notes(
-        search=query,
-        limit=limit * 3,
-        workspace_path=workspace_path,
-    )
+    Returns a value in the [0, 1] range.
+    """
+    if node_id not in graph.nodes:
+        return 0.0
 
-    # 2. Load graph for scoring
-    graph = graph_service.load_graph(workspace_path)
-    if not graph:
-        return candidates[:limit]
+    # (a) Edge weight to other candidates in pool
+    edge_score = 0.0
+    neighbor_ids: Set[str] = set()
+    cluster_count = 0
+    for edge in graph.edges:
+        other: Optional[str] = None
+        if edge.source == node_id:
+            other = edge.target
+        elif edge.target == node_id:
+            other = edge.source
+        if other is None:
+            continue
+        if other in candidate_ids:
+            edge_score += edge.weight
+            neighbor_ids.add(other)
+            if edge.type == "similar_to":
+                cluster_count += 1
 
-    # 3. Extract query entities for path scoring
-    anchors = _extract_query_entities(query, graph)
-    use_path_scoring = len(anchors) > 0
+    # (b) Convergence bonus — connects to 3+ other candidates
+    if len(neighbor_ids) >= 3:
+        edge_score += 0.3
 
-    # 4. Score each candidate using graph neighborhood
-    scored = []
-    fts_node_ids = {f"note:{c['path']}" for c in candidates}
+    # (c) Path distance to query entity anchors
+    path_score = 0.0
+    if anchors:
+        path_score = _score_by_path(graph, anchors, node_id)
 
-    for i, candidate in enumerate(candidates):
-        node_id = f"note:{candidate['path']}"
-        fts_rank = 1.0 / (i + 1)
+    # (d) Semantic cluster bonus
+    cluster_bonus = min(cluster_count * 0.15, 0.45)
 
-        # Graph score: weighted sum of edges to other FTS hits
-        graph_score = 0.0
-        if node_id in graph.nodes:
-            for edge in graph.edges:
-                if edge.source == node_id and edge.target in fts_node_ids:
-                    graph_score += edge.weight
-                elif edge.target == node_id and edge.source in fts_node_ids:
-                    graph_score += edge.weight
+    raw = edge_score + path_score + cluster_bonus
+    return min(raw, 1.0)
 
-            # Convergence bonus: node connects to 3+ FTS hits
-            neighbor_ids = {e.target for e in graph.edges if e.source == node_id}
-            neighbor_ids |= {e.source for e in graph.edges if e.target == node_id}
-            overlap = len(neighbor_ids & fts_node_ids)
-            if overlap >= 3:
-                graph_score += 0.3
 
-        # Path scoring if anchors found
-        path_score = 0.0
-        if use_path_scoring and node_id in graph.nodes:
-            path_score = _score_by_path(graph, anchors, node_id)
+async def _get_note_meta(path: str, workspace_path=None) -> Optional[Dict]:
+    """Look up note metadata directly from SQLite for candidates found
+    only by embeddings (no BM25 match)."""
+    import aiosqlite
 
-        if use_path_scoring:
-            final_score = fts_rank * 0.4 + graph_score * 0.3 + path_score * 0.3
-        else:
-            final_score = fts_rank * 0.6 + graph_score * 0.4
+    db_p = memory_service._db_path(workspace_path)
+    if not db_p.exists():
+        return None
 
-        scored.append({**candidate, "_score": final_score, "_node_id": node_id})
+    async with aiosqlite.connect(str(db_p)) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT path, title, folder, tags, updated_at, word_count FROM notes WHERE path = ?",
+            (path,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        try:
+            tags = json.loads(row["tags"])
+        except (json.JSONDecodeError, TypeError):
+            tags = []
+        return {
+            "path": row["path"],
+            "title": row["title"],
+            "folder": row["folder"],
+            "tags": tags,
+            "updated_at": row["updated_at"],
+            "word_count": row["word_count"],
+        }
 
-    # 5. Sort by final score
-    scored.sort(key=lambda x: x["_score"], reverse=True)
 
-    # 6. Cluster dedup: avoid returning 3+ notes from same folder
+def _cluster_dedup(scored: List[Dict], limit: int) -> List[Dict]:
+    """Keep at most 2 results per folder, trim to ``limit``."""
     seen_folders: Dict[str, int] = {}
-    result = []
+    result: List[Dict] = []
     for item in scored:
-        folder = item.get("folder", "")
+        folder = item.get("folder", "") or ""
         if folder and seen_folders.get(folder, 0) >= 2:
             continue
         seen_folders[folder] = seen_folders.get(folder, 0) + 1
         result.append(item)
         if len(result) >= limit:
             break
+    return result
 
-    # Clean internal fields
+
+async def retrieve(
+    query: str,
+    limit: int = 5,
+    workspace_path=None,
+) -> List[Dict]:
+    """Hybrid retrieval combining BM25, cosine similarity and graph scoring."""
+    if not query or not query.strip():
+        return []
+
+    # --- Signal 1: BM25 candidates ---
+    fts_candidates = await memory_service.list_notes(
+        search=query,
+        limit=limit * 3,
+        workspace_path=workspace_path,
+    )
+
+    max_bm25 = max(
+        (abs(c.get("_bm25_score", 0)) for c in fts_candidates), default=1.0
+    ) or 1.0
+
+    candidate_pool: Dict[str, Dict] = {}
+    for c in fts_candidates:
+        path = c["path"]
+        bm25_norm = abs(c.get("_bm25_score", 0)) / max_bm25
+        candidate_pool[path] = {
+            **c,
+            "_bm25": bm25_norm,
+            "_cosine": 0.0,
+            "_graph": 0.0,
+        }
+
+    # --- Signal 2: Cosine similarity (if embeddings available) ---
+    cosine_available = False
+    embeddings_disabled = os.environ.get("JARVIS_DISABLE_EMBEDDINGS") == "1"
+    if not embeddings_disabled:
+        try:
+            from services.embedding_service import is_available, search_similar
+
+            if is_available():
+                similar = await search_similar(
+                    query, limit=limit * 3, workspace_path=workspace_path
+                )
+                cosine_available = True
+                for path, score in similar:
+                    # Clamp similarity to [0, 1] — cosine can be negative
+                    norm_score = max(0.0, min(1.0, float(score)))
+                    if path in candidate_pool:
+                        candidate_pool[path]["_cosine"] = norm_score
+                    else:
+                        meta = await _get_note_meta(path, workspace_path)
+                        if meta:
+                            candidate_pool[path] = {
+                                **meta,
+                                "_bm25": 0.0,
+                                "_cosine": norm_score,
+                                "_graph": 0.0,
+                            }
+        except ImportError:
+            pass
+        except Exception as exc:
+            logger.warning("Cosine retrieval failed: %s", exc)
+
+    if not candidate_pool:
+        return []
+
+    # --- Signal 3: Graph scoring ---
+    graph = graph_service.load_graph(workspace_path)
+    anchors: List[str] = []
+    if graph:
+        anchors = _extract_query_entities(query, graph)
+        candidate_ids = {f"note:{p}" for p in candidate_pool}
+        for path, data in candidate_pool.items():
+            node_id = f"note:{path}"
+            data["_graph"] = _compute_graph_score(
+                node_id, graph, anchors, candidate_ids
+            )
+
+    # --- Weighted fusion ---
+    w_bm25 = WEIGHT_BM25
+    w_cos = WEIGHT_COSINE if cosine_available else 0.0
+    w_graph = WEIGHT_GRAPH if graph else 0.0
+    total_w = w_bm25 + w_cos + w_graph or 1.0
+    w_bm25 /= total_w
+    w_cos /= total_w
+    w_graph /= total_w
+
+    scored: List[Dict] = []
+    for data in candidate_pool.values():
+        final = (
+            w_bm25 * data["_bm25"]
+            + w_cos * data["_cosine"]
+            + w_graph * data["_graph"]
+        )
+        scored.append({
+            **data,
+            "_score": final,
+            "_signals": {
+                "bm25": round(data["_bm25"], 3),
+                "cosine": round(data["_cosine"], 3),
+                "graph": round(data["_graph"], 3),
+            },
+        })
+
+    # Sort by fused score; tie-breaker: recency
+    scored.sort(
+        key=lambda x: (x["_score"], x.get("updated_at", "")),
+        reverse=True,
+    )
+
+    result = _cluster_dedup(scored, limit)
+
     for r in result:
         r.pop("_score", None)
+        r.pop("_bm25", None)
+        r.pop("_cosine", None)
+        r.pop("_graph", None)
+        r.pop("_bm25_score", None)
         r.pop("_node_id", None)
 
     return result

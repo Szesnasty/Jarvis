@@ -82,6 +82,51 @@ async def reindex_endpoint():
     return ReindexResponse(indexed=count)
 
 
+@router.post("/reindex-embeddings")
+async def reindex_embeddings_endpoint():
+    """Rebuild all note embeddings from markdown files."""
+    try:
+        from services.embedding_service import reindex_all as reindex_embeddings_all
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Embedding service unavailable (fastembed not installed)",
+        )
+    try:
+        count = await reindex_embeddings_all()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Reindex failed: {exc}")
+    return {"status": "ok", "notes_embedded": count}
+
+
+@router.get("/semantic-search")
+async def semantic_search_endpoint(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Standalone semantic search using embeddings only."""
+    try:
+        from services.embedding_service import is_available, search_similar
+    except ImportError:
+        return {"results": [], "mode": "unavailable", "error": "fastembed not installed"}
+
+    if not is_available():
+        return {"results": [], "mode": "unavailable", "error": "fastembed not installed"}
+
+    try:
+        results = await search_similar(q, limit=limit)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Semantic search failed: {exc}")
+
+    return {
+        "results": [
+            {"path": path, "similarity": round(score, 3)}
+            for path, score in results
+        ],
+        "mode": "semantic",
+    }
+
+
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 _FOLDER_RE = re.compile(r"^[a-zA-Z0-9-]+$")
 

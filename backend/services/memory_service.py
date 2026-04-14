@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import shutil
 from datetime import datetime, timezone
@@ -10,6 +11,8 @@ import aiosqlite
 from config import get_settings
 from models.database import init_database
 from utils.markdown import add_frontmatter, parse_frontmatter
+
+logger = logging.getLogger(__name__)
 
 
 class NoteNotFoundError(Exception):
@@ -141,19 +144,40 @@ async def list_notes(
             tokens = re.findall(r'\w+', search)[:8]
             if not tokens:
                 return []
-            fts_query = " ".join(t + "*" for t in tokens)
-            query = """
-                SELECT n.path, n.title, n.folder, n.tags, n.updated_at, n.word_count
-                FROM notes n
-                WHERE n.id IN (SELECT rowid FROM notes_fts WHERE notes_fts MATCH ?)
-            """
-            params: list = [fts_query]
+
+            # Column weights: title 10×, body 1×, tags 5×
+            bm25_expr = "bm25(notes_fts, 10.0, 1.0, 5.0)"
+
+            # Try AND first (all terms required)
+            fts_and = " ".join(t + "*" for t in tokens)
+
+            folder_clause = ""
+            params: list = [fts_and]
             if folder:
-                query += " AND n.folder = ?"
+                folder_clause = " AND n.folder = ?"
                 params.append(folder)
-            query += " ORDER BY n.updated_at DESC LIMIT ?"
             params.append(limit)
+
+            # bm25() returns negative values; lower = better match
+            query = f"""
+                SELECT n.path, n.title, n.folder, n.tags,
+                       n.updated_at, n.word_count,
+                       {bm25_expr} AS bm25_score
+                FROM notes n
+                JOIN notes_fts ON notes_fts.rowid = n.id
+                WHERE notes_fts MATCH ?{folder_clause}
+                ORDER BY bm25_score
+                LIMIT ?
+            """
             cursor = await db.execute(query, params)
+            rows = await cursor.fetchall()
+
+            # Fallback to OR if AND returns < 3 results and we have 2+ tokens
+            if len(rows) < 3 and len(tokens) >= 2:
+                fts_or = " OR ".join(t + "*" for t in tokens)
+                params[0] = fts_or
+                cursor = await db.execute(query, params)
+                rows = await cursor.fetchall()
         else:
             query = "SELECT path, title, folder, tags, updated_at, word_count FROM notes"
             params = []
@@ -163,22 +187,26 @@ async def list_notes(
             query += " ORDER BY updated_at DESC LIMIT ?"
             params.append(limit)
             cursor = await db.execute(query, params)
+            rows = await cursor.fetchall()
 
-        rows = await cursor.fetchall()
         results = []
         for row in rows:
             try:
                 tags = json.loads(row["tags"])
             except (json.JSONDecodeError, TypeError):
                 tags = []
-            results.append({
+            item = {
                 "path": row["path"],
                 "title": row["title"],
                 "folder": row["folder"],
                 "tags": tags,
                 "updated_at": row["updated_at"],
                 "word_count": row["word_count"],
-            })
+            }
+            # Include BM25 score for downstream retrieval scoring
+            if search:
+                item["_bm25_score"] = row["bm25_score"]
+            results.append(item)
         return results
 
 
@@ -241,6 +269,7 @@ async def delete_note(
     if db_p.exists():
         async with aiosqlite.connect(str(db_p)) as db:
             await db.execute("DELETE FROM notes WHERE path = ?", (note_path,))
+            await db.execute("DELETE FROM note_embeddings WHERE path = ?", (note_path,))
             await db.commit()
 
     # Invalidate graph cache so it rebuilds without the deleted note
@@ -356,6 +385,17 @@ async def _index_note(
             ),
         )
         await db.commit()
+
+    # Auto-embed for semantic search (skip if fastembed missing or disabled)
+    import os
+    if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") != "1":
+        try:
+            from services.embedding_service import embed_note
+            await embed_note(note_path, full_content, db_path)
+        except ImportError:
+            pass
+        except Exception as exc:
+            logger.warning("embed_note failed for %s: %s", note_path, exc)
 
 
 def _note_metadata(note_path: str, fm: Dict, body: str) -> Dict:

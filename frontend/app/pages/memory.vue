@@ -40,7 +40,7 @@
         :on-delete="onDeleteNote"
         @select="onSelectNote"
         @folder="onFolderChange"
-        @search="onSearch"
+        @search="(q, mode) => onSearch(q, mode)"
       />
     </aside>
     <section class="memory-page__viewer">
@@ -61,13 +61,16 @@
 <script setup lang="ts">
 import type { NoteMetadata, NoteDetail } from '~/types'
 
-const { fetchNotes, fetchNote, deleteNote } = useApi()
+type SearchMode = 'keyword' | 'semantic' | 'hybrid'
+
+const { fetchNotes, semanticSearchNotes, fetchNote, deleteNote } = useApi()
 
 const notes = ref<NoteMetadata[]>([])
 const selectedPath = ref<string | null>(null)
 const selectedNote = ref<NoteDetail | null>(null)
 const activeFolder = ref<string | null>(null)
 const searchQuery = ref('')
+const searchMode = ref<SearchMode>('keyword')
 const showImport = ref(false)
 const showUrlImport = ref(false)
 const showImportMenu = ref(false)
@@ -94,11 +97,32 @@ const folders = computed(() => {
 async function loadNotes() {
   loadingNotes.value = true
   try {
-    const params: { folder?: string; search?: string } = {}
-    if (activeFolder.value) params.folder = activeFolder.value
-    if (searchQuery.value) params.search = searchQuery.value
-    const result = await fetchNotes(params)
-    notes.value = Array.isArray(result) ? result : []
+    if (!searchQuery.value || searchMode.value !== 'semantic') {
+      const params: { folder?: string; search?: string } = {}
+      if (activeFolder.value) params.folder = activeFolder.value
+      if (searchQuery.value) params.search = searchQuery.value
+      const result = await fetchNotes(params)
+      notes.value = Array.isArray(result) ? result : []
+      return
+    }
+
+    const res = await semanticSearchNotes(searchQuery.value, 20)
+    if (res.mode === 'unavailable') {
+      notes.value = []
+      return
+    }
+
+    const paths = (res.results || []).map((h) => h.path)
+    if (paths.length === 0) {
+      notes.value = []
+      return
+    }
+
+    const all = await fetchNotes({ limit: 200 })
+    const byPath = new Map((all || []).map((n) => [n.path, n]))
+    notes.value = paths
+      .map((p) => byPath.get(p))
+      .filter((n): n is NoteMetadata => Boolean(n))
   } finally {
     loadingNotes.value = false
   }
@@ -115,8 +139,9 @@ async function onFolderChange(folder: string | null) {
   await loadNotes()
 }
 
-async function onSearch(query: string) {
+async function onSearch(query: string, mode: SearchMode = 'keyword') {
   searchQuery.value = query
+  searchMode.value = mode
   activeFolder.value = null
   await loadNotes()
 }

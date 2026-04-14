@@ -1,7 +1,13 @@
+import os
 from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+# Disable embedding model loading during tests to avoid loading a 200MB
+# model into every test run. Individual tests that need embeddings can
+# clear this env var in their own fixture.
+os.environ.setdefault("JARVIS_DISABLE_EMBEDDINGS", "1")
 
 from main import app
 

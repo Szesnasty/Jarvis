@@ -57,7 +57,7 @@ const EDGE_COLOR: Record<string, string> = {
   linked:   'rgba(2, 254, 255, 0.75)',
   mentions: 'rgba(192, 132, 252, 0.7)',
   related:  'rgba(2, 254, 255, 0.65)',
-  similar_to: 'rgba(156, 163, 175, 0.4)',
+  similar_to: 'rgba(129, 140, 248, 0.6)', // indigo for semantic similarity
   temporal: 'rgba(250, 204, 21, 0.35)',
 }
 
@@ -67,7 +67,7 @@ const EDGE_PARTICLE_COLOR: Record<string, string> = {
   linked:   'rgba(2, 254, 255, 0.8)',
   mentions: 'rgba(192, 132, 252, 0.7)',
   related:  'rgba(2, 254, 255, 0.7)',
-  similar_to: 'rgba(156, 163, 175, 0.4)',
+  similar_to: 'rgba(165, 180, 252, 0.7)',
   temporal: 'rgba(250, 204, 21, 0.3)',
 }
 

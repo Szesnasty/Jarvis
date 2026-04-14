@@ -31,6 +31,12 @@ export function useApi() {
   const fetchNotes = (params?: { folder?: string; search?: string; limit?: number }) =>
     _api<NoteMetadata[]>('/api/memory/notes', { params })
 
+  const semanticSearchNotes = (q: string, limit = 10) =>
+    _api<{ results: { path: string; similarity: number }[]; mode: string; error?: string }>(
+      '/api/memory/semantic-search',
+      { params: { q, limit } },
+    )
+
   const fetchNote = (path: string) =>
     _api<NoteDetail>(`/api/memory/notes/${encodeURIComponent(path)}`)
 
@@ -118,5 +124,5 @@ export function useApi() {
   const deleteSpecialistFile = (id: string, filename: string) =>
     _api<void>(`/api/specialists/${id}/files/${encodeURIComponent(filename)}`, { method: 'DELETE' })
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile }
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile }
 }

@@ -6,15 +6,15 @@ sources:
   - backend/services/retrieval.py
   - backend/services/context_builder.py
 depends_on: [memory, knowledge-graph]
-last_reviewed: 2026-04-15
-last_updated: 2026-04-15
+last_reviewed: 2026-04-14
+last_updated: 2026-04-14
 ---
 
 # Hybrid Retrieval Pipeline
 
 ## Summary
 
-The retrieval pipeline finds the notes most relevant to a user's message and assembles them into a compact context string for Claude. It combines full-text search with graph-aware scoring — using edge weights, entity anchors, shortest-path distance, and cluster deduplication — so that notes connected to the most relevant hits are surfaced even when they don't match the query directly.
+The retrieval pipeline finds the notes most relevant to a user's message and assembles them into a compact context string for Claude. It fuses three independent signals — **BM25** full-text ranking, **cosine similarity** over local embeddings, and **graph** connectivity scoring — into a single ranked list. Each signal contributes a normalized `[0, 1]` score with default weights `0.35 / 0.35 / 0.30`, and weights are renormalized on the fly when a signal is unavailable so the pipeline degrades gracefully (no embeddings, no graph, or neither). Every returned note carries a `_signals` dict exposing the raw per-signal scores for transparency and debugging.
 
 ## How It Works
 
@@ -22,17 +22,19 @@ The pipeline runs in two stages: retrieval (`retrieval.py`) followed by context 
 
 **Stage 1 — retrieve()**
 
-1. **FTS search via SQLite.** The query is passed to `memory_service.list_notes()` with a `limit` of `3×` the requested result count to provide a wide candidate pool for scoring.
-2. **Load graph for scoring.** The knowledge graph is loaded from cache or disk. If no graph exists, raw FTS order is used.
-3. **Extract query entities.** `_extract_query_entities()` matches query tokens against known graph node labels (persons, tags, areas). If entities are found, path scoring is enabled.
-4. **Score each candidate.** For each FTS result, three scores are computed:
-   - **FTS rank** — reciprocal of FTS position: `1 / (i + 1)`.
-   - **Graph score** — sum of edge weights connecting this note to other FTS hits in the graph, plus a +0.3 convergence bonus if the note connects to 3+ FTS hits.
-   - **Path score** (when anchors exist) — `_score_by_path()` computes the shortest weighted path (BFS, max depth 3) from the candidate to each anchor entity node. Cost = `1 / (weight + 0.01)`, so high-weight edges are cheap to traverse.
-5. **Combine scores.** Without anchors: `fts_rank × 0.6 + graph_score × 0.4`. With anchors: `fts_rank × 0.4 + graph_score × 0.3 + path_score × 0.3`.
-6. **Sort by final score** descending.
-7. **Cluster dedup.** No more than 2 notes from the same folder are returned, preventing one folder from dominating results.
-8. **Trim to limit** (default 5) and strip internal scoring fields.
+1. **Signal 1 — BM25 candidates.** `memory_service.list_notes(search=query, limit=limit*3)` runs the FTS5 query. Each candidate carries a `_bm25_score` from SQLite's built-in BM25 ranker. Scores are normalized against the maximum absolute score in the candidate pool to produce a `[0, 1]` value per note. This is the seed candidate pool.
+2. **Signal 2 — cosine similarity.** If `JARVIS_DISABLE_EMBEDDINGS` is not set and `embedding_service.is_available()` returns true, `search_similar(query, limit*3)` runs the query through the local fastembed model and scores every embedded note by cosine similarity. Scores are clamped to `[0, 1]` (cosine can be negative). Notes already in the candidate pool get their `_cosine` field updated; notes found only by embeddings (no BM25 match) are looked up via `_get_note_meta()` directly from SQLite and joined into the pool with `_bm25 = 0`. Cosine failure (`ImportError`, model load error) is logged as a warning and the pipeline continues without this signal.
+3. **Signal 3 — graph scoring.** The knowledge graph is loaded from cache or disk. When present, `_extract_query_entities()` matches query tokens against known graph node labels (persons, tags, areas). `_compute_graph_score()` then computes, for each candidate, the sum of:
+   - **Edge connectivity** — weighted edges linking the note to other candidates in the pool.
+   - **Convergence bonus** — `+0.3` if the note connects to 3+ other candidates.
+   - **Path score** — when query entities matched anchors, `_score_by_path()` computes the shortest weighted BFS path (max depth 3) from the candidate to each anchor. Step cost is `1 / (edge.weight + 0.01)` so high-weight edges are cheap to traverse.
+   - **Cluster bonus** — `min(similar_to_neighbors × 0.15, 0.45)`, boosting notes that share semantic similarity edges with other candidates.
+
+   The raw graph score is capped at `1.0`.
+4. **Weighted fusion.** Weights default to `WEIGHT_BM25 = 0.35`, `WEIGHT_COSINE = 0.35`, `WEIGHT_GRAPH = 0.30`. Any missing signal is zeroed and the remaining weights are renormalized so they still sum to `1.0`. The final score per note is `w_bm25*bm25 + w_cos*cosine + w_graph*graph`.
+5. **Sort** by `(score, updated_at)` descending — recency is the tiebreaker when scores are equal.
+6. **Cluster dedup.** `_cluster_dedup()` enforces at most 2 notes per folder so a single folder can't dominate the output, then trims to `limit`.
+7. **Cleanup.** Internal scoring fields (`_score`, `_bm25`, `_cosine`, `_graph`, `_bm25_score`, `_node_id`) are stripped from the returned dicts. The `_signals` dict is preserved for transparency — callers can inspect which signal drove each result.
 
 **Stage 2 — build_context()**
 
@@ -46,13 +48,26 @@ The pipeline runs in two stages: retrieval (`retrieval.py`) followed by context 
 
 The 500-character truncation, 3-note cap, and 4,000-character specialist knowledge budget are the primary token-budget controls.
 
+### Graceful degradation
+
+The pipeline is designed to work with 1, 2, or 3 active signals:
+
+| BM25 | Cosine | Graph | Behaviour                                             |
+|------|--------|-------|-------------------------------------------------------|
+| ✅   | ✅     | ✅    | Full fusion at `0.35 / 0.35 / 0.30`.                   |
+| ✅   | ✅     | ❌    | No graph — weights renormalize to `0.5 / 0.5`.         |
+| ✅   | ❌     | ✅    | fastembed not installed — renormalize to `0.54 / 0.46`.|
+| ✅   | ❌     | ❌    | Pure BM25 with folder dedup.                           |
+
+Cosine is disabled when `JARVIS_DISABLE_EMBEDDINGS=1` (test mode), when `fastembed` is not installed, or when `search_similar` raises. Graph is disabled when no `graph.json` exists yet.
+
 ### Graph-scoped context
 
 `build_graph_scoped_context(node_id, user_message)` builds context from a node's graph neighborhood only, without FTS search. It fetches depth-2 neighbors, reads up to 5 note neighbors (500 chars each), and wraps them in `<retrieved_note>` tags. This is used when the user navigates to chat from the graph's node detail panel ("Ask about this").
 
 ## Key Files
 
-- `backend/services/retrieval.py` — Weighted hybrid FTS + graph scoring, entity-based path scoring, BFS shortest weighted path, cluster dedup.
+- `backend/services/retrieval.py` — 3-signal hybrid fusion (BM25 + cosine + graph), weight renormalization, `_compute_graph_score` (edge connectivity + convergence + path + similar_to cluster bonus), folder dedup, `_signals` transparency.
 - `backend/services/context_builder.py` — Orchestrates retrieval, applies specialist scoping, fetches note bodies, produces the final `(context_text, token_estimate)` tuple for Claude. Also provides `build_graph_scoped_context()` and the shared `_extract_keywords()` utility.
 
 ## API / Interface
@@ -67,9 +82,15 @@ async def retrieve(
 ) -> List[Dict]:
 ```
 
-Returns a ranked list of note dicts. Each dict contains at minimum a `"path"` key and a `"folder"` key. Scoring is graph-weighted when graph data is available, with cluster dedup limiting folder repetition.
+Returns a ranked list of note dicts. Each dict contains at minimum a `"path"` key, a `"folder"` key, and a `"_signals"` dict of the form:
 
-Returns an empty list if `query` is blank or whitespace-only.
+```python
+{"bm25": 0.72, "cosine": 0.45, "graph": 0.31}
+```
+
+Any missing signal is reported as `0.0`. Internal intermediate fields are stripped before return.
+
+Returns an empty list if `query` is blank or whitespace-only, or if no signal produced any candidates.
 
 ### `build_context()`
 
@@ -94,13 +115,27 @@ async def build_graph_scoped_context(
 
 Returns a context string scoped to the node's neighborhood (depth 2, max 5 notes), or `None` if no neighbor notes were found.
 
+### Tuning constants
+
+```python
+WEIGHT_BM25 = 0.35
+WEIGHT_COSINE = 0.35
+WEIGHT_GRAPH = 0.30
+```
+
+Defined at module top of `retrieval.py`. Changing these rebalances signal influence; the renormalization logic guarantees the effective weights still sum to 1.0 even when a signal is absent.
+
 ## Gotchas
 
-- **Graph scoring requires a built graph.** If no `graph.json` exists, `retrieve()` falls back to raw FTS order with no graph weighting. The first run after workspace creation will behave purely as keyword search until the graph is built.
-- **Entity anchor matching is substring-based.** `_extract_query_entities()` checks if a node label appears anywhere in the query (lowercased). This can produce false positives for short labels like "AI" or "Go".
+- **Cosine is disabled entirely under `JARVIS_DISABLE_EMBEDDINGS=1`.** The test suite sets this env var by default (see `conftest.py`) to avoid loading the 220MB fastembed model on every run. Tests that need the full pipeline must clear the var and stub the embedding functions to stay fast.
+- **`fastembed` is an optional dependency.** If it isn't installed the pipeline silently falls back to `BM25 + graph`. The retrieval code catches `ImportError` without logging, so the only indication that cosine was unavailable is an all-zero `_cosine` signal on results.
+- **Cosine scores are clamped to `[0, 1]`.** Embeddings can return slightly negative cosine values for unrelated content; those become `0` rather than pulling the final score below zero.
+- **Graph scoring requires a built graph.** If no `graph.json` exists, the graph signal is zeroed and its weight is renormalized out. The first run after workspace creation will rank by `BM25 + cosine` until the graph is rebuilt.
+- **Entity anchor matching is substring-based.** `_extract_query_entities()` checks if a node label appears anywhere in the lowercased query. This can produce false positives for short labels like "AI" or "Go".
 - **BFS shortest-path is approximate.** `_shortest_weighted_path()` uses layered BFS (not Dijkstra), so it doesn't guarantee the true shortest weighted path — it finds the minimum-cost step at each layer. For max depth 3 this is generally close enough.
-- **Silent note-read failures.** If a note's path exists in the index but the file is missing on disk, `build_context()` skips it without logging. A partially deleted workspace can silently reduce context quality.
-- **Specialist scoping strips graph-scored notes too.** `_scope_results()` filters by path prefix without distinguishing FTS from graph results. A graph-scored note that lives outside a specialist's declared sources will be dropped even if it's highly relevant.
-- **500-character truncation is unconditional.** Long notes are always cut at 500 characters regardless of how short the rest of the context is. There is no fill-up logic that uses the remaining token budget.
 - **Cluster dedup cap of 2 per folder.** In workspaces where most notes live in one folder (e.g. `inbox/`), the cap aggressively limits results — potentially returning fewer than `limit` items.
+- **Recency is only a tiebreaker.** Two notes with the same fused score are sorted by `updated_at` descending, but recency has zero influence when scores differ. A months-old note with a high BM25 + cosine match will still outrank yesterday's weakly matching note.
+- **Silent note-read failures.** If a note's path exists in the index but the file is missing on disk, `build_context()` skips it without logging. A partially deleted workspace can silently reduce context quality.
+- **Specialist scoping strips graph-scored notes too.** `_scope_results()` filters by path prefix without distinguishing signal sources. A graph-scored note that lives outside a specialist's declared sources will be dropped even if it's highly relevant.
+- **500-character truncation is unconditional.** Long notes are always cut at 500 characters regardless of how short the rest of the context is. There is no fill-up logic that uses the remaining token budget.
 - **`workspace_path` threading.** Both functions accept a `workspace_path` argument that is forwarded to all service calls. Passing `None` in both calls is safe — each underlying service falls back to its own default — but passing mismatched values between `retrieve()` and `build_context()` would silently produce results from different workspaces.

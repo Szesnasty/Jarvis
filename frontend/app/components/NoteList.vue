@@ -5,7 +5,7 @@
         v-model="searchQuery"
         type="text"
         class="note-list__search-input"
-        placeholder="Search notes..."
+        :placeholder="searchPlaceholder"
         @keydown.enter="onSearch"
       />
       <button
@@ -14,6 +14,21 @@
         @click="onClearSearch"
       >
         Clear
+      </button>
+    </div>
+    <div class="note-list__modes" role="tablist" aria-label="Search mode">
+      <button
+        v-for="mode in searchModes"
+        :key="mode.value"
+        type="button"
+        class="note-list__mode-btn"
+        :class="{ 'note-list__mode-btn--active': searchMode === mode.value }"
+        :title="mode.tooltip"
+        :aria-pressed="searchMode === mode.value"
+        @click="onChangeMode(mode.value)"
+      >
+        <span class="note-list__mode-icon">{{ mode.icon }}</span>
+        {{ mode.label }}
       </button>
     </div>
 
@@ -78,6 +93,8 @@
 <script setup lang="ts">
 import type { NoteMetadata } from '~/types'
 
+type SearchMode = 'keyword' | 'semantic' | 'hybrid'
+
 const props = defineProps<{
   notes: NoteMetadata[]
   selectedPath: string | null
@@ -90,12 +107,31 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [path: string]
   folder: [folder: string | null]
-  search: [query: string]
+  search: [query: string, mode: SearchMode]
 }>()
 
 const searchQuery = ref('')
+const searchMode = ref<SearchMode>('keyword')
 const deleteTarget = ref<NoteMetadata | null>(null)
 const deleting = ref(false)
+
+const searchModes: { value: SearchMode; label: string; icon: string; tooltip: string }[] = [
+  { value: 'keyword', label: 'Keyword', icon: '🔍', tooltip: 'Exact word match via BM25' },
+  { value: 'semantic', label: 'Semantic', icon: '🧠', tooltip: 'Meaning-based search via embeddings' },
+  { value: 'hybrid', label: 'Hybrid', icon: '⚡', tooltip: 'Combined BM25 + embeddings + graph' },
+]
+
+const searchPlaceholder = computed(() => {
+  if (searchMode.value === 'semantic') return 'Ask by meaning…'
+  if (searchMode.value === 'hybrid') return 'Hybrid search…'
+  return 'Search notes...'
+})
+
+function onChangeMode(mode: SearchMode) {
+  if (searchMode.value === mode) return
+  searchMode.value = mode
+  if (searchQuery.value) emit('search', searchQuery.value, mode)
+}
 
 function confirmDelete(note: NoteMetadata) {
   deleteTarget.value = note
@@ -121,12 +157,12 @@ function onFolderClick(folder: string) {
 }
 
 function onSearch() {
-  emit('search', searchQuery.value)
+  emit('search', searchQuery.value, searchMode.value)
 }
 
 function onClearSearch() {
   searchQuery.value = ''
-  emit('search', '')
+  emit('search', '', searchMode.value)
 }
 </script>
 
@@ -167,6 +203,44 @@ function onClearSearch() {
 .note-list__clear:hover {
   color: var(--neon-cyan);
   border-color: var(--neon-cyan-30);
+}
+
+.note-list__modes {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.note-list__mode-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  transition: all 0.2s;
+}
+
+.note-list__mode-btn:hover {
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan-30);
+}
+
+.note-list__mode-btn--active {
+  background: var(--neon-cyan-08);
+  border-color: var(--neon-cyan-30);
+  color: var(--neon-cyan);
+  box-shadow: 0 0 8px var(--neon-cyan-08);
+}
+
+.note-list__mode-icon {
+  font-size: 0.85rem;
+  line-height: 1;
 }
 
 .note-list__folders {

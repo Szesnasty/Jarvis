@@ -41,6 +41,7 @@
         "backend/services/memory_service.py",
         "backend/services/ingest.py",
         "backend/services/url_ingest.py",
+        "backend/services/embedding_service.py",
         "backend/utils/markdown.py",
         "frontend/app/pages/memory.vue",
         "frontend/app/components/NoteList.vue",
