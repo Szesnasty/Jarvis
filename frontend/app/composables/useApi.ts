@@ -1,339 +1,111 @@
-import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, SpecialistSummary, SpecialistDetail, UrlIngestResult } from '~/types'
+import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, SpecialistSummary, SpecialistDetail, SpecialistFileInfo, UrlIngestResult } from '~/types'
 import { ApiError } from '~/types'
 
+function _wrapError(error: unknown): never {
+  if (error && typeof error === 'object' && 'status' in error) {
+    const status = (error as { status: number }).status
+    const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
+    throw new ApiError(status, message)
+  }
+  throw new ApiError(0, 'Network error')
+}
+
+async function _api<T>(url: string, opts?: Parameters<typeof $fetch>[1]): Promise<T> {
+  try {
+    return await $fetch<T>(url, opts)
+  } catch (error: unknown) {
+    _wrapError(error)
+  }
+}
+
 export function useApi() {
-  async function fetchHealth(): Promise<HealthResponse> {
-    try {
-      return await $fetch<HealthResponse>('/api/health')
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchHealth = () => _api<HealthResponse>('/api/health')
+  const fetchWorkspaceStatus = () => _api<WorkspaceStatusResponse>('/api/workspace/status')
 
-  async function fetchWorkspaceStatus(): Promise<WorkspaceStatusResponse> {
-    try {
-      return await $fetch<WorkspaceStatusResponse>('/api/workspace/status')
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const initWorkspace = (apiKey: string) =>
+    _api<WorkspaceInitResponse>('/api/workspace/init', { method: 'POST', body: { api_key: apiKey } })
 
-  async function initWorkspace(apiKey: string): Promise<WorkspaceInitResponse> {
-    try {
-      return await $fetch<WorkspaceInitResponse>('/api/workspace/init', {
-        method: 'POST',
-        body: { api_key: apiKey },
-      })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchNotes = (params?: { folder?: string; search?: string; limit?: number }) =>
+    _api<NoteMetadata[]>('/api/memory/notes', { params })
 
-  async function fetchNotes(params?: { folder?: string; search?: string; limit?: number }): Promise<NoteMetadata[]> {
-    try {
-      return await $fetch<NoteMetadata[]>('/api/memory/notes', { params })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchNote = (path: string) =>
+    _api<NoteDetail>(`/api/memory/notes/${encodeURIComponent(path)}`)
 
-  async function fetchNote(path: string): Promise<NoteDetail> {
-    try {
-      return await $fetch<NoteDetail>(`/api/memory/notes/${path}`)
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const deleteNote = (path: string) =>
+    _api<void>(`/api/memory/notes/${encodeURIComponent(path)}`, { method: 'DELETE' })
 
-  async function deleteNote(path: string): Promise<void> {
-    try {
-      await $fetch(`/api/memory/notes/${path}`, { method: 'DELETE' })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchSessions = (limit = 20) =>
+    _api<SessionMetadata[]>('/api/sessions', { params: { limit } })
 
-  async function fetchSessions(limit = 20): Promise<SessionMetadata[]> {
-    try {
-      return await $fetch<SessionMetadata[]>('/api/sessions', { params: { limit } })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchSession = (sessionId: string) =>
+    _api<SessionDetail>(`/api/sessions/${sessionId}`)
 
-  async function fetchSession(sessionId: string): Promise<SessionDetail> {
-    try {
-      return await $fetch<SessionDetail>(`/api/sessions/${sessionId}`)
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const resumeSession = (sessionId: string) =>
+    _api<{ session_id: string; status: string }>(`/api/sessions/${sessionId}/resume`, { method: 'POST' })
 
-  async function resumeSession(sessionId: string): Promise<{ session_id: string; status: string }> {
-    try {
-      return await $fetch<{ session_id: string; status: string }>(`/api/sessions/${sessionId}/resume`, { method: 'POST' })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const deleteSession = (sessionId: string) =>
+    _api<void>(`/api/sessions/${sessionId}`, { method: 'DELETE' })
 
-  async function deleteSession(sessionId: string): Promise<void> {
-    try {
-      await $fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchPreferences = () =>
+    _api<Record<string, string>>('/api/preferences')
 
-  async function fetchPreferences(): Promise<Record<string, string>> {
-    try {
-      return await $fetch<Record<string, string>>('/api/preferences')
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const setPreference = (key: string, value: string) =>
+    _api<Record<string, string>>('/api/preferences', { method: 'PATCH', body: { key, value } })
 
-  async function setPreference(key: string, value: string): Promise<Record<string, string>> {
-    try {
-      return await $fetch<Record<string, string>>('/api/preferences', { method: 'PATCH', body: { key, value } })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchGraph = () => _api<GraphData>('/api/graph')
+  const fetchGraphStats = () => _api<GraphStats>('/api/graph/stats')
 
-  async function fetchGraph(): Promise<GraphData> {
-    try {
-      return await $fetch<GraphData>('/api/graph')
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchGraphNeighbors = (nodeId: string, depth = 1) =>
+    _api<GraphNode[]>('/api/graph/neighbors', { params: { node_id: nodeId, depth } })
 
-  async function fetchGraphStats(): Promise<GraphStats> {
-    try {
-      return await $fetch<GraphStats>('/api/graph/stats')
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const rebuildGraph = () =>
+    _api<GraphStats>('/api/graph/rebuild', { method: 'POST' })
 
-  async function fetchGraphNeighbors(nodeId: string, depth = 1): Promise<GraphNode[]> {
-    try {
-      return await $fetch<GraphNode[]>('/api/graph/neighbors', { params: { node_id: nodeId, depth } })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchSpecialists = () => _api<SpecialistSummary[]>('/api/specialists')
 
-  async function rebuildGraph(): Promise<GraphStats> {
-    try {
-      return await $fetch<GraphStats>('/api/graph/rebuild', { method: 'POST' })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const fetchSpecialist = (id: string) =>
+    _api<SpecialistDetail>(`/api/specialists/${id}`)
 
-  async function fetchSpecialists(): Promise<SpecialistSummary[]> {
-    try {
-      return await $fetch<SpecialistSummary[]>('/api/specialists')
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const createSpecialist = (data: Partial<SpecialistDetail>) =>
+    _api<SpecialistDetail>('/api/specialists', { method: 'POST', body: data })
 
-  async function fetchSpecialist(id: string): Promise<SpecialistDetail> {
-    try {
-      return await $fetch<SpecialistDetail>(`/api/specialists/${id}`)
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const updateSpecialist = (id: string, data: Partial<SpecialistDetail>) =>
+    _api<SpecialistDetail>(`/api/specialists/${id}`, { method: 'PUT', body: data })
 
-  async function createSpecialist(data: Partial<SpecialistDetail>): Promise<SpecialistDetail> {
-    try {
-      return await $fetch<SpecialistDetail>('/api/specialists', { method: 'POST', body: data })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const deleteSpecialist = (id: string) =>
+    _api<void>(`/api/specialists/${id}`, { method: 'DELETE' })
 
-  async function updateSpecialist(id: string, data: Partial<SpecialistDetail>): Promise<SpecialistDetail> {
-    try {
-      return await $fetch<SpecialistDetail>(`/api/specialists/${id}`, { method: 'PUT', body: data })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const activateSpecialist = (id: string) =>
+    _api<{ status: string }>(`/api/specialists/activate/${id}`, { method: 'POST' })
 
-  async function deleteSpecialist(id: string): Promise<void> {
-    try {
-      await $fetch(`/api/specialists/${id}`, { method: 'DELETE' })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
-
-  async function activateSpecialist(id: string): Promise<{ status: string }> {
-    try {
-      return await $fetch<{ status: string }>(`/api/specialists/activate/${id}`, { method: 'POST' })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
-
-  async function deactivateSpecialist(): Promise<{ status: string }> {
-    try {
-      return await $fetch<{ status: string }>('/api/specialists/deactivate', { method: 'POST' })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
-  }
+  const deactivateSpecialist = () =>
+    _api<{ status: string }>('/api/specialists/deactivate', { method: 'POST' })
 
   async function fetchActiveSpecialist(): Promise<SpecialistDetail | null> {
-    try {
-      const result = await $fetch<SpecialistDetail | { active: null }>('/api/specialists/active')
-      if ('active' in result && result.active === null) return null
-      return result as SpecialistDetail
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
+    const result = await _api<SpecialistDetail | { active: null }>('/api/specialists/active')
+    if ('active' in result && result.active === null) return null
+    return result as SpecialistDetail
   }
 
-  async function ingestUrl(url: string, folder = 'knowledge', summarize = false): Promise<UrlIngestResult> {
-    try {
-      return await $fetch<UrlIngestResult>('/api/memory/ingest-url', {
-        method: 'POST',
-        body: { url, folder, summarize },
-      })
-    } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'status' in error) {
-        const status = (error as { status: number }).status
-        const message = (error as { statusMessage?: string }).statusMessage ?? 'Request failed'
-        throw new ApiError(status, message)
-      }
-      throw new ApiError(0, 'Network error')
-    }
+  const ingestUrl = (url: string, folder = 'knowledge', summarize = false) =>
+    _api<UrlIngestResult>('/api/memory/ingest-url', { method: 'POST', body: { url, folder, summarize } })
+
+  // --- Specialist Files ---
+
+  const fetchSpecialistFiles = (id: string) =>
+    _api<SpecialistFileInfo[]>(`/api/specialists/${id}/files`)
+
+  const uploadSpecialistFile = async (id: string, file: File): Promise<SpecialistFileInfo> => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return _api<SpecialistFileInfo>(`/api/specialists/${id}/files`, { method: 'POST', body: formData })
   }
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl }
+  const ingestSpecialistUrl = (id: string, url: string, summarize = false) =>
+    _api<SpecialistFileInfo>(`/api/specialists/${id}/ingest-url`, { method: 'POST', body: { url, summarize } })
+
+  const deleteSpecialistFile = (id: string, filename: string) =>
+    _api<void>(`/api/specialists/${id}/files/${encodeURIComponent(filename)}`, { method: 'DELETE' })
+
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile }
 }

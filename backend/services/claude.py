@@ -96,6 +96,10 @@ class ClaudeService:
     def __init__(self, api_key: str):
         self.client = anthropic.AsyncAnthropic(api_key=api_key)
 
+    async def close(self) -> None:
+        """Close the underlying HTTP client to release connections."""
+        await self.client.close()
+
     async def stream_response(
         self,
         messages: list[dict],

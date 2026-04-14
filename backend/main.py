@@ -1,8 +1,12 @@
+import logging
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from config import get_settings
+from models.database import init_database
 from models.schemas import HealthResponse
 from routers.chat import router as chat_router
 from routers.graph import router as graph_router
@@ -13,19 +17,30 @@ from routers.settings import router as settings_router
 from routers.specialists import router as specialists_router
 from routers.workspace import router as workspace_router
 
+logger = logging.getLogger(__name__)
+
 APP_VERSION = "0.1.0"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_settings()
+    db_path = settings.workspace_path / "app" / "jarvis.db"
+    if db_path.parent.exists():
+        await init_database(db_path)
+    yield
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
 
-    app = FastAPI(title="Jarvis API", version=APP_VERSION)
+    app = FastAPI(title="Jarvis API", version=APP_VERSION, lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"],
     )
 
@@ -44,6 +59,7 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
+        logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
         return JSONResponse(
             status_code=500,
             content={"detail": "Internal server error"},
