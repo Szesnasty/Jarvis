@@ -23,6 +23,8 @@ def save_preference(
 ) -> None:
     if not key or not key.strip():
         raise ValueError("Preference key cannot be empty")
+    if len(value) > 2000:
+        raise ValueError("Preference value too long (max 2000 characters)")
     path = _prefs_path(workspace_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     prefs = load_preferences(workspace_path)

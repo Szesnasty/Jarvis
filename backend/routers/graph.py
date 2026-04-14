@@ -23,11 +23,13 @@ async def get_stats():
 
 @router.get("/neighbors")
 async def get_neighbors(node_id: str, depth: int = 1):
+    depth = max(1, min(depth, 5))  # cap depth to prevent DoS
     return graph_service.get_neighbors(node_id, depth)
 
 
 @router.post("/rebuild")
 async def rebuild_graph():
+    import asyncio
     graph_service.invalidate_cache()
-    graph = graph_service.rebuild_graph()
+    graph = await asyncio.to_thread(graph_service.rebuild_graph)
     return graph.stats()

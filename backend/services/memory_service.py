@@ -34,11 +34,26 @@ def _trash_path(workspace_path: Optional[Path] = None) -> Path:
     return path
 
 
-def _validate_path(note_path: str) -> None:
-    """Prevent path traversal attacks."""
+def _validate_path(note_path: str, base: Optional[Path] = None) -> None:
+    """Prevent path traversal attacks.
+
+    Uses resolve() + relative_to() containment check to block all traversal
+    patterns including Windows absolute paths and encoded sequences.
+    """
     normalized = Path(note_path).as_posix()
     if ".." in normalized or normalized.startswith("/"):
         raise ValueError("Invalid path: path traversal not allowed")
+    # Additional containment check when base is provided
+    if base is not None:
+        try:
+            resolved = (base / note_path).resolve()
+            base_resolved = base.resolve()
+            resolved.relative_to(base_resolved)
+        except (ValueError, OSError):
+            raise ValueError("Invalid path: path traversal not allowed")
+    # Block Windows absolute paths (e.g. C:\, D:/)
+    if len(note_path) >= 2 and note_path[1] == ':':
+        raise ValueError("Invalid path: absolute paths not allowed")
 
 
 async def create_note(
@@ -46,8 +61,8 @@ async def create_note(
     content: str,
     workspace_path: Optional[Path] = None,
 ) -> Dict:
-    _validate_path(note_path)
     mem = _memory_path(workspace_path)
+    _validate_path(note_path, mem)
     db_p = _db_path(workspace_path)
 
     if not note_path.endswith(".md"):
@@ -82,8 +97,8 @@ async def get_note(
     note_path: str,
     workspace_path: Optional[Path] = None,
 ) -> Dict:
-    _validate_path(note_path)
     mem = _memory_path(workspace_path)
+    _validate_path(note_path, mem)
     file_path = mem / note_path
 
     if not file_path.exists():
@@ -91,7 +106,7 @@ async def get_note(
 
     content = file_path.read_text(encoding="utf-8")
     fm, body = parse_frontmatter(content)
-    
+
     # Convert any non-JSON-serializable objects in frontmatter
     for key, value in fm.items():
         if hasattr(value, 'isoformat'):  # datetime objects
@@ -150,17 +165,21 @@ async def list_notes(
             cursor = await db.execute(query, params)
 
         rows = await cursor.fetchall()
-        return [
-            {
+        results = []
+        for row in rows:
+            try:
+                tags = json.loads(row["tags"])
+            except (json.JSONDecodeError, TypeError):
+                tags = []
+            results.append({
                 "path": row["path"],
                 "title": row["title"],
                 "folder": row["folder"],
-                "tags": json.loads(row["tags"]),
+                "tags": tags,
                 "updated_at": row["updated_at"],
                 "word_count": row["word_count"],
-            }
-            for row in rows
-        ]
+            })
+        return results
 
 
 async def append_note(
@@ -168,8 +187,8 @@ async def append_note(
     append_text: str,
     workspace_path: Optional[Path] = None,
 ) -> Dict:
-    _validate_path(note_path)
     mem = _memory_path(workspace_path)
+    _validate_path(note_path, mem)
     db_p = _db_path(workspace_path)
     file_path = mem / note_path
 
@@ -194,31 +213,47 @@ async def delete_note(
     note_path: str,
     workspace_path: Optional[Path] = None,
 ) -> None:
-    _validate_path(note_path)
     mem = _memory_path(workspace_path)
+    _validate_path(note_path, mem)
     db_p = _db_path(workspace_path)
     file_path = mem / note_path
 
-    if not file_path.exists():
+    file_exists = file_path.exists()
+
+    # Check that either the file or a DB entry exists
+    has_db_entry = False
+    if db_p.exists():
+        async with aiosqlite.connect(str(db_p)) as db:
+            cursor = await db.execute("SELECT 1 FROM notes WHERE path = ?", (note_path,))
+            has_db_entry = await cursor.fetchone() is not None
+
+    if not file_exists and not has_db_entry:
         raise NoteNotFoundError(f"Note not found: {note_path}")
 
-    trash = _trash_path(workspace_path)
-    dest = trash / note_path
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(file_path), str(dest))
+    # Move file to trash if it exists on disk
+    if file_exists:
+        trash = _trash_path(workspace_path)
+        dest = trash / note_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(file_path), str(dest))
 
+    # Always clean up the DB entry
     if db_p.exists():
         async with aiosqlite.connect(str(db_p)) as db:
             await db.execute("DELETE FROM notes WHERE path = ?", (note_path,))
             await db.commit()
+
+    # Invalidate graph cache so it rebuilds without the deleted note
+    from services.graph_service import invalidate_cache
+    invalidate_cache()
 
 
 async def index_note_file(
     note_path: str,
     workspace_path: Optional[Path] = None,
 ) -> None:
-    _validate_path(note_path)
     mem = _memory_path(workspace_path)
+    _validate_path(note_path, mem)
     db_p = _db_path(workspace_path)
     file_path = mem / note_path
 
@@ -236,18 +271,40 @@ async def reindex_all(workspace_path: Optional[Path] = None) -> int:
 
     await init_database(db_p)
 
+    count = 0
     async with aiosqlite.connect(str(db_p)) as db:
         await db.execute("DELETE FROM notes")
+        if mem.exists():
+            for md_file in mem.rglob("*.md"):
+                rel = md_file.relative_to(mem).as_posix()
+                content = md_file.read_text(encoding="utf-8")
+                fm, body = parse_frontmatter(content)
+                now = datetime.now(timezone.utc).isoformat()
+                folder = str(Path(rel).parent) if "/" in rel else ""
+                tags = json.dumps(fm.get("tags", []), default=str)
+                preview = body[:200].strip()
+                word_count = len(body.split())
+                await db.execute(
+                    """
+                    INSERT INTO notes (path, title, folder, content_preview, body, tags, frontmatter,
+                                      created_at, updated_at, word_count, indexed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(path) DO UPDATE SET
+                        title=excluded.title, folder=excluded.folder,
+                        content_preview=excluded.content_preview, body=excluded.body,
+                        tags=excluded.tags, frontmatter=excluded.frontmatter,
+                        updated_at=excluded.updated_at, word_count=excluded.word_count,
+                        indexed_at=excluded.indexed_at
+                    """,
+                    (
+                        rel, fm.get("title", Path(rel).stem), folder, preview, body,
+                        tags, json.dumps(fm, default=str),
+                        fm.get("created_at", now), fm.get("updated_at", now),
+                        word_count, now,
+                    ),
+                )
+                count += 1
         await db.commit()
-
-    count = 0
-    if mem.exists():
-        for md_file in mem.rglob("*.md"):
-            rel = md_file.relative_to(mem).as_posix()
-            content = md_file.read_text(encoding="utf-8")
-            fm, body = parse_frontmatter(content)
-            await _index_note(rel, content, fm, body, db_p)
-            count += 1
 
     return count
 

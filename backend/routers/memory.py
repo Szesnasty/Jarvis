@@ -1,3 +1,4 @@
+import re
 import tempfile
 from pathlib import Path
 from typing import List, Optional
@@ -81,6 +82,10 @@ async def reindex_endpoint():
     return ReindexResponse(indexed=count)
 
 
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+_FOLDER_RE = re.compile(r"^[a-zA-Z0-9-]+$")
+
+
 @router.post("/ingest")
 async def ingest_file(
     file: UploadFile = File(...),
@@ -88,11 +93,17 @@ async def ingest_file(
 ):
     from services.ingest import IngestError, fast_ingest
 
+    # Validate folder against path traversal
+    if not _FOLDER_RE.match(folder):
+        raise HTTPException(status_code=400, detail="Invalid folder name")
+
     with tempfile.NamedTemporaryFile(
         delete=False,
         suffix=Path(file.filename or "upload").suffix,
     ) as tmp:
         content = await file.read()
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
         tmp.write(content)
         tmp_path = Path(tmp.name)
 

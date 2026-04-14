@@ -1,5 +1,9 @@
+import logging
+
 import aiosqlite
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS notes (
@@ -49,7 +53,12 @@ END;
 """
 
 
+_VALID_TABLES = {"notes"}
+
+
 async def _column_exists(db, table: str, column: str) -> bool:
+    if table not in _VALID_TABLES:
+        raise ValueError(f"Invalid table name: {table}")
     cursor = await db.execute(f"PRAGMA table_info({table})")
     rows = await cursor.fetchall()
     return any(row[1] == column for row in rows)
@@ -74,19 +83,19 @@ async def init_database(db_path: Path) -> None:
             await db.execute("ALTER TABLE notes ADD COLUMN body TEXT DEFAULT ''")
 
         if not await _fts_indexes_body(db):
-            await db.executescript(
-                "DROP TRIGGER IF EXISTS notes_ai;"
-                "DROP TRIGGER IF EXISTS notes_au;"
-                "DROP TRIGGER IF EXISTS notes_ad;"
-                "DROP TABLE IF EXISTS notes_fts;"
-            )
+            # Drop and recreate FTS + triggers atomically in one script
+            try:
+                await db.executescript(
+                    "DROP TRIGGER IF EXISTS notes_ai;"
+                    "DROP TRIGGER IF EXISTS notes_au;"
+                    "DROP TRIGGER IF EXISTS notes_ad;"
+                    "DROP TABLE IF EXISTS notes_fts;"
+                )
+            except Exception as exc:
+                logger.error("Failed to drop old FTS objects: %s", exc)
 
         try:
-            await db.executescript(FTS_SQL)
-        except Exception:
-            pass
-        try:
-            await db.executescript(TRIGGER_SQL)
-        except Exception:
-            pass
+            await db.executescript(FTS_SQL + "\n" + TRIGGER_SQL)
+        except Exception as exc:
+            logger.error("Failed to create FTS table/triggers: %s", exc)
         await db.commit()

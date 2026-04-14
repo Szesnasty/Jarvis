@@ -1,5 +1,5 @@
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -11,6 +11,24 @@ pytestmark = pytest.mark.anyio(backends=["asyncio"])
 @pytest.fixture(params=["asyncio"])
 def anyio_backend(request):
     return request.param
+
+
+@pytest.fixture(autouse=True)
+def isolate_workspace(tmp_path, monkeypatch):
+    """Prevent tests from writing session files to the real workspace."""
+    settings = MagicMock()
+    settings.workspace_path = tmp_path
+    for mod in ["services.session_service", "services.memory_service",
+                "services.graph_service", "services.context_builder",
+                "services.preference_service", "services.token_tracking",
+                "services.workspace_service"]:
+        try:
+            monkeypatch.setattr(f"{mod}.get_settings", lambda: settings)
+        except AttributeError:
+            pass
+    for d in ["app", "app/sessions", "memory", "memory/inbox",
+              "memory/preferences", "graph"]:
+        (tmp_path / d).mkdir(parents=True, exist_ok=True)
 
 
 FAKE_API_KEY = "sk-ant-test-fake-key-do-not-use"
