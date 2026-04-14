@@ -90,6 +90,7 @@
 | [18a](step-18a-multi-provider-keys-frontend.md) | Multi-provider API keys: frontend (browser storage, Settings UI, provider cards) | ⬜ |
 | [18b](step-18b-multi-provider-backend.md) | Multi-provider backend: LiteLLM integration (unified streaming, per-request keys) | ⬜ |
 | [18c](step-18c-model-selector.md) | Model selector UI + per-specialist model config + persistence | ⬜ |
+| [18d](step-18d-onboarding-multi-provider.md) | Onboarding redesign: multi-provider welcome flow + keyless workspace init | ⬜ |
 
 ---
 
