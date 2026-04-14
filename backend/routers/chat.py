@@ -262,13 +262,11 @@ async def _handle_message(
         provider=provider or "anthropic",
     )
 
-    # Periodically save conversation to memory (every 3rd assistant reply)
-    session = session_service.get_session(session_id)
-    if session:
-        msg_count = len(session.get("messages", []))
-        if msg_count >= 4 and msg_count % 6 == 0:  # every 3rd exchange (6 msgs)
-            import asyncio
-            asyncio.ensure_future(_save_session_bg(session_id))
+    # Save conversation to memory after every assistant reply.
+    # First save happens after the first exchange; subsequent saves update the
+    # same note (dedup by session_id in frontmatter).
+    import asyncio
+    asyncio.ensure_future(_save_session_bg(session_id))
 
 
 def _parse_message(raw: str) -> tuple:

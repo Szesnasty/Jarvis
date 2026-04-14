@@ -259,14 +259,14 @@ async def test_save_session_to_memory_skips_short(ws):
     assert result is None
 
 
-async def test_save_session_to_memory_skips_trivial(ws):
-    """A single short exchange like 'hello'/'hi' should not be saved to memory."""
+async def test_save_session_to_memory_saves_trivial(ws):
+    """Even a short exchange like 'hello'/'hi' is saved — all conversations matter."""
     sid = create_session()
     add_message(sid, "user", "hello")
     add_message(sid, "assistant", "Hi there! How can I help?")
 
     result = await save_session_to_memory(sid, workspace_path=ws)
-    assert result is None
+    assert result is not None
 
 
 async def test_save_session_to_memory_saves_when_active_tools_used(ws):
@@ -280,15 +280,15 @@ async def test_save_session_to_memory_saves_when_active_tools_used(ws):
     assert note_path is not None
 
 
-async def test_save_session_to_memory_skips_passive_tools_only(ws):
-    """Sessions with only passive tools (search/read) should not be saved."""
+async def test_save_session_to_memory_saves_with_passive_tools(ws):
+    """Sessions with passive tools are saved — all conversations matter."""
     sid = create_session()
     add_message(sid, "user", "hello")
     add_message(sid, "assistant", "Hi! I searched your notes.")
     record_tool_use(sid, "search_notes")
 
     result = await save_session_to_memory(sid, workspace_path=ws)
-    assert result is None
+    assert result is not None
 
 
 async def test_save_session_to_memory_saves_when_long_input(ws):

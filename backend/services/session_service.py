@@ -405,27 +405,12 @@ async def save_session_to_memory(
         return None
 
     messages = session.get("messages", [])
-    # Skip trivial sessions (fewer than 2 messages = no real conversation)
-    if len(messages) < 2:
-        return None
-
-    # Skip low-value sessions: require meaningful interaction before persisting
-    # to the knowledge base.  Session JSON is still saved for history/resume —
-    # this only gates the memory note that becomes part of searchable knowledge.
-    tools_used = session.get("tools_used", set())
-    user_msgs = [m["content"] for m in messages if m["role"] == "user" and isinstance(m.get("content"), str)]
-    user_text = " ".join(user_msgs)
-
-    # Tools that are "read-only lookup" don't count as substantive action
-    _PASSIVE_TOOLS = {"search_notes", "read_note", "query_graph"}
-    active_tools = tools_used - _PASSIVE_TOOLS if isinstance(tools_used, set) else set(tools_used) - _PASSIVE_TOOLS
-
-    has_substance = (
-        len(active_tools) > 0                   # Jarvis wrote/created something
-        or len(messages) >= 4                    # at least 2 full exchanges
-        or len(user_text) >= 50                  # meaningful single question
-    )
-    if not has_substance:
+    # Any conversation with at least one assistant reply is worth saving.
+    # Even short exchanges ("Hi" → response) are valuable in the user's
+    # knowledge base — they show up in Memory, get indexed, and link in graph.
+    has_user = any(m["role"] == "user" for m in messages)
+    has_assistant = any(m["role"] == "assistant" for m in messages)
+    if not (has_user and has_assistant):
         return None
 
     from services import memory_service, graph_service
