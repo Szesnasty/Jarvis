@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import uuid
 from datetime import datetime, timezone
@@ -7,8 +8,12 @@ from typing import Dict, List, Optional, Set
 
 from config import get_settings
 
+logger = logging.getLogger(__name__)
+
 
 MAX_HISTORY_MESSAGES = 20
+MAX_IN_MEMORY_SESSIONS = 10
+MAX_SESSION_FILES = 200
 
 _sessions: dict[str, dict] = {}
 
@@ -17,8 +22,45 @@ class SessionNotFoundError(Exception):
     pass
 
 
+_SESSION_ID_RE = re.compile(r"^[a-f0-9]{12,64}$")
+
+
+def is_valid_session_id(session_id: str) -> bool:
+    """Check if a session ID has a valid format."""
+    return bool(_SESSION_ID_RE.match(session_id))
+
+
+def _validate_session_id(session_id: str) -> None:
+    """Validate session ID to prevent path traversal."""
+    if not is_valid_session_id(session_id):
+        raise SessionNotFoundError(f"Invalid session id: {session_id}")
+
+
+def _evict_oldest_sessions(exclude: str = "") -> None:
+    """Remove oldest sessions when we exceed MAX_IN_MEMORY_SESSIONS.
+
+    The ``exclude`` session id (if given) is protected from eviction.
+    """
+    while len(_sessions) > MAX_IN_MEMORY_SESSIONS:
+        candidates = [sid for sid in _sessions if sid != exclude]
+        if not candidates:
+            break
+        oldest_id = min(
+            candidates,
+            key=lambda sid: _sessions[sid].get("created_at", ""),
+        )
+        # Persist before evicting
+        try:
+            save_session(oldest_id)
+        except Exception:
+            pass
+        _sessions.pop(oldest_id, None)
+
+
 def create_session() -> str:
     """Create a new session and return its ID."""
+    _evict_oldest_sessions()
+    _rotate_session_files_if_needed()
     session_id = uuid.uuid4().hex[:12]
     _sessions[session_id] = {
         "id": session_id,
@@ -34,7 +76,7 @@ def get_session(session_id: str) -> Optional[dict]:
 
 
 def add_message(session_id: str, role: str, content: str) -> None:
-    """Add a message to session history, trimming if needed."""
+    """Add a message to session history, trimming if needed. Auto-persists."""
     session = _sessions.get(session_id)
     if not session:
         return
@@ -43,6 +85,17 @@ def add_message(session_id: str, role: str, content: str) -> None:
 
     if len(session["messages"]) > MAX_HISTORY_MESSAGES:
         session["messages"] = session["messages"][-MAX_HISTORY_MESSAGES:]
+
+    # Auto-persist after each message for crash protection
+    try:
+        _auto_persist(session_id)
+    except Exception:
+        logger.warning("Failed to auto-persist session %s", session_id)
+
+
+def _auto_persist(session_id: str) -> None:
+    """Wrapper for auto-persist so tests can patch this without affecting explicit save_session calls."""
+    save_session(session_id)
 
 
 def get_messages(session_id: str) -> list[dict]:
@@ -83,8 +136,8 @@ def save_session(session_id: str, workspace_path: Optional[Path] = None) -> None
         return
 
     messages = session["messages"]
-    # Don't persist sessions with no messages
-    if not messages:
+    # Don't persist sessions without a complete exchange (user + assistant)
+    if len(messages) < 2:
         return
 
     ws = _get_workspace_path(workspace_path)
@@ -112,16 +165,46 @@ def save_session(session_id: str, workspace_path: Optional[Path] = None) -> None
     filepath.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def list_sessions(workspace_path: Optional[Path] = None) -> List[dict]:
+def _rotate_session_files_if_needed() -> None:
+    """Delete oldest session files when count exceeds MAX_SESSION_FILES.
+
+    Called once per new session creation, not on every save.
+    """
+    try:
+        sessions_dir = _get_workspace_path(None) / "app" / "sessions"
+        if not sessions_dir.exists():
+            return
+        files = sorted(sessions_dir.glob("*.json"), key=lambda f: f.stat().st_mtime)
+    except OSError:
+        return
+    excess = len(files) - MAX_SESSION_FILES
+    if excess <= 0:
+        return
+    for f in files[:excess]:
+        try:
+            f.unlink()
+        except OSError:
+            pass
+
+
+def _list_sessions_sync(workspace_path: Optional[Path], limit: int) -> List[dict]:
     d = _get_workspace_path(workspace_path) / "app" / "sessions"
     if not d.exists():
         return []
 
+    # Sort files by modification time (newest first) to avoid loading all
+    files = sorted(d.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+
     sessions = []
-    for f in d.glob("*.json"):
+    for f in files:
+        if len(sessions) >= limit:
+            break
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
+            continue
+        # Skip trivial sessions (no real exchange)
+        if data.get("message_count", 0) < 2:
             continue
         sessions.append({
             "session_id": data.get("session_id", f.stem),
@@ -130,11 +213,16 @@ def list_sessions(workspace_path: Optional[Path] = None) -> List[dict]:
             "message_count": data.get("message_count", 0),
         })
 
-    sessions.sort(key=lambda s: s["created_at"], reverse=True)
     return sessions
 
 
+async def list_sessions(workspace_path: Optional[Path] = None, limit: int = 50) -> List[dict]:
+    import asyncio
+    return await asyncio.to_thread(_list_sessions_sync, workspace_path, limit)
+
+
 def load_session(session_id: str, workspace_path: Optional[Path] = None) -> dict:
+    _validate_session_id(session_id)
     d = _get_workspace_path(workspace_path) / "app" / "sessions"
     filepath = d / f"{session_id}.json"
 
@@ -145,6 +233,7 @@ def load_session(session_id: str, workspace_path: Optional[Path] = None) -> dict
 
 
 def resume_session(session_id: str, workspace_path: Optional[Path] = None) -> str:
+    _evict_oldest_sessions(exclude=session_id)
     data = load_session(session_id, workspace_path)
     _sessions[session_id] = {
         "id": session_id,
@@ -157,10 +246,26 @@ def resume_session(session_id: str, workspace_path: Optional[Path] = None) -> st
 
 
 def delete_session_file(session_id: str, workspace_path: Optional[Path] = None) -> None:
-    d = _get_workspace_path(workspace_path) / "app" / "sessions"
-    filepath = d / f"{session_id}.json"
+    _validate_session_id(session_id)
+    ws = _get_workspace_path(workspace_path)
+
+    # Remove session JSON
+    filepath = ws / "app" / "sessions" / f"{session_id}.json"
     if filepath.exists():
         filepath.unlink()
+
+    # Remove corresponding conversation note from memory (if saved)
+    convos = ws / "memory" / "conversations"
+    if convos.exists():
+        for md_file in convos.glob("*.md"):
+            try:
+                text = md_file.read_text(encoding="utf-8")
+                if f"session_id: {session_id}" in text or f"session_id: '{session_id}'" in text:
+                    md_file.unlink()
+                    break
+            except OSError:
+                continue
+
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +289,8 @@ _TOOL_TAG_MAP = {
 def _extract_topics(messages: List[dict]) -> List[str]:
     """Extract topic keywords from user messages using simple heuristics."""
     user_text = " ".join(
-        m["content"] for m in messages if m["role"] == "user"
+        m["content"] for m in messages
+        if m["role"] == "user" and isinstance(m.get("content"), str)
     ).lower()
 
     # Common stop words to skip
@@ -292,11 +398,45 @@ async def save_session_to_memory(
     if len(messages) < 2:
         return None
 
+    # Skip low-value sessions: require meaningful interaction before persisting
+    # to the knowledge base.  Session JSON is still saved for history/resume —
+    # this only gates the memory note that becomes part of searchable knowledge.
+    tools_used = session.get("tools_used", set())
+    user_msgs = [m["content"] for m in messages if m["role"] == "user" and isinstance(m.get("content"), str)]
+    user_text = " ".join(user_msgs)
+
+    # Tools that are "read-only lookup" don't count as substantive action
+    _PASSIVE_TOOLS = {"search_notes", "read_note", "query_graph"}
+    active_tools = tools_used - _PASSIVE_TOOLS if isinstance(tools_used, set) else set(tools_used) - _PASSIVE_TOOLS
+
+    has_substance = (
+        len(active_tools) > 0                   # Jarvis wrote/created something
+        or (len(messages) >= 6 and len(user_text) >= 150)  # longer meaningful conversation
+        or len(user_text) >= 300                 # substantial user input regardless
+    )
+    if not has_substance:
+        return None
+
     from services import memory_service, graph_service
 
     ws = workspace_path
     now = datetime.now(timezone.utc)
     created = session.get("created_at", now.isoformat())
+
+    # --- Dedup: if a memory note already exists for this session, update it
+    # instead of creating a duplicate file with a new timestamp. ---
+    mem = (ws or get_settings().workspace_path) / "memory"
+    convos_dir = mem / "conversations"
+    existing_note: Optional[Path] = None
+    if convos_dir.exists():
+        for md_file in convos_dir.glob("*.md"):
+            try:
+                text = md_file.read_text(encoding="utf-8")
+                if f"session_id: {session_id}" in text or f"session_id: '{session_id}'" in text:
+                    existing_note = md_file
+                    break
+            except OSError:
+                continue
 
     title = _generate_title(messages)
     tags = _extract_tags(session)
@@ -308,11 +448,14 @@ async def save_session_to_memory(
         if topic not in tags:
             tags.append(topic)
 
-    # Build frontmatter
-    date_slug = now.strftime("%Y-%m-%d")
-    time_slug = now.strftime("%H%M")
-    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
-    note_path = f"conversations/{date_slug}-{time_slug}-{slug}.md"
+    # Reuse existing filename if updating, otherwise generate a new one
+    if existing_note:
+        note_path = f"conversations/{existing_note.name}"
+    else:
+        date_slug = now.strftime("%Y-%m-%d")
+        time_slug = now.strftime("%H%M")
+        slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
+        note_path = f"conversations/{date_slug}-{time_slug}-{slug}.md"
 
     fm = {
         "title": title,
@@ -333,7 +476,6 @@ async def save_session_to_memory(
     content = add_frontmatter(body, fm)
 
     # Save to memory/conversations/
-    mem = (ws or get_settings().workspace_path) / "memory"
     file_path = mem / note_path
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_text(content, encoding="utf-8")
@@ -345,8 +487,9 @@ async def save_session_to_memory(
         pass  # Don't fail if indexing fails
 
     # Update knowledge graph to include the new conversation node
+    import asyncio
     try:
-        graph_service.rebuild_graph(workspace_path=ws)
+        await asyncio.to_thread(graph_service.rebuild_graph, workspace_path=ws)
     except Exception:
         pass  # Don't fail if graph rebuild fails
 

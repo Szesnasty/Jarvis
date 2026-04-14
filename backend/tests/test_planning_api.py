@@ -65,6 +65,7 @@ async def client():
 async def test_get_sessions_200(client, patch_settings):
     sid = create_session()
     add_message(sid, "user", "Hello")
+    add_message(sid, "assistant", "Hi there")
     save_session(sid, patch_settings)
 
     r = await client.get("/api/sessions")
@@ -78,13 +79,14 @@ async def test_get_sessions_200(client, patch_settings):
 async def test_get_session_by_id_200(client, patch_settings):
     sid = create_session()
     add_message(sid, "user", "Hello")
+    add_message(sid, "assistant", "Hi there")
     save_session(sid, patch_settings)
 
     r = await client.get(f"/api/sessions/{sid}")
     assert r.status_code == 200
     data = r.json()
     assert data["session_id"] == sid
-    assert len(data["messages"]) == 1
+    assert len(data["messages"]) == 2
 
 
 @pytest.mark.anyio
@@ -112,6 +114,7 @@ async def test_set_preference_200(client, patch_settings):
 async def test_resume_session_200(client, patch_settings):
     sid = create_session()
     add_message(sid, "user", "Old conversation")
+    add_message(sid, "assistant", "Old reply")
     save_session(sid, patch_settings)
     _sessions.clear()
 

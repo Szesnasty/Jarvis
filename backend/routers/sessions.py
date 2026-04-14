@@ -7,8 +7,7 @@ router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 @router.get("")
 async def list_sessions(limit: int = 20):
-    sessions = session_service.list_sessions()
-    return sessions[:limit]
+    return await session_service.list_sessions(limit=limit)
 
 
 @router.get("/{session_id}")
@@ -30,6 +29,14 @@ async def resume_session(session_id: str):
 
 @router.delete("/{session_id}")
 async def delete_session(session_id: str):
-    session_service.delete_session(session_id)
-    session_service.delete_session_file(session_id)
+    try:
+        session_service.delete_session(session_id)
+        session_service.delete_session_file(session_id)
+    except session_service.SessionNotFoundError:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Invalidate graph cache so stale session-derived data is cleared on next access
+    from services.graph_service import invalidate_cache
+    invalidate_cache()
+
     return {"status": "deleted", "session_id": session_id}

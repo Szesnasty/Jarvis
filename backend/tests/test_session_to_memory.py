@@ -75,6 +75,7 @@ def test_record_note_access_missing_session():
 def test_save_session_includes_notes_accessed(ws):
     sid = create_session()
     add_message(sid, "user", "Hello")
+    add_message(sid, "assistant", "Hi there")
     record_note_access(sid, "projects/jarvis.md")
     record_note_access(sid, "inbox/idea.md")
     save_session(sid, ws)
@@ -192,7 +193,7 @@ async def test_save_session_to_memory_creates_note(ws):
     sid = create_session()
     add_message(sid, "user", "Tell me about Jarvis")
     add_message(sid, "assistant", "Jarvis is your personal assistant")
-    record_tool_use(sid, "search_notes")
+    record_tool_use(sid, "write_note")  # active tool triggers save
     record_note_access(sid, "projects/jarvis.md")
 
     note_path = await save_session_to_memory(sid, workspace_path=ws)
@@ -226,6 +227,7 @@ async def test_save_session_to_memory_has_related(ws):
     sid = create_session()
     add_message(sid, "user", "Read project notes")
     add_message(sid, "assistant", "Done")
+    record_tool_use(sid, "open_note")
     record_note_access(sid, "projects/jarvis.md")
     record_note_access(sid, "inbox/idea.md")
 
@@ -241,6 +243,7 @@ async def test_save_session_to_memory_has_wiki_links(ws):
     sid = create_session()
     add_message(sid, "user", "Check my notes")
     add_message(sid, "assistant", "Found them")
+    record_tool_use(sid, "open_note")
     record_note_access(sid, "daily/today.md")
 
     note_path = await save_session_to_memory(sid, workspace_path=ws)
@@ -256,6 +259,62 @@ async def test_save_session_to_memory_skips_short(ws):
     assert result is None
 
 
+async def test_save_session_to_memory_skips_trivial(ws):
+    """A single short exchange like 'hello'/'hi' should not be saved to memory."""
+    sid = create_session()
+    add_message(sid, "user", "hello")
+    add_message(sid, "assistant", "Hi there! How can I help?")
+
+    result = await save_session_to_memory(sid, workspace_path=ws)
+    assert result is None
+
+
+async def test_save_session_to_memory_saves_when_active_tools_used(ws):
+    """Even a short session is saved if an active (write) tool was used."""
+    sid = create_session()
+    add_message(sid, "user", "hello")
+    add_message(sid, "assistant", "Hi! I created a note for you.")
+    record_tool_use(sid, "write_note")
+
+    note_path = await save_session_to_memory(sid, workspace_path=ws)
+    assert note_path is not None
+
+
+async def test_save_session_to_memory_skips_passive_tools_only(ws):
+    """Sessions with only passive tools (search/read) should not be saved."""
+    sid = create_session()
+    add_message(sid, "user", "hello")
+    add_message(sid, "assistant", "Hi! I searched your notes.")
+    record_tool_use(sid, "search_notes")
+
+    result = await save_session_to_memory(sid, workspace_path=ws)
+    assert result is None
+
+
+async def test_save_session_to_memory_saves_when_long_input(ws):
+    """A single exchange with substantial user content (300+ chars) is saved."""
+    sid = create_session()
+    add_message(sid, "user", "I need to plan my week carefully. I have meetings on Monday morning and Wednesday afternoon, a dentist appointment on Thursday at 2pm, and I want to finish the quarterly report by Friday. Also need to schedule a call with the marketing team about the new campaign and review the budget proposal that was sent last week. Can you help me organize all of this?")
+    add_message(sid, "assistant", "Here's a plan for your week.")
+
+    note_path = await save_session_to_memory(sid, workspace_path=ws)
+    assert note_path is not None
+
+
+async def test_save_session_to_memory_saves_multi_exchange(ws):
+    """Multiple exchanges with meaningful content are saved."""
+    sid = create_session()
+    add_message(sid, "user", "I want to organize my notes about the project architecture and database design")
+    add_message(sid, "assistant", "Sure, let me help you with that.")
+    add_message(sid, "user", "The backend uses FastAPI with SQLite for the operational database and markdown files for persistent storage")
+    add_message(sid, "assistant", "Got it! That's a solid architecture.")
+    add_message(sid, "user", "Can you create a summary of the key components?")
+    add_message(sid, "assistant", "Here's the summary of your project architecture...")
+
+    note_path = await save_session_to_memory(sid, workspace_path=ws)
+    assert note_path is not None
+
+
 async def test_save_session_to_memory_skips_missing():
     result = await save_session_to_memory("nonexistent")
     assert result is None
@@ -263,8 +322,10 @@ async def test_save_session_to_memory_skips_missing():
 
 async def test_save_session_to_memory_tagged_with_topics(ws):
     sid = create_session()
-    add_message(sid, "user", "architecture design patterns for backend services")
+    # Use an active tool to pass the substance check
+    add_message(sid, "user", "architecture design patterns for backend services and distributed systems")
     add_message(sid, "assistant", "Here are some patterns for backend architecture")
+    record_tool_use(sid, "write_note")
 
     note_path = await save_session_to_memory(sid, workspace_path=ws)
     content = (ws / "memory" / note_path).read_text()
@@ -272,3 +333,25 @@ async def test_save_session_to_memory_tagged_with_topics(ws):
 
     # Should have topic-based tags beyond just "conversation"
     assert len(fm["tags"]) > 1
+
+
+async def test_save_session_to_memory_deduplicates(ws):
+    """Calling save_session_to_memory twice should not create two files."""
+    sid = create_session()
+    add_message(sid, "user", "Create a note about testing")
+    add_message(sid, "assistant", "Done, note created.")
+    record_tool_use(sid, "write_note")
+
+    path1 = await save_session_to_memory(sid, workspace_path=ws)
+    assert path1 is not None
+
+    # Second save (simulating tab switch / reconnect)
+    path2 = await save_session_to_memory(sid, workspace_path=ws)
+    assert path2 is not None
+
+    # Should reuse the same file, not create a new one
+    assert path1 == path2
+
+    # Only one file should exist in conversations/
+    convos = list((ws / "memory" / "conversations").glob("*.md"))
+    assert len(convos) == 1

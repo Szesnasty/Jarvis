@@ -8,28 +8,43 @@ export function useWebSocket() {
   let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let _reconnectAttempts = 0
   let _intentionalClose = false
+  let _hasConnected = false
+  let _lastSessionId: string | undefined
   const _reconnectCallbacks = new Set<() => void>()
 
-  function _getWsUrl(): string {
+  function _getWsUrl(sessionId?: string): string {
     const configured = useRuntimeConfig().public.backendWsUrl as string | undefined
-    if (configured) return configured
-    const loc = window.location
-    const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${loc.host}/api/chat/ws`
+    let base: string
+    if (configured) {
+      base = configured
+    } else {
+      const loc = window.location
+      const protocol = loc.protocol === 'https:' ? 'wss:' : 'ws:'
+      base = `${protocol}//${loc.host}/api/chat/ws`
+    }
+    if (sessionId) {
+      const sep = base.includes('?') ? '&' : '?'
+      return `${base}${sep}session_id=${sessionId}`
+    }
+    return base
   }
 
-  function onReconnect(cb: () => void): void {
+  function onReconnect(cb: () => void): () => void {
     _reconnectCallbacks.add(cb)
+    return () => _reconnectCallbacks.delete(cb)
   }
 
-  function connect(): void {
+  function connect(sessionId?: string): void {
     if (_ws.value && _ws.value.readyState === WebSocket.OPEN) return
 
+    if (sessionId) _lastSessionId = sessionId
     _intentionalClose = false
-    const ws = new WebSocket(_getWsUrl())
+    const ws = new WebSocket(_getWsUrl(_lastSessionId))
 
     ws.onopen = () => {
       isConnected.value = true
+      const isReconnect = _hasConnected
+      _hasConnected = true
       _reconnectAttempts = 0
       _heartbeatTimer = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
@@ -37,7 +52,7 @@ export function useWebSocket() {
         }
       }, 25_000)
       // Notify listeners that we reconnected (so they can re-init session etc)
-      if (_reconnectAttempts > 0 || _ws.value !== ws) {
+      if (isReconnect) {
         for (const cb of _reconnectCallbacks) cb()
       }
     }
@@ -116,5 +131,9 @@ export function useWebSocket() {
     close()
   })
 
-  return { isConnected, connect, send, onMessage, close, onReconnect }
+  function setSessionId(id: string): void {
+    _lastSessionId = id
+  }
+
+  return { isConnected, connect, send, onMessage, close, onReconnect, setSessionId }
 }

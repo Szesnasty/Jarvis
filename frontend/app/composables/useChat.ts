@@ -11,8 +11,10 @@ export function useChat() {
   const canRetry = ref(false)
   let _lastContent = ''
   let _errorClearTimer: ReturnType<typeof setTimeout> | null = null
+  let _removeMessageListener: (() => void) | null = null
+  let _removeReconnectListener: (() => void) | null = null
 
-  const { isConnected, connect, send, onMessage, close, onReconnect } = useWebSocket()
+  const { isConnected, connect, send, onMessage, close, onReconnect, setSessionId } = useWebSocket()
 
   function _setError(msg: string, retryable = false): void {
     error.value = msg
@@ -24,6 +26,16 @@ export function useChat() {
   function _handleEvent(event: WsEvent): void {
     if (event.type === 'session_start') {
       sessionId.value = event.session_id
+      setSessionId(event.session_id)
+      try { sessionStorage.setItem('jarvis_session_id', event.session_id) } catch {}
+      return
+    }
+
+    if (event.type === 'session_history') {
+      // Restore chat history after reconnect/refresh (only if UI is empty)
+      if (messages.value.length === 0 && Array.isArray(event.messages)) {
+        messages.value = event.messages
+      }
       return
     }
 
@@ -63,7 +75,7 @@ export function useChat() {
     }
 
     // WebSocket disconnected mid-response — reset loading state
-    if ((event as any).type === 'disconnected') {
+    if (event.type === 'disconnected') {
       if (isLoading.value) {
         if (currentResponse.value) {
           messages.value.push({ role: 'assistant', content: currentResponse.value + ' *(connection lost)*' })
@@ -87,11 +99,27 @@ export function useChat() {
   }
 
   function init(): void {
-    connect()
-    onMessage(_handleEvent)
-    // When WS reconnects, session_start fires automatically from backend
-    onReconnect(() => {
-      sessionId.value = ''
+    // Clean up previous listeners if re-initializing (e.g. new session)
+    if (_removeMessageListener) {
+      _removeMessageListener()
+      _removeMessageListener = null
+    }
+    if (_removeReconnectListener) {
+      _removeReconnectListener()
+      _removeReconnectListener = null
+    }
+    // Restore session ID from sessionStorage so page refreshes resume the same session
+    const stored = (() => { try { return sessionStorage.getItem('jarvis_session_id') } catch { return null } })()
+    if (stored && !sessionId.value) {
+      sessionId.value = stored
+      setSessionId(stored)
+    }
+    connect(sessionId.value || undefined)
+    _removeMessageListener = onMessage(_handleEvent)
+    // When WS reconnects, clear transient error state.
+    // The session_id is already passed via _lastSessionId in useWebSocket
+    // so the backend will resume the same session.
+    _removeReconnectListener = onReconnect(() => {
       error.value = ''
       canRetry.value = false
     })
@@ -128,8 +156,24 @@ export function useChat() {
   }
 
   function disconnect(): void {
+    if (_errorClearTimer) {
+      clearTimeout(_errorClearTimer)
+      _errorClearTimer = null
+    }
+    if (_removeMessageListener) {
+      _removeMessageListener()
+      _removeMessageListener = null
+    }
+    if (_removeReconnectListener) {
+      _removeReconnectListener()
+      _removeReconnectListener = null
+    }
     close()
   }
+
+  onUnmounted(() => {
+    disconnect()
+  })
 
   return {
     messages,

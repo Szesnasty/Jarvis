@@ -4,9 +4,10 @@
       <SessionHistory
         :sessions="sessions"
         :active-session-id="activeSessionId"
+        :loading="sessionsState.loading.value"
+        :on-delete="handleSessionDelete"
         @select="handleSessionSelect"
         @new-session="handleNewSession"
-        @delete="handleSessionDelete"
       />
       <main class="main-page__content">
         <div class="main-page__orb-area" :class="{ 'main-page__orb-area--hero': !chatActive }">
@@ -86,18 +87,33 @@ function handleVoiceToggle(): void {
 async function handleSessionSelect(sessionId: string): Promise<void> {
   const detail = await sessionsState.selectSession(sessionId)
   messages.value = detail.messages
+  // Reconnect the WebSocket to the selected session so backend is in sync
+  chat.sessionId.value = sessionId
+  try { sessionStorage.setItem('jarvis_session_id', sessionId) } catch {}
+  chat.disconnect()
+  init()
 }
 
 function handleNewSession(): void {
   sessionsState.clearActive()
   messages.value = []
+  chat.sessionId.value = ''
+  try { sessionStorage.removeItem('jarvis_session_id') } catch {}
+  chat.disconnect()
   init()
 }
 
 async function handleSessionDelete(sessionId: string): Promise<void> {
-  await sessionsState.removeSession(sessionId)
-  if (messages.value.length && !sessionsState.activeSessionId.value) {
+  try {
+    await sessionsState.removeSession(sessionId)
+  } catch {
+    return
+  }
+  if (messages.value.length && !activeSessionId.value) {
     messages.value = []
+    chat.sessionId.value = ''
+    try { sessionStorage.removeItem('jarvis_session_id') } catch {}
+    chat.disconnect()
     init()
   }
 }
@@ -107,6 +123,21 @@ watch(
   (len) => { chatActive.value = len > 0 },
   { immediate: true },
 )
+
+// Refresh session list when a new session starts
+watch(
+  () => chat.sessionId.value,
+  (id) => {
+    if (id) sessionsState.loadSessions()
+  },
+)
+
+// Refresh session list when a response completes (updates title/preview)
+watch(isLoading, (loading, wasLoading) => {
+  if (wasLoading && !loading && chat.sessionId.value) {
+    sessionsState.loadSessions()
+  }
+})
 
 onMounted(async () => {
   checkHealth()

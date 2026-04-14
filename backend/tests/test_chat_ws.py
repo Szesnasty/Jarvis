@@ -1,5 +1,5 @@
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -13,6 +13,24 @@ pytestmark = pytest.mark.anyio(backends=["asyncio"])
 @pytest.fixture(params=["asyncio"])
 def anyio_backend(request):
     return request.param
+
+
+@pytest.fixture(autouse=True)
+def isolate_workspace(tmp_path, monkeypatch):
+    """Prevent tests from writing session files to the real workspace."""
+    settings = MagicMock()
+    settings.workspace_path = tmp_path
+    for mod in ["services.session_service", "services.memory_service",
+                "services.graph_service", "services.context_builder",
+                "services.preference_service", "services.token_tracking",
+                "services.workspace_service"]:
+        try:
+            monkeypatch.setattr(f"{mod}.get_settings", lambda: settings)
+        except AttributeError:
+            pass
+    for d in ["app", "app/sessions", "memory", "memory/inbox",
+              "memory/preferences", "graph"]:
+        (tmp_path / d).mkdir(parents=True, exist_ok=True)
 
 
 def _fake_stream(*events: StreamEvent):
@@ -266,7 +284,9 @@ async def test_ws_disconnect_cleanup(mock_api_key, mock_claude_stream):
             start = ws.receive_json()
             sid = start["session_id"]
 
-    # After disconnect, session should be cleaned up
+    # After disconnect, session is kept for potential resume (not deleted)
     from services.session_service import get_session
 
-    assert get_session(sid) is None
+    session = get_session(sid)
+    assert session is not None
+    assert session["id"] == sid

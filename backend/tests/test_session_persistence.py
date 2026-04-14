@@ -41,8 +41,17 @@ def ws(tmp_path):
 def test_save_session_creates_file(ws):
     sid = create_session()
     add_message(sid, "user", "Hello")
+    add_message(sid, "assistant", "Hi there")
     save_session(sid, ws)
     assert (ws / "app" / "sessions" / f"{sid}.json").exists()
+
+
+def test_save_session_skips_single_message(ws):
+    """save_session requires at least 2 messages (a complete exchange)."""
+    sid = create_session()
+    add_message(sid, "user", "Hello")
+    save_session(sid, ws)
+    assert not (ws / "app" / "sessions" / f"{sid}.json").exists()
 
 
 def test_save_session_has_metadata(ws):
@@ -70,37 +79,40 @@ def test_save_session_has_messages(ws):
 def test_save_session_auto_title(ws):
     sid = create_session()
     add_message(sid, "user", "Plan my week please")
+    add_message(sid, "assistant", "Sure, here's a plan")
     save_session(sid, ws)
     data = json.loads((ws / "app" / "sessions" / f"{sid}.json").read_text())
     assert data["title"] == "Plan my week please"
 
 
-def test_list_sessions_sorted(ws):
+async def test_list_sessions_sorted(ws):
     for i in range(3):
         sid = create_session()
         add_message(sid, "user", f"Message {i}")
+        add_message(sid, "assistant", f"Reply {i}")
         save_session(sid, ws)
         delete_session(sid)
 
-    sessions = list_sessions(ws)
+    sessions = await list_sessions(ws)
     assert len(sessions) == 3
     dates = [s["created_at"] for s in sessions]
     assert dates == sorted(dates, reverse=True)
 
 
-def test_list_sessions_metadata_only(ws):
+async def test_list_sessions_metadata_only(ws):
     sid = create_session()
     add_message(sid, "user", "Hello")
+    add_message(sid, "assistant", "Hi")
     save_session(sid, ws)
 
-    sessions = list_sessions(ws)
+    sessions = await list_sessions(ws)
     assert len(sessions) == 1
     assert "messages" not in sessions[0]
     assert "session_id" in sessions[0]
 
 
-def test_list_sessions_empty(ws):
-    sessions = list_sessions(ws)
+async def test_list_sessions_empty(ws):
+    sessions = await list_sessions(ws)
     assert sessions == []
 
 
@@ -117,7 +129,7 @@ def test_load_session_full(ws):
 
 def test_load_session_not_found(ws):
     with pytest.raises(SessionNotFoundError):
-        load_session("nonexistent", ws)
+        load_session("nonexistent000", ws)
 
 
 def test_resume_session_restores_history(ws):
@@ -136,19 +148,21 @@ def test_resume_session_restores_history(ws):
 def test_resume_session_appends_new(ws):
     sid = create_session()
     add_message(sid, "user", "Hello")
+    add_message(sid, "assistant", "Hi")
     save_session(sid, ws)
     delete_session(sid)
 
     resume_session(sid, ws)
-    add_message(sid, "assistant", "Resumed!")
+    add_message(sid, "user", "Follow up")
     msgs = get_messages(sid)
-    assert len(msgs) == 2
-    assert msgs[1]["content"] == "Resumed!"
+    assert len(msgs) == 3
+    assert msgs[2]["content"] == "Follow up"
 
 
 def test_delete_session_file(ws):
     sid = create_session()
     add_message(sid, "user", "Hello")
+    add_message(sid, "assistant", "Hi")
     save_session(sid, ws)
     assert (ws / "app" / "sessions" / f"{sid}.json").exists()
 
@@ -159,6 +173,7 @@ def test_delete_session_file(ws):
 def test_session_file_valid_json(ws):
     sid = create_session()
     add_message(sid, "user", "Hello")
+    add_message(sid, "assistant", "Hi")
     save_session(sid, ws)
     data = json.loads((ws / "app" / "sessions" / f"{sid}.json").read_text())
     assert isinstance(data, dict)
@@ -184,6 +199,7 @@ def test_record_tool_use(ws):
     record_tool_use(sid, "create_plan")
     record_tool_use(sid, "search_notes")  # duplicate
     add_message(sid, "user", "Hello")
+    add_message(sid, "assistant", "Found your notes")
     save_session(sid, ws)
     data = json.loads((ws / "app" / "sessions" / f"{sid}.json").read_text())
     assert sorted(data["tools_used"]) == ["create_plan", "search_notes"]

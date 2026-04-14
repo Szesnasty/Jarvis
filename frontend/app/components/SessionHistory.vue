@@ -4,7 +4,11 @@
       <h3 class="session-history__title">Sessions</h3>
       <button class="session-history__new" @click="$emit('new-session')">+ New</button>
     </div>
-    <ul v-if="sessions.length" class="session-history__list">
+    <div v-if="loading" class="session-history__loading">
+      <span class="session-history__spinner" />
+      <span class="session-history__loading-text">Loading sessions…</span>
+    </div>
+    <ul v-else-if="sessions.length" class="session-history__list">
       <li
         v-for="s in sessions"
         :key="s.session_id"
@@ -33,6 +37,7 @@
 
     <ConfirmDialog
       :visible="deleteTarget !== null"
+      :loading="deleting"
       title="Delete conversation?"
       :message="`&quot;${deleteTarget?.title || 'Untitled'}&quot; will be permanently removed.`"
       confirm-label="Delete"
@@ -45,26 +50,32 @@
 <script setup lang="ts">
 import type { SessionMetadata } from '~/types'
 
-defineProps<{
+const props = defineProps<{
   sessions: SessionMetadata[]
   activeSessionId: string | null
+  loading?: boolean
+  onDelete: (sessionId: string) => Promise<void>
 }>()
 
 const emit = defineEmits<{
   select: [sessionId: string]
   'new-session': []
-  delete: [sessionId: string]
 }>()
 
 const deleteTarget = ref<SessionMetadata | null>(null)
+const deleting = ref(false)
 
 function confirmDelete(session: SessionMetadata) {
   deleteTarget.value = session
 }
 
-function handleDelete() {
-  if (deleteTarget.value) {
-    emit('delete', deleteTarget.value.session_id)
+async function handleDelete() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  try {
+    await props.onDelete(deleteTarget.value.session_id)
+  } finally {
+    deleting.value = false
     deleteTarget.value = null
   }
 }
@@ -204,5 +215,31 @@ function formatDate(iso: string): string {
   color: var(--text-muted);
   text-align: center;
   padding: 1.5rem 0;
+}
+
+.session-history__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 2rem 0;
+}
+
+.session-history__spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--neon-cyan-15);
+  border-top-color: var(--neon-cyan);
+  border-radius: 50%;
+  animation: session-spin 0.7s linear infinite;
+}
+
+.session-history__loading-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+@keyframes session-spin {
+  to { transform: rotate(360deg); }
 }
 </style>      

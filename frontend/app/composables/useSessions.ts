@@ -4,10 +4,16 @@ import { useApi } from '~/composables/useApi'
 export function useSessions() {
   const sessions = ref<SessionMetadata[]>([])
   const activeSessionId = ref<string | null>(null)
+  const loading = ref(false)
   const { fetchSessions, fetchSession, resumeSession, deleteSession: apiDeleteSession } = useApi()
 
   async function loadSessions(): Promise<void> {
-    sessions.value = await fetchSessions()
+    loading.value = true
+    try {
+      sessions.value = await fetchSessions()
+    } finally {
+      loading.value = false
+    }
   }
 
   async function selectSession(sessionId: string): Promise<SessionDetail> {
@@ -33,5 +39,5 @@ export function useSessions() {
     activeSessionId.value = null
   }
 
-  return { sessions, activeSessionId, loadSessions, selectSession, resume, removeSession, clearActive }
+  return { sessions, activeSessionId, loading, loadSessions, selectSession, resume, removeSession, clearActive }
 }
