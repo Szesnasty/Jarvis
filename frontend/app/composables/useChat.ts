@@ -162,10 +162,12 @@ export function useChat() {
 
     // Attach provider + model + API key from browser storage
     const { activeProvider, activeKey, activeModel } = useApiKeys()
+    // Always send provider + model so backend uses the chosen model,
+    // even if falling back to server-stored API key
+    payload.provider = activeProvider.value
+    payload.model = activeModel.value
     if (activeKey.value) {
-      payload.provider = activeProvider.value
       payload.api_key = activeKey.value
-      payload.model = activeModel.value
     }
 
     const sent = send(payload)

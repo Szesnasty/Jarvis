@@ -238,10 +238,30 @@ async function buildGraph() {
     })
     .linkDirectionalArrowRelPos(0.85)
     .linkDirectionalParticles((link: any) => {
-      return link._type === 'tagged' || link._type === 'linked' ? 1 : 0
+      // More particles = more life! Different edge types get different densities
+      if (link._type === 'linked') return 3
+      if (link._type === 'related') return 2
+      if (link._type === 'tagged') return 2
+      if (link._type === 'mentions') return 2
+      if (link._type === 'part_of') return 1
+      return 1
     })
-    .linkDirectionalParticleWidth(1.2)
-    .linkDirectionalParticleSpeed(0.003)
+    .linkDirectionalParticleWidth((link: any) => {
+      if (link._type === 'linked' || link._type === 'related') return 2.2
+      if (link._type === 'tagged') return 1.8
+      return 1.4
+    })
+    .linkDirectionalParticleSpeed((link: any) => {
+      // Varied speeds make the graph feel organic and alive
+      if (link._type === 'linked') return 0.006 + Math.random() * 0.004
+      if (link._type === 'related') return 0.005 + Math.random() * 0.003
+      if (link._type === 'tagged') return 0.003 + Math.random() * 0.002
+      if (link._type === 'mentions') return 0.004 + Math.random() * 0.003
+      if (link._type === 'part_of') return 0.002 + Math.random() * 0.002
+      if (link._type === 'similar_to') return 0.001 + Math.random() * 0.001
+      if (link._type === 'temporal') return 0.002 + Math.random() * 0.001
+      return 0.003 + Math.random() * 0.002
+    })
     .linkDirectionalParticleColor((link: any) => {
       return EDGE_PARTICLE_COLOR[link._type] ?? 'rgba(100, 180, 255, 0.4)'
     })
