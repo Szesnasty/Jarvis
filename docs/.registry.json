@@ -26,7 +26,7 @@
         "frontend/app/components/ChatPanel.vue"
       ],
       "depends_on": ["retrieval", "sessions", "specialists"],
-      "last_updated": "2026-04-14",
+      "last_updated": "2026-04-15",
       "status": "current"
     },
     "memory": {
@@ -180,6 +180,22 @@
       ],
       "depends_on": [],
       "last_updated": "2026-04-14",
+      "status": "current"
+    },
+    "duel": {
+      "doc": "docs/features/duel.md",
+      "type": "feature",
+      "sources": [
+        "backend/services/council.py",
+        "backend/routers/chat.py",
+        "backend/tests/test_duel_backend.py",
+        "frontend/app/composables/useDuel.ts",
+        "frontend/app/components/DuelSetup.vue",
+        "frontend/app/components/DuelDebateView.vue",
+        "frontend/app/components/DuelScoreBar.vue"
+      ],
+      "depends_on": ["chat", "specialists", "knowledge-graph"],
+      "last_updated": "2026-04-15",
       "status": "current"
     }
   }

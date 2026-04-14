@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ChatMessage, OrbState, UrlIngestResult } from '~/types'
+import type { ChatMessage, DuelConfig, OrbState, UrlIngestResult } from '~/types'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useSpecialists } from '~/composables/useSpecialists'
@@ -11,7 +11,7 @@ function renderMarkdown(text: string): string {
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
 }
 
-const { activeSpecialists, deactivate } = useSpecialists()
+const { activeSpecialists, deactivate, specialists: allSpecialists, load: loadSpecialists } = useSpecialists()
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -22,14 +22,22 @@ const props = defineProps<{
   canRetry?: boolean
   voiceState?: OrbState
   voiceSupported?: boolean
+  duelSetupOpen?: boolean
 }>()
 
 const emit = defineEmits<{
   send: [content: string]
   retry: []
   toggleVoice: []
+  openDuel: []
+  startDuel: [config: DuelConfig]
+  cancelDuelSetup: []
 }>()
 
+// Load specialists when duel setup opens so we have the list
+watch(() => props.duelSetupOpen, (open) => {
+  if (open && allSpecialists.value.length === 0) loadSpecialists()
+})
 const { ingestUrl } = useApi()
 
 const input = ref('')
@@ -70,6 +78,11 @@ async function handleSaveUrl() {
 function handleSend(): void {
   const text = input.value.trim()
   if (!text || props.isLoading) return
+  if (text.toLowerCase() === '/duel') {
+    input.value = ''
+    emit('openDuel')
+    return
+  }
   emit('send', text)
   input.value = ''
 }
@@ -178,6 +191,17 @@ watch(
       {{ ingestResult }}
     </div>
 
+    <!-- Duel Setup Panel -->
+    <Transition name="setup-slide">
+      <DuelSetup
+        v-if="duelSetupOpen"
+        :specialists="allSpecialists"
+        :prefill-topic="input.trim()"
+        @start="emit('startDuel', $event)"
+        @cancel="emit('cancelDuelSetup')"
+      />
+    </Transition>
+
     <div class="chat-panel__input-bar">
       <textarea
         ref="inputEl"
@@ -204,6 +228,14 @@ watch(
         <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="6" y="6" width="12" height="12" rx="2"/>
         </svg>
+      </button>
+      <button
+        class="chat-panel__icon-btn chat-panel__icon-btn--duel"
+        aria-label="Duel Mode"
+        :disabled="isLoading"
+        @click="emit('openDuel')"
+      >
+        ⚔️
       </button>
       <button
         class="chat-panel__icon-btn chat-panel__icon-btn--send"
@@ -656,5 +688,37 @@ watch(
   font-size: 0.8rem;
   border-top: 1px solid var(--border-subtle);
   color: var(--text-secondary);
+}
+
+/* Duel button */
+.chat-panel__icon-btn--duel {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.chat-panel__icon-btn--duel:hover {
+  border-color: var(--neon-yellow);
+  box-shadow: 0 0 10px rgba(234, 179, 8, 0.1);
+}
+
+.chat-panel__icon-btn--duel:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+/* Setup slide transition */
+.setup-slide-enter-active {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.setup-slide-leave-active {
+  transition: all 0.2s ease;
+}
+.setup-slide-enter-from {
+  opacity: 0;
+  transform: translateY(12px);
+}
+.setup-slide-leave-to {
+  opacity: 0;
+  transform: translateY(12px);
 }
 </style>

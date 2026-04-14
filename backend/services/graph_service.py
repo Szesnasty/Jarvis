@@ -363,13 +363,16 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
     # Pass 3: Bidirectional wiki-link resolution
     _resolve_bidirectional_links(graph)
 
-    # Pass 4: Keyword similarity edges
-    for edge in _compute_similarity_edges(graph, mem):
-        graph.edges.append(edge)
+    # Pass 4: Keyword similarity edges (kill switch)
+    settings = get_settings()
+    if settings.similarity_edges_enabled:
+        for edge in _compute_similarity_edges(graph, mem):
+            graph.edges.append(edge)
 
-    # Pass 5: Temporal edges
-    for edge in _compute_temporal_edges(graph, mem):
-        graph.edges.append(edge)
+    # Pass 5: Temporal edges (kill switch)
+    if settings.temporal_edges_enabled:
+        for edge in _compute_temporal_edges(graph, mem):
+            graph.edges.append(edge)
 
     # Pass 6: Apply IDF-weighted edge weights
     _apply_edge_weights(graph)
@@ -501,6 +504,74 @@ def find_orphans(workspace_path: Optional[Path] = None) -> List[Dict]:
         for n in graph.nodes.values()
         if n.type == "note" and n.id not in connected
     ]
+
+
+def ingest_note(note_path: str, workspace_path: Optional[Path] = None) -> None:
+    """Incrementally add/update a single note in the graph without full rebuild."""
+    global _graph_cache
+    graph = load_graph(workspace_path)
+    if graph is None:
+        graph = Graph()
+
+    mem = _memory_path(workspace_path)
+    filepath = mem / note_path
+    if not filepath.exists():
+        return
+
+    note_id = f"note:{note_path}"
+    try:
+        content = filepath.read_text(encoding="utf-8", errors="replace")
+        fm, body = parse_frontmatter(content)
+    except Exception:
+        return
+
+    # Remove old edges involving this note
+    graph.edges = [e for e in graph.edges if e.source != note_id and e.target != note_id]
+
+    # Re-add node
+    folder = str(Path(note_path).parent) if "/" in note_path else ""
+    graph.add_node(note_id, "note", fm.get("title", Path(note_path).stem), folder=folder)
+    # Force update label in case it changed
+    graph.nodes[note_id] = Node(
+        id=note_id, type="note",
+        label=fm.get("title", Path(note_path).stem), folder=folder,
+    )
+
+    # Re-add frontmatter edges
+    for tag in fm.get("tags", []):
+        tag_id = f"tag:{tag}"
+        graph.add_node(tag_id, "tag", str(tag))
+        graph.add_edge(note_id, tag_id, "tagged")
+
+    for link in extract_wiki_links(body):
+        graph.add_edge(note_id, f"note:{link}", "linked")
+
+    for person in fm.get("people", []):
+        person_id = f"person:{person}"
+        graph.add_node(person_id, "person", str(person))
+        graph.add_edge(note_id, person_id, "mentions")
+
+    for related in fm.get("related", []):
+        rel_path = related if related.endswith(".md") else related + ".md"
+        graph.add_edge(note_id, f"note:{rel_path}", "related")
+
+    if folder:
+        area_id = f"area:{folder}"
+        graph.add_node(area_id, "area", folder)
+        graph.add_edge(note_id, area_id, "part_of")
+
+    # Entity extraction on body (no API cost)
+    from services.entity_extraction import extract_entities
+    existing_people = [n.label for n in graph.nodes.values() if n.type == "person"]
+    fm_people = {str(p).lower() for p in fm.get("people", [])}
+    for ent in extract_entities(body, existing_people):
+        if ent.type == "person" and ent.confidence >= 0.5:
+            if ent.text.lower() not in fm_people:
+                pid = f"person:{ent.text}"
+                graph.add_node(pid, "person", ent.text)
+                graph.add_edge(note_id, pid, "mentions")
+
+    _save_and_cache(graph, workspace_path)
 
 
 def invalidate_cache() -> None:

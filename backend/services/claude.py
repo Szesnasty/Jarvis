@@ -153,13 +153,16 @@ class ClaudeService:
     ) -> AsyncIterator[StreamEvent]:
         tool = _ToolAccumulator()
 
-        async with self.client.messages.stream(
+        kwargs: dict[str, Any] = dict(
             model=MODEL,
             max_tokens=MAX_TOKENS,
             system=system_prompt,
             messages=messages,
-            tools=tools,
-        ) as stream:
+        )
+        if tools:
+            kwargs["tools"] = tools
+
+        async with self.client.messages.stream(**kwargs) as stream:
             async for event in stream:
                 result = self._process_event(event, tool)
                 if result is not None:

@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     api_port: int = 8000
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Graph edge type kill switches
+    similarity_edges_enabled: bool = True
+    temporal_edges_enabled: bool = True
+
     model_config = {"env_prefix": "JARVIS_", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

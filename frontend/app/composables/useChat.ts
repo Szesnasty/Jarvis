@@ -1,4 +1,5 @@
 import type { ChatMessage, WsEvent } from '~/types'
+import { useDuel } from '~/composables/useDuel'
 import { useWebSocket } from '~/composables/useWebSocket'
 
 export function useChat() {
@@ -23,7 +24,16 @@ export function useChat() {
     _errorClearTimer = setTimeout(() => { error.value = ''; canRetry.value = false }, 8000)
   }
 
+  const duel = useDuel()
+  duel.bindSend(send)
+
   function _handleEvent(event: WsEvent): void {
+    // Route duel events to the duel composable
+    if ((event as any).type?.startsWith('duel_')) {
+      duel.handleWsEvent(event as any)
+      return
+    }
+
     if (event.type === 'session_start') {
       sessionId.value = event.session_id
       setSessionId(event.session_id)
@@ -52,6 +62,11 @@ export function useChat() {
 
     if (event.type === 'tool_result') {
       toolActivity.value = ''
+      return
+    }
+
+    if (event.type === 'memory_changed') {
+      window.dispatchEvent(new CustomEvent('jarvis:memory-changed', { detail: event }))
       return
     }
 
@@ -188,6 +203,7 @@ export function useChat() {
     canRetry,
     sessionId,
     isConnected,
+    duel,
     init,
     sendMessage,
     retry,

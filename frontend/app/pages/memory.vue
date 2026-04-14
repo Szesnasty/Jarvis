@@ -138,8 +138,15 @@ async function onDeleteNote(path: string) {
   }
 }
 
+const _onMemoryChanged = () => loadNotes()
+
 onMounted(() => {
   loadNotes()
+  window.addEventListener('jarvis:memory-changed', _onMemoryChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('jarvis:memory-changed', _onMemoryChanged)
 })
 </script>
 

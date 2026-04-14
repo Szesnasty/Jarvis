@@ -263,6 +263,11 @@ async def execute_tool(
         )
         if session_id:
             session_service.record_note_access(session_id, tool_input["path"])
+        # Incremental graph update (no full rebuild)
+        try:
+            graph_service.ingest_note(tool_input["path"], workspace_path)
+        except Exception:
+            pass
         return f"Note saved: {tool_input['path']}"
 
     if name == "append_note":
@@ -273,6 +278,11 @@ async def execute_tool(
         )
         if session_id:
             session_service.record_note_access(session_id, tool_input["path"])
+        # Incremental graph update (no full rebuild)
+        try:
+            graph_service.ingest_note(tool_input["path"], workspace_path)
+        except Exception:
+            pass
         return f"Content appended to: {tool_input['path']}"
 
     if name == "create_plan":

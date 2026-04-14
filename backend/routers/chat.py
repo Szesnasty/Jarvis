@@ -34,6 +34,16 @@ async def _run_tool(event: StreamEvent, session_id: str = "", api_key: str = "")
         return f"Tool error: {exc}"
 
 
+_MEMORY_MUTATING_TOOLS = frozenset({"write_note", "append_note", "create_plan", "update_plan"})
+
+
+async def _emit_memory_changed(ws: WebSocket, tool_name: str, tool_input: dict) -> None:
+    """Emit memory_changed event for tools that modify notes."""
+    if tool_name in _MEMORY_MUTATING_TOOLS:
+        path = tool_input.get("path", "")
+        await _send_event(ws, "memory_changed", path=path, action=tool_name)
+
+
 def _build_tool_messages(
     messages: list[dict],
     event: StreamEvent,
@@ -110,6 +120,7 @@ async def _stream_follow_up(
             session_service.record_tool_use(session_id, tool_event.name)
             result = await _run_tool(tool_event, session_id=session_id, api_key=api_key)
             await _send_event(ws, "tool_result", name=tool_event.name, content=result)
+            await _emit_memory_changed(ws, tool_event.name, tool_event.tool_input or {})
             next_messages = _build_tool_messages(next_messages, tool_event, result)
 
         text += await _stream_follow_up(
@@ -148,6 +159,11 @@ async def _handle_message(
 
     claude = get_claude(api_key) if get_claude else ClaudeService(api_key=api_key)
     assistant_text = ""
+    # Specialist attribution: prefix first text_delta with specialist names
+    attribution_prefix = ""
+    if active_specs:
+        names = ", ".join(s["name"] for s in active_specs)
+        attribution_prefix = f"**[{names}]** "
     # [input_tokens, output_tokens] accumulated across all rounds
     usage_acc = [0, 0]
     pending_tools: list[StreamEvent] = []
@@ -158,8 +174,12 @@ async def _handle_message(
         tools=tools,
     ):
         if event.type == "text_delta":
-            assistant_text += event.content
-            await _send_event(ws, "text_delta", content=event.content)
+            content = event.content
+            if attribution_prefix:
+                content = attribution_prefix + content
+                attribution_prefix = ""  # Only prepend once
+            assistant_text += content
+            await _send_event(ws, "text_delta", content=content)
 
         elif event.type == "tool_use":
             pending_tools.append(event)
@@ -179,6 +199,7 @@ async def _handle_message(
             session_service.record_tool_use(session_id, tool_event.name)
             result = await _run_tool(tool_event, session_id=session_id, api_key=api_key)
             await _send_event(ws, "tool_result", name=tool_event.name, content=result)
+            await _emit_memory_changed(ws, tool_event.name, tool_event.tool_input or {})
             tool_messages = _build_tool_messages(tool_messages, tool_event, result)
 
         assistant_text += await _stream_follow_up(
@@ -217,11 +238,70 @@ def _parse_message(raw: str) -> tuple:
     if data.get("type") == "ping":
         return None, None
 
+    # Duel start messages have their own validation
+    if data.get("type") == "duel_start":
+        return data, None
+
     content = data.get("content", "").strip()
     if not content:
         return None, "Message content is required"
 
     return data, None
+
+
+async def _handle_duel(
+    ws: WebSocket,
+    data: dict,
+    session_id: str,
+    get_claude: callable,
+) -> None:
+    """Handle a duel_start WS message."""
+    from services.council import DuelConfig, DuelOrchestrator, validate_duel_config
+
+    api_key = get_api_key()
+    if not api_key:
+        await _send_event(ws, "error", content="API key not configured")
+        return
+
+    topic = data.get("topic", "").strip()
+    specialist_ids = data.get("specialist_ids", [])
+
+    config = DuelConfig(topic=topic, specialist_ids=specialist_ids)
+    try:
+        validate_duel_config(config)
+    except ValueError as exc:
+        await _send_event(ws, "error", content=str(exc))
+        return
+
+    claude = get_claude(api_key)
+    orchestrator = DuelOrchestrator(claude)
+
+    try:
+        async for event in orchestrator.run(config):
+            # Map DuelEvent to WS JSON
+            ws_data = {"type": f"duel_{event.type}"}
+            if event.specialist:
+                ws_data["specialist"] = event.specialist
+            if event.content:
+                ws_data["content"] = event.content
+            if event.round_num:
+                ws_data["round"] = event.round_num
+            if event.metadata:
+                ws_data.update(event.metadata)
+            await ws.send_json(ws_data)
+
+            # If duel finished, add verdict summary to session for continued chat
+            if event.type == "judge_done":
+                summary = (
+                    f"**Duel Verdict — {topic}**\n\n"
+                    f"Winner: {event.metadata.get('winner', '?')}\n\n"
+                    f"{event.metadata.get('reasoning', '')}\n\n"
+                    f"{event.metadata.get('recommendation', '')}"
+                )
+                session_service.add_message(session_id, "assistant", summary)
+    except Exception as exc:
+        logger.exception("Duel error")
+        await _send_event(ws, "duel_error", content=f"Duel failed: {exc}")
 
 
 @router.websocket("/ws")
@@ -271,6 +351,11 @@ async def chat_ws(websocket: WebSocket) -> None:
 
             if error:
                 await _send_event(websocket, "error", content=error)
+                continue
+
+            # Route duel messages
+            if data.get("type") == "duel_start":
+                await _handle_duel(websocket, data, session_id, _get_claude)
                 continue
 
             content = data.get("content", "").strip()

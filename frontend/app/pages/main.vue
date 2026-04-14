@@ -14,7 +14,21 @@
           <Orb :state="orbState" />
         </div>
         <TranscriptBar :transcript="transcript" :visible="voiceState !== 'idle'" />
+
+        <!-- Duel debate view replaces chat when duel is active -->
+        <DuelDebateView
+          v-if="duel.isActive.value"
+          :topic="duel.topic.value"
+          :events="duel.events.value"
+          :phase="duel.phase.value"
+          :verdict="duel.verdict.value"
+          :current-texts="duel.currentTexts.value"
+          :error-msg="duel.errorMsg.value"
+          @cancel="handleDuelCancel"
+        />
+
         <ChatPanel
+          v-else
           :messages="messages"
           :current-response="currentResponse"
           :is-loading="isLoading"
@@ -23,9 +37,13 @@
           :can-retry="canRetry"
           :voice-state="voiceState"
           :voice-supported="isVoiceAvailable"
+          :duel-setup-open="duel.showSetup.value"
           @send="handleSend"
           @retry="chat.retry()"
           @toggle-voice="handleVoiceToggle"
+          @open-duel="duel.openSetup()"
+          @start-duel="handleDuelStart"
+          @cancel-duel-setup="duel.closeSetup()"
         />
       </main>
     </div>
@@ -33,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import type { OrbState } from '~/types'
+import type { DuelConfig, OrbState } from '~/types'
 import { createWebSpeechSTT } from '~/composables/stt/webSpeechSTT'
 import { createWebSpeechTTS } from '~/composables/tts/webSpeechTTS'
 import { useChat } from '~/composables/useChat'
@@ -42,7 +60,7 @@ import { useVoice } from '~/composables/useVoice'
 
 const { checkHealth, chatActive } = useAppState()
 const chat = useChat()
-const { messages, currentResponse, isLoading, toolActivity, error, canRetry, init, sendMessage } = chat
+const { messages, currentResponse, isLoading, toolActivity, error, canRetry, duel, init, sendMessage } = chat
 
 const sessionsState = useSessions()
 const { sessions, activeSessionId } = sessionsState
@@ -84,7 +102,25 @@ function handleVoiceToggle(): void {
   }
 }
 
+function handleDuelStart(config: DuelConfig): void {
+  duel.start(config)
+}
+
+function handleDuelCancel(): void {
+  duel.cancel()
+}
+
+// When duel finishes with a verdict, append it as a chat message and keep duel view for a bit
+watch(() => duel.phase.value, (p) => {
+  if (p === 'done' && duel.verdict.value) {
+    const v = duel.verdict.value
+    const summary = `⚔️ **Duel Verdict** — "${duel.topic.value}"\n\n🏆 Winner: **${v.winner}**\n\n${v.reasoning}${v.recommendation ? '\n\n**Recommendation:** ' + v.recommendation : ''}${v.action_items?.length ? '\n\n**Action Items:**\n' + v.action_items.map((a: string) => `- ${a}`).join('\n') : ''}`
+    messages.value.push({ role: 'assistant', content: summary })
+  }
+})
+
 async function handleSessionSelect(sessionId: string): Promise<void> {
+  duel.cancel()
   const detail = await sessionsState.selectSession(sessionId)
   messages.value = detail.messages
   // Reconnect the WebSocket to the selected session so backend is in sync
@@ -95,6 +131,7 @@ async function handleSessionSelect(sessionId: string): Promise<void> {
 }
 
 function handleNewSession(): void {
+  duel.cancel()
   sessionsState.clearActive()
   messages.value = []
   chat.sessionId.value = ''
@@ -120,8 +157,14 @@ async function handleSessionDelete(sessionId: string): Promise<void> {
 
 watch(
   () => messages.value.length,
-  (len) => { chatActive.value = len > 0 },
+  (len) => { chatActive.value = len > 0 || duel.isActive.value },
   { immediate: true },
+)
+
+// Keep Orb shrunk while duel is active
+watch(
+  () => duel.isActive.value,
+  (active) => { if (active) chatActive.value = true },
 )
 
 // Refresh session list when a new session starts
