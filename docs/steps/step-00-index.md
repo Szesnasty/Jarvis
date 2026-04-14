@@ -62,6 +62,27 @@
 | [11](step-11-url-ingest.md) | URL ingest pipeline (YouTube + Web) | ✅ |
 | [11b](step-11b-url-ingest-frontend.md) | URL ingest frontend (dialog + chat) | ✅ |
 
+## Phase 10 — Graph Intelligence + Living Memory
+
+> **Execution order**: 14a → 15 → 14b → 16a → 16b → 17
+> Feedback loops before graph refinement — bigger user impact first.
+
+| Step | Title | Status | Order |
+|------|-------|--------|-------|
+| [12](step-12-graph-interactive.md) | Interactive graph UX (preview, ask, filter, orphans, manual edges) | ✅ | — |
+| [13](step-13-graph-retrieval.md) | Graph-guided retrieval (weighted edges, IDF, path scoring) | ✅ | — |
+| [14a](step-14a-entity-extraction.md) | Entity extraction + bidirectional wiki-links | ⬜ | → 1st |
+| [15](step-15-feedback-loops.md) | Feedback loops (auto-graph, attribution, session→memory, realtime refresh) | ⬜ | → 2nd |
+| [14b](step-14b-graph-refinement.md) | Similarity edges, temporal edges, pruning, rebuild pipeline | ⬜ | → 3rd |
+
+## Phase 11 — Duel & Council Mode
+
+| Step | Title | Status | Order |
+|------|-------|--------|-------|
+| [16a](step-16a-duel-backend.md) | Duel Mode backend (orchestrator, prompts, scoring, WS events, memory save) | ⬜ | → 4th |
+| [16b](step-16b-duel-frontend.md) | Duel Mode frontend (setup, debate view, score bar, chat integration) | ⬜ | → 5th |
+| [17](step-17-council-full.md) | Council Full (3-4 specialists, compression, alliance map, learning extraction) | ⬜ | v2 |
+
 ---
 
 ## Execution Rule

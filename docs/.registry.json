@@ -54,12 +54,15 @@
       "sources": [
         "backend/routers/graph.py",
         "backend/services/graph_service.py",
+        "backend/services/entity_extraction.py",
         "frontend/app/pages/graph.vue",
         "frontend/app/components/GraphCanvas.vue",
+        "frontend/app/components/GraphNodePreview.vue",
+        "frontend/app/components/GraphFilterBar.vue",
         "frontend/app/composables/useGraph.ts"
       ],
       "depends_on": ["memory"],
-      "last_updated": "2026-04-14",
+      "last_updated": "2026-04-15",
       "status": "current"
     },
     "voice": {
@@ -117,7 +120,7 @@
         "backend/services/context_builder.py"
       ],
       "depends_on": ["memory", "knowledge-graph"],
-      "last_updated": "2026-04-14",
+      "last_updated": "2026-04-15",
       "status": "current"
     },
     "planning": {
