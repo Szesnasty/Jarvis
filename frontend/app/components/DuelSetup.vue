@@ -1,5 +1,17 @@
 <script setup lang="ts">
 import type { DuelConfig, SpecialistSummary } from '~/types'
+import { useApiKeys, MODEL_CATALOG } from '~/composables/useApiKeys'
+
+const { activeProvider, activeModel, providers } = useApiKeys()
+
+const currentModelLabel = computed(() => {
+  const catalog = MODEL_CATALOG[activeProvider.value]
+  return catalog?.find(m => m.id === activeModel.value)?.label ?? activeModel.value
+})
+
+const currentProviderIcon = computed(() => {
+  return providers.find(p => p.id === activeProvider.value)?.icon ?? ''
+})
 
 const props = defineProps<{
   specialists: SpecialistSummary[]
@@ -77,6 +89,11 @@ watch(() => props.prefillTopic, (v) => {
       <p v-if="specialists.length === 0" class="duel-setup__empty">
         No specialists found. Create at least 2 to use Duel Mode.
       </p>
+    </div>
+
+    <div class="duel-setup__model">
+      <span class="duel-setup__model-icon" v-html="currentProviderIcon" />
+      <span class="duel-setup__model-label">{{ currentModelLabel }}</span>
     </div>
 
     <div class="duel-setup__info">
@@ -236,6 +253,37 @@ watch(() => props.prefillTopic, (v) => {
   font-size: 0.82rem;
   color: var(--text-muted);
   padding: 0.5rem 0;
+}
+
+.duel-setup__model {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  align-self: center;
+}
+
+.duel-setup__model-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.duel-setup__model-icon :deep(svg) {
+  width: 14px;
+  height: 14px;
+}
+
+.duel-setup__model-label {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .duel-setup__info {
