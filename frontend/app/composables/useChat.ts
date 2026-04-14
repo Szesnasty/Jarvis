@@ -77,6 +77,7 @@ export function useChat() {
           content: currentResponse.value,
           model: event.model,
           provider: event.provider,
+          timestamp: new Date().toISOString(),
         })
         currentResponse.value = ''
       }
@@ -150,7 +151,7 @@ export function useChat() {
     if (!content.trim() || isLoading.value) return
 
     _lastContent = content.trim()
-    messages.value.push({ role: 'user', content: _lastContent })
+    messages.value.push({ role: 'user', content: _lastContent, timestamp: new Date().toISOString() })
     currentResponse.value = ''
     error.value = ''
     canRetry.value = false

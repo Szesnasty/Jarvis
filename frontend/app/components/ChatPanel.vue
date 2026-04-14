@@ -4,6 +4,7 @@ import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useSpecialists } from '~/composables/useSpecialists'
 import { MODEL_CATALOG } from '~/composables/useApiKeys'
+import { PROVIDER_ICONS } from '~/composables/providerIcons'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -16,6 +17,20 @@ function modelLabel(provider?: string, model?: string): string {
   if (!provider || !model) return ''
   const catalog = MODEL_CATALOG[provider]
   return catalog?.find(m => m.id === model)?.label ?? model
+}
+
+function providerIcon(provider?: string): string {
+  if (!provider) return ''
+  return (PROVIDER_ICONS as Record<string, string>)[provider] ?? ''
+}
+
+function formatTime(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleString('pl-PL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  })
 }
 
 const { activeSpecialists, deactivate, specialists: allSpecialists, load: loadSpecialists } = useSpecialists()
@@ -150,11 +165,20 @@ watch(
         <div
           class="chat-panel__bubble"
           :class="{ 'chat-panel__bubble--md': msg.role === 'assistant' }"
-          v-html="msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content"
-        />
-        <span v-if="msg.role === 'assistant' && msg.model" class="chat-panel__model-tag">
-          {{ modelLabel(msg.provider, msg.model) }}
-        </span>
+        >
+          <div v-if="msg.role === 'assistant' && (msg.model || msg.timestamp)" class="chat-panel__meta">
+            <span v-if="msg.model" class="chat-panel__meta-model">
+              <span class="chat-panel__meta-icon" v-html="providerIcon(msg.provider)" />
+              {{ modelLabel(msg.provider, msg.model) }}
+            </span>
+            <span v-if="msg.timestamp" class="chat-panel__meta-time">{{ formatTime(msg.timestamp) }}</span>
+          </div>
+          <div v-else-if="msg.role === 'user' && msg.timestamp" class="chat-panel__meta">
+            <span class="chat-panel__meta-time">{{ formatTime(msg.timestamp) }}</span>
+          </div>
+          <div v-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)" />
+          <template v-else>{{ msg.content }}</template>
+        </div>
       </div>
 
       <div v-if="currentResponse" class="chat-panel__message assistant">
@@ -403,14 +427,39 @@ watch(
   color: var(--text-primary);
 }
 
-.chat-panel__model-tag {
-  display: block;
-  font-size: 0.68rem;
+.chat-panel__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.65rem;
   color: var(--text-muted);
-  margin-top: 0.2rem;
-  padding-left: 0.25rem;
-  opacity: 0.7;
+  opacity: 0.6;
+  margin-bottom: 0.35rem;
   user-select: none;
+  line-height: 1;
+}
+
+.chat-panel__meta-model {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.chat-panel__meta-icon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+
+.chat-panel__meta-icon :deep(svg) {
+  width: 12px;
+  height: 12px;
+}
+
+.chat-panel__meta-time {
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .chat-panel__cursor {

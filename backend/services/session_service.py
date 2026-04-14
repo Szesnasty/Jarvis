@@ -86,7 +86,7 @@ def add_message(session_id: str, role: str, content: str, **meta) -> None:
     if not session:
         return
 
-    msg: dict = {"role": role, "content": content}
+    msg: dict = {"role": role, "content": content, "timestamp": datetime.now(timezone.utc).isoformat()}
     if meta.get("model"):
         msg["model"] = meta["model"]
     if meta.get("provider"):

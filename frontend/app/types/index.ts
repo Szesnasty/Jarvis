@@ -46,6 +46,7 @@ export interface ChatMessage {
   content: string
   model?: string
   provider?: string
+  timestamp?: string
 }
 
 export interface WsTextDelta {
