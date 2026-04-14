@@ -123,8 +123,3 @@ export interface TTSProvider {
 **`onEnd` fires on `stop()` too.** When `stop()` is called on the TTS provider, it explicitly invokes the `endCallback`. This means `useVoice`'s `tts.onEnd` handler will fire and return state to `idle` even when a stop was requested by `cancel()`. The guard `if (state.value === 'speaking')` in `tts.onEnd` prevents spurious state resets from `cancel()` scenarios where state has already been set to `idle`.
 
 **Single-utterance STT.** The Web Speech STT implementation uses `continuous: false`. It captures one utterance and then the session ends naturally. There is no long-running session; each `startListening()` is a discrete capture.
-
-## Known Issues
-
-**Medium — STT callbacks registered before `bindChat` is called (`useVoice.ts:19-25`).**
-The `stt.onResult` callback is wired at composable construction time. The `_sendMessage` reference it closes over is `null` until `bindChat()` is called by the caller. If the STT provider fires a final result before `bindChat` has been invoked — for example, if `startListening()` is called immediately after composable construction in the same tick — the transcript is silently dropped. There is no warning, no queuing, and no error. The existing Gotchas section documents the consequence; this entry records it as a concrete code-level risk tied to the initialization order.

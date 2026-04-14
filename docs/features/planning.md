@@ -70,8 +70,3 @@ The `create_plan` tool definition also accepts a `context` field (a free-text st
 **No direct HTTP endpoint.** There is no `/plans` REST route. Reads, writes, and toggles can only be triggered through the chat tool pipeline. If you need to expose plans to the frontend independently (e.g. a dedicated plans UI), a router will need to be added and wired into `main.py`.
 
 **Slug collisions on same-day creation.** Two plans created on the same day with the same title produce the same filename. `memory_service.create_note` will overwrite the earlier file without warning.
-
-## Known Issues
-
-**Medium — `update_plan_task` replaces the first matching substring on the target line (`planning_service.py:63-65`).**
-When marking a checkbox checked, the code calls `line.replace("- [ ]", "- [x]")`, and when unchecking it calls `line.replace("- [x]", "- [ ]")`. Python's `str.replace` replaces the first occurrence of the pattern in the string. For a normal checkbox line this is fine, but if the checkbox item text itself contains the literal string `- [ ]` or `- [x]` (for example, a nested task description written inline), the replacement targets the wrong substring. The result is a corrupted line rather than an error, and the file is written immediately with no validation.

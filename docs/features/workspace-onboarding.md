@@ -71,32 +71,4 @@ workspace_exists(workspace_path?) -> bool
 
 - **The frontend error message for any non-network failure** is whatever the backend sends in the `detail` field. A 409 surfaces as "Workspace already exists" and a 422 as the ValueError message. Any true network/connection failure (backend not running) falls through to the generic "Connection error. Is the backend running?" string in the catch block.
 
-- **No SQLite initialization happens here.** The workspace directories are created by this service, but the database is initialized separately at backend startup (`main.py`). Onboarding does not guarantee the DB is ready — it only guarantees the file structure and config exist.
-
-## Known Issues
-
-### Critical
-
-**No rollback on partial workspace creation** (`workspace_service.py:74-88`)
-
-`create_workspace` creates all directories first, then calls `_store_api_key`, then writes `config.json`. There is no rollback logic. If `_store_api_key` or the `config.json` write fails after directories have been created, the workspace is left in a partially initialized state: directories exist but `config.json` does not. `workspace_exists()` checks only for `config.json`, so the next call to `create_workspace` will not raise `WorkspaceExistsError` and will attempt to re-run setup over the already-created directories. The user will see a new onboarding attempt succeed, but any state written to those directories between the failed and successful runs is silently preserved.
-
-**`_store_api_key` swallows all exceptions** (`workspace_service.py:93-102`)
-
-The fallback branch catches `(NoKeyringError, Exception)` — catching `Exception` is a superset of catching `NoKeyringError`, meaning all exceptions are caught and logged as a warning. A disk-full error, a permission denied error, or any other I/O failure during the fallback file write is silently swallowed. `create_workspace` will continue and write `config.json` with `api_key_set: true` even though the key was never actually stored. Subsequent calls to `get_api_key()` will return `None`, causing all Claude API calls to fail with a missing-key error rather than a clear setup error.
-
-### High
-
-**`get_workspace_status` has no error handling around config read** (`workspace_service.py:49-60`)
-
-`config_file.read_text()` is called without a try/except. A corrupt, empty, or deleted `config.json` (after `workspace_exists()` returns `True` but before the read completes) will raise an unhandled exception that propagates through the router as a 500. Because the app shell calls `/api/workspace/status` on every mount, a corrupt config file causes every page load to fail with a 500 until the file is manually repaired.
-
-### Medium
-
-**No API key format validation in `WorkspaceInitRequest`**
-
-The schema accepts any non-empty string as a valid API key. An obviously wrong value (e.g., `"test"` or a key from a different provider) is accepted, stored, and only discovered to be invalid at the first Claude API call. There is no `sk-ant-` prefix check or length check on the incoming value.
-
-**`get_api_key` re-reads and re-parses the fallback file on every call** (`workspace_service.py:122-140`)
-
-When the keyring is unavailable and the environment variable is not set, `get_api_key` opens and `json.loads`-parses `api_key.json` on every invocation. There is no in-process cache. On a corrupt file, `json.loads` raises an exception that is not caught here — the caller receives an unhandled `JSONDecodeError` rather than a `None` return or a clear error. This also means a corrupt fallback file will surface as an unexpected exception in any code path that calls `get_api_key()`.
+- **No SQLite initialization happens here.** The workspace directories are created by this service, but the database is initialized at backend startup via `main.py`'s lifespan handler. Onboarding guarantees the file structure and config exist; the DB is ready as soon as the backend process finishes starting.

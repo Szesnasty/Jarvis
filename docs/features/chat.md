@@ -38,7 +38,7 @@ For each user message the backend (`_handle_message` in `chat.py`) runs the foll
 3. **First Claude stream** — `ClaudeService.stream_response` opens a streaming request to the Anthropic Messages API. `text_delta` events are forwarded to the WebSocket immediately as they arrive.
 4. **Tool call handling** — If Claude emits a `tool_use` block, its JSON input is accumulated across streaming deltas by `_ToolAccumulator` and yielded as a single `StreamEvent` only when the `content_block_stop` event arrives. The router then executes the tool, appends both the assistant tool-use block and the tool result to the message list, and calls `_stream_follow_up` to get Claude's next response.
 5. **Recursive tool rounds** — `_stream_follow_up` is recursive. Each recursive call increments a `depth` counter. The chain is cut off at `MAX_TOOL_ROUNDS = 5` to prevent runaway loops.
-6. **Session save** — After every exchange the full session is persisted to disk (crash protection). On WebSocket disconnect the session is additionally written to `memory/` as a Markdown note.
+6. **Session save** — `add_message` auto-persists after each append (crash protection). If Claude responds with text, the assistant message triggers another auto-save. If Claude returns only tool calls with no text, no redundant save is triggered since the user message already persisted. On WebSocket disconnect the session is additionally written to `memory/` as a Markdown note.
 7. **Token logging** — Accumulated `input_tokens` + `output_tokens` from all rounds in a turn are written to `app/logs/token_usage.jsonl` via `log_usage`.
 
 ### Error handling in ClaudeService
@@ -63,7 +63,7 @@ All Anthropic SDK exceptions are caught and converted to `StreamEvent(type="erro
 | `SPECIALIST_BUDGET` | 500 tokens |
 | `HISTORY_BUDGET` | 500 tokens |
 
-These constants are defined and exported but are not currently enforced — `check_budget` is never called before Claude API calls. Token usage is logged at `$3/MTok` input and `$15/MTok` output (claude-sonnet-4 pricing at time of writing).
+`check_budget()` is now called in `chat.py` before each Claude API call. When the accumulated token count exceeds `TOTAL_BUDGET`, the call is blocked and an error event is sent to the client. When the count exceeds the warning threshold, a notification event is sent but the call proceeds. Token usage is logged at `$3/MTok` input and `$15/MTok` output (claude-sonnet-4 pricing at time of writing).
 
 ## Key Files
 
@@ -116,7 +116,7 @@ All frames are JSON. The client sends; the server sends back a stream of events 
 // Recoverable or fatal error. Check content for user-facing message.
 ```
 
-`disconnected` is a synthetic client-side-only event emitted by `useWebSocket` on socket close; it never comes from the server.
+`disconnected` is a synthetic client-side-only event emitted by `useWebSocket` on socket close; it never comes from the server. It is included in the `WsEvent` union type as `WsDisconnected`.
 
 ### Tool definitions
 
@@ -160,7 +160,7 @@ const {
 
 **Tool input arrives fragmented.** The Anthropic streaming API sends tool input JSON as multiple `input_json_delta` events. `_ToolAccumulator` concatenates these strings and only parses the complete JSON on `content_block_stop`. If Claude sends malformed JSON for a tool input (rare but possible), the accumulator silently returns an empty dict `{}` rather than raising — so tools that require inputs may behave unexpectedly without a visible error.
 
-**Only one tool call per Claude turn is handled.** The router tracks a single `pending_tool` variable per streaming pass. If Claude emits two `tool_use` blocks in the same response, only the last one is retained (each overwrites the previous). Any earlier tool calls in that pass are silently dropped. In current Anthropic API behaviour only one tool call is emitted per stop sequence, but this is a structural limitation with no guard.
+**Multiple tool calls per Claude turn are now handled.** The router accumulates all `tool_use` blocks from a single streaming pass into a list and executes each one in order before calling the follow-up stream. This removed the earlier limitation where only the last tool call in a pass was processed.
 
 **Session ID switching mid-connection.** A client can pass a different `session_id` in a message to resume a previous conversation. The server will switch context silently if that session exists. The frontend never does this intentionally today, but it means a replayed or forged frame could hijack session context.
 
@@ -169,43 +169,3 @@ const {
 **Error messages auto-clear after 8 seconds** in `useChat`. If the user does not notice and act (e.g. click Retry), the error disappears silently. The underlying WebSocket may still be reconnecting.
 
 **URL ingest in ChatPanel bypasses Claude.** When the user types a URL and clicks "Save to memory", the `ingestUrl` REST call happens directly without going through the WebSocket or adding a user message to the history. The save result is shown in a transient status bar that disappears after 4 seconds and is not recorded in the session.
-
-## Known Issues
-
-### Critical
-
-**Prompt injection via ingested note content** (`context_builder.py:52`). Raw note content — including pages fetched via `ingest_url` — is embedded verbatim into the system prompt with no sanitization. A web page or YouTube transcript that contains text resembling system instructions can manipulate Claude's behaviour for the remainder of the session.
-
-### High
-
-**Parallel tool calls are silently dropped** (`chat.py:96-97`, `chat.py:150-151`). Both `_handle_message` and `_stream_follow_up` track the current tool call in a single `pending_tool` variable. If the Anthropic API ever emits more than one `tool_use` block in a single streaming response (possible with future model versions or changed API behaviour), all but the last call are overwritten and never executed. There is no warning logged.
-
-**`ClaudeService` instantiated per-message** (`chat.py:135`). `ClaudeService(api_key=api_key)` is called inside `_handle_message`, which runs on every WebSocket message. Each instantiation creates a new `anthropic.AsyncAnthropic` client and a new underlying HTTP connection pool. Under load this creates unnecessary connection churn. The service should be instantiated once per WebSocket connection or as a module-level singleton.
-
-**Token budget constants are defined but never enforced** (`token_tracking.py:11-15`). `TOTAL_BUDGET`, `CONTEXT_BUDGET`, and related constants are exported from `token_tracking.py` but `check_budget` is never called before Claude API calls anywhere in the codebase. There is no mechanism to prevent runaway token consumption against the budget thresholds.
-
-### Medium
-
-**`_execute_summarize` performs synchronous file I/O on the async event loop** (`tools.py:313-339`). The `summarize_context` tool handler calls `target.write_text(...)` synchronously inside an `async` call chain. This blocks the event loop for the duration of the disk write. Additionally, it bypasses `memory_service.create_note`, meaning the saved summary is not indexed in SQLite, does not appear in search results, and has no path validation — Claude-supplied path components are used directly.
-
-**Hard 500-character truncation in context assembly breaks mid-word** (`context_builder.py:52`). Notes are truncated to 500 characters without regard for word or sentence boundaries. This can produce cut-off words or broken Markdown at the context injection boundary, which may confuse Claude's reading of the injected note.
-
-**`_anthropic_client.py` is dead code.** The module exports a `create_client` factory that returns a synchronous `anthropic.Anthropic` instance. The codebase uses `anthropic.AsyncAnthropic` directly in `ClaudeService.__init__` and `_anthropic_client.py` is never imported. It provides no live functionality and its presence implies a test-mocking path that does not exist.
-
-### Frontend
-
-**XSS via cursor `<span>` appended after DOMPurify** (`ChatPanel.vue:115`). The streaming response bubble is rendered as:
-
-```
-renderMarkdown(currentResponse) + '<span class=chat-panel__cursor>▊</span>'
-```
-
-`renderMarkdown` runs `DOMPurify.sanitize` on the Markdown output, but the cursor span is concatenated as a raw string after sanitization and set via `v-html`. If `currentResponse` ends with content that can break out of the sanitized HTML context before the append, the cursor span bypasses DOMPurify. The span should be injected via a DOM API or template ref rather than raw string concatenation.
-
-**`URL_RE` matches trailing punctuation** (`ChatPanel.vue:37`). The regex `/https?:\/\/[^\s]+/` captures everything up to the next whitespace, including trailing punctuation like commas, periods, and closing parentheses. A sentence like "see https://example.com." will match `https://example.com.` (with the period), producing an invalid URL passed to the ingest endpoint.
-
-**`_errorClearTimer` is never cleared on component unmount** (`useChat.ts:13`). The 8-second auto-clear timer is stored in `_errorClearTimer` but `useChat` has no `onUnmounted` hook. If the component is destroyed while a timer is pending, the callback fires against a stale ref, which in Vue 3 is harmless but still leaks the timer handle.
-
-**Reconnect callbacks fire on first connection** (`useWebSocket.ts:26-43`). The reconnect guard checks `_reconnectAttempts > 0 || _ws.value !== ws`. On the very first `connect()` call, `_ws.value` is `null` and `ws` is the newly created socket, so `_ws.value !== ws` is always true and all registered `onReconnect` callbacks fire immediately. In `useChat`, this resets `sessionId` to an empty string on first connect, before `session_start` arrives. In practice this is harmless because `session_start` follows immediately, but any `onReconnect` handler that assumes a prior session existed will run incorrectly on cold start.
-
-**`disconnected` event handled via `any` cast** (`useChat.ts:66`). The `_handleEvent` function receives a typed `WsEvent` but falls through to `(event as any).type === 'disconnected'` because `'disconnected'` is not in the `WsEvent` union. This bypasses TypeScript's exhaustiveness checking. The `WsEvent` type should be extended to include the synthetic `disconnected` event type.

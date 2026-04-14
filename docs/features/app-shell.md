@@ -47,11 +47,15 @@ Three pieces of state are owned at the application level and shared across all p
 
 `StatusBar.vue` provides five navigation links (Chat, Memory, Graph, Specialists, Settings) and the backend status indicator. The "JARVIS" wordmark on the left fades to `opacity: 0` when `chatActive` is true — this is intentional to clear visual space for the mini orb that animates into the same top-left region.
 
+On viewports narrower than 640px the navigation links collapse behind a hamburger button. The hamburger icon animates into an X when the menu is open. The dropdown appears below the status bar with a slide-down animation and a semi-transparent backdrop that closes the menu on tap. Active links use a left-border accent instead of the desktop pill style. Route changes also auto-close the menu.
+
 ### The Orb and its position animation
 
 `Orb.vue` is a fully SVG-based animated component. It accepts a single `state` prop (`'idle' | 'listening' | 'thinking' | 'speaking'`) and uses that to drive CSS class–based changes across its layers: arc rotation speed, glow pulse rate, core gradient colors, and drop-shadow intensity.
 
 The orb's position is managed in `main.vue` via a CSS class toggle on a `position: fixed` wrapper, not by the Orb component itself. In hero mode (no chat messages), the wrapper is centered in the content area. Once chat starts (`chatActive` becomes true), the wrapper transitions to `top: 20px; left: 48px; transform: scale(0.13)` — overlaying the faded wordmark. The transition uses an 0.85s cubic-bezier curve so the shrink-and-fly motion is smooth.
+
+`main.vue` also keeps the session sidebar in sync with the backend in real time. Two watchers call `sessionsState.loadSessions()`: one when `chat.sessionId` changes (new session created via WebSocket `session_start`), and another when a chat response completes (`isLoading` transitions from true to false). This ensures new sessions and updated titles appear immediately without a page refresh.
 
 `main.vue` derives the orb state from voice and loading state with this priority:
 
@@ -80,7 +84,7 @@ An `enabled` guard function can be passed to disable all shortcuts conditionally
 
 ### Obsidian integration helper
 
-`ObsidianHelper.vue` (used on the Settings page) generates an `obsidian://open?vault=Jarvis` deep link. It opens with `window.open(..., '_self')` to hand off to the Obsidian desktop application. The vault name is hardcoded as `Jarvis` — this works if the user accepted the default workspace name during onboarding, but will silently fail to open the right vault if they renamed it.
+`ObsidianHelper.vue` (used on the Settings page) generates an `obsidian://open?vault=Jarvis` deep link. It opens with `window.open(..., '_blank')` to hand off to the Obsidian desktop application without navigating the current tab. The vault name is hardcoded as `Jarvis` — this works if the user accepted the default workspace name during onboarding, but will silently fail to open the right vault if they renamed it.
 
 ## Key Files
 
@@ -110,20 +114,3 @@ An `enabled` guard function can be passed to disable all shortcuts conditionally
 **`checkWorkspaceStatus` swallows all errors as `initialized: false`.** If the backend is down when `index.vue` loads, the user is sent to onboarding rather than seeing an error. This is intentional for the MVP but means a temporary backend restart could put a user through onboarding again.
 
 **`useApi` has no request deduplication or caching.** Every call creates a fresh `$fetch` request. Pages that call the same endpoint on mount (e.g., fetching sessions) will fire redundant requests if rendered multiple times. This is acceptable at current scale but worth noting for high-frequency endpoints.
-
-## Known Issues
-
-**Medium — Note paths not URL-encoded in API calls (`useApi.ts:71-72`, `82-84`).**
-`fetchNote` and `deleteNote` interpolate the note path directly into the URL template: `` `/api/memory/notes/${path}` ``. If the path contains characters that are significant in URLs (spaces, `#`, `?`, `%`, or non-ASCII characters), the request will be malformed or silently route to the wrong resource. Paths should be passed through `encodeURIComponent()` before interpolation. As a secondary concern, because the path comes from user-controlled note filenames, a path containing `../` sequences could potentially traverse URL routing in unexpected ways depending on how the backend router normalizes segments.
-
-**Medium — Error handling logic duplicated across 20+ methods in `useApi.ts`.**
-Every method in `useApi` contains an identical `try/catch` block: check for `'status'` on the error object, extract `statusMessage`, rethrow as `ApiError`. This pattern is copy-pasted 22 times. Any change to error normalization (e.g., adding retry logic, changing how `statusMessage` is extracted, or supporting additional error shapes) requires updating every method individually. A private `_request` helper would centralize this without changing the public API.
-
-**Medium — `ObsidianHelper.vue:22` navigates the current tab away on protocol handler miss.**
-`window.open('obsidian://...', '_self')` replaces the current page in the browser's history. On systems where the `obsidian://` protocol is not registered (Obsidian not installed, or running in a browser environment without the desktop handler), the browser will either show a protocol-not-found error page or do nothing — but the current Jarvis page has already been unloaded from the tab. Using `'_blank'` or checking for handler availability first would prevent the page-navigation side effect.
-
-**Low — `onSend` callback defined in `KeyboardOptions` interface but never called (`useKeyboard.ts`).**
-The `KeyboardOptions` interface declares an `onSend?: () => void` field, but no keyboard handler in `useKeyboard` reads or invokes it. The handler only processes Space (toggle voice) and Escape (cancel). The `onSend` callback is dead API surface — it cannot be triggered by any keyboard shortcut. Callers passing `onSend` will have no observable effect.
-
-**Low — `ChatPanel.vue` uses array index as `:key` (`ChatPanel.vue:103`).**
-The message list renders with `:key="i"` (the loop index). When messages are prepended, removed from the middle, or reordered, Vue's diffing algorithm cannot distinguish existing nodes from new ones by identity, and may reuse stale DOM nodes or trigger unnecessary full re-renders. A stable, unique message ID (e.g., a UUID or timestamp assigned at message creation) should be used as the key instead.

@@ -18,6 +18,8 @@ last_reviewed: 2026-04-14
 last_updated: 2026-04-14
 ---
 
+
+
 ## Summary
 
 The memory system is Jarvis's core storage layer. Every piece of user knowledge lives as a Markdown file under `Jarvis/memory/`, with SQLite acting as a queryable index on top of those files. The browser UI provides note browsing, full-text search, folder filtering, and two ingest paths — local file upload and URL import — that each produce a new Markdown note automatically indexed into SQLite.
@@ -36,7 +38,7 @@ Every note carries a YAML frontmatter block with `title`, `created_at`, `updated
 
 ### Deletion (soft)
 
-`delete_note` moves the Markdown file to `Jarvis/.trash/{relative-path}` rather than deleting it outright, then removes the SQLite record. This means the note is recoverable from the filesystem even after deletion via the UI.
+`delete_note` checks both the filesystem and the SQLite index. If the Markdown file exists on disk it is moved to `Jarvis/.trash/{relative-path}` rather than deleted outright. The SQLite record is always removed regardless of whether the file was present on disk — this handles the case where a file was deleted externally but its index entry remained, which previously caused the note to appear in the list but fail to delete with a 404 error. After deletion, it calls `graph_service.invalidate_cache()` so that the knowledge graph rebuilds from the current filesystem state on next access, preventing stale graph nodes from referencing deleted notes. The note is recoverable from the `.trash` folder even after deletion via the UI.
 
 ### Ingest pipeline — files
 
@@ -136,11 +138,11 @@ POST   /enrich/{note_path}
 
 ## Gotchas
 
-**Deletion is not permanent.** The delete endpoint moves files to `Jarvis/.trash/` rather than removing them. SQLite records are removed, so deleted notes disappear from all queries, but the file remains recoverable. There is currently no UI to manage or empty the trash.
+**Deletion is not permanent.** The delete endpoint moves files to `Jarvis/.trash/` rather than removing them. SQLite records are always removed (even if the file is already missing from disk) and the graph cache is invalidated, so deleted notes disappear from all queries and the graph on next access. The file remains recoverable from `.trash`. There is currently no UI to manage or empty the trash.
 
-**Path traversal protection is shallow.** `_validate_path` blocks `..` segments and absolute paths, but validation happens only in the service layer. Callers using `note_path` directly with file system operations should ensure they call `_validate_path` first.
+**Path traversal protection uses containment checking.** `_validate_path` now uses `Path.resolve()` plus `.relative_to()` to ensure the final resolved path stays inside the memory directory, and also rejects Windows-style absolute paths at the input stage. Callers that construct paths outside the service layer must still call `_validate_path` themselves.
 
-**`list_notes` reads from SQLite only.** Notes that exist on disk but have not been indexed (e.g. placed there manually outside of Jarvis) will not appear in the list until `/api/memory/reindex` is called. The frontend has no automatic trigger for reindex; it must be called explicitly.
+**`list_notes` reads from SQLite only.** Notes that exist on disk but have not been indexed (e.g. placed there manually outside of Jarvis) will not appear in the list until `/api/memory/reindex` is called. Conversely, if a file is removed from disk but the SQLite entry remains, the note will still appear in the list — however, deleting it via the UI will clean up the orphaned index entry. The frontend has no automatic trigger for reindex; it must be called explicitly.
 
 **Search tokenization strips all non-word characters.** A search for `C++` becomes `C` — the `+` signs are removed before the FTS query is built. This is intentional to avoid FTS5 query syntax errors, but it means searches containing punctuation will silently broaden.
 
@@ -148,43 +150,6 @@ POST   /enrich/{note_path}
 
 **YouTube ingest requires `youtube-transcript-api` to be installed** and will save a metadata-only note if no transcript is available. The `no-transcript` tag is added in this case to make such notes identifiable.
 
-**Web page ingest retries without SSL verification on certificate failure.** The retry is logged as a warning but proceeds. This is a convenience trade-off for ingesting pages with self-signed or expired certificates; it means content from such pages is fetched without TLS validation.
+**Web page ingest no longer retries without SSL verification.** The earlier `verify=False` retry has been removed. Pages with self-signed or expired certificates will fail ingest rather than being fetched insecurely.
 
 **`smart_enrich` truncates input to 3,000 characters.** For long notes this means Claude only sees the beginning of the document when generating the summary and tags.
-
-## Known Issues
-
-The following issues were identified in a codebase review. They are listed in order of severity. None have been fixed as of `last_updated`.
-
-### Critical
-
-**SSRF via URL ingest (`url_ingest.py:223`).**
-`_ingest_webpage` calls `requests.get(url, ...)` after only checking that the URL scheme is `http` or `https`. There is no check whether the resolved host is a private, loopback, or link-local address (e.g. `127.0.0.1`, `169.254.x.x`, `10.x.x.x`). An attacker who can submit ingest requests can use this to probe or exfiltrate responses from internal network services.
-
-**Path traversal not fully blocked on Windows (`memory_service.py:37–41`).**
-`_validate_path` rejects strings containing `..` or starting with `/`, but it does not reject Windows-style absolute paths such as `C:\Users\...` or paths using forward-slash drive prefixes like `/c:/...`. On a Windows host, constructing a `Path` from such a string and joining it to the memory directory will silently resolve outside the workspace.
-
-### High
-
-**SSL verification silently disabled on retry (`url_ingest.py:227–234`).**
-When the first HTTP request to a web URL fails for any reason (not just certificate errors), the retry attempt sets `verify=False`, disabling TLS certificate validation entirely. The retry is logged as a warning but the downgraded request proceeds without any user confirmation, making the ingest silently vulnerable to man-in-the-middle interception on that request.
-
-**`reindex_all` clears the notes table outside a transaction (`memory_service.py:239–249`).**
-The function issues `DELETE FROM notes` and commits it, then re-indexes each file in a separate connection per note. A crash, restart, or exception between the delete commit and the completion of re-indexing leaves the index empty. Notes on disk are unaffected (source of truth is Markdown files), but the application will appear to have no notes until another reindex is run.
-
-**Unbounded file upload size (`memory.py:84–108`).**
-The `/api/memory/ingest` endpoint calls `await file.read()` with no size limit. There is no `Content-Length` check, no streaming, and no cap. A sufficiently large upload will consume all available backend memory before any validation runs.
-
-**`smart_enrich` does not validate `note_path` against path traversal (`ingest.py:139–142`).**
-`smart_enrich` constructs `full_path = mem / note_path` without calling `_validate_path` first. A caller passing a path such as `../../etc/passwd` (or a Windows equivalent) will cause the function to read an arbitrary file from the filesystem and send its first 3,000 characters to the Claude API.
-
-### Medium
-
-**Frontmatter YAML built with f-strings is injection-prone (`ingest.py:172–178`, `url_ingest.py:84–92`).**
-Both `smart_enrich` and `_build_frontmatter` construct YAML by concatenating raw field values into a `---`-delimited string using f-strings or a manual loop. A title or author value containing a colon, newline, or quote character will produce invalid or semantically incorrect YAML. `memory_service` and `add_frontmatter` in `utils/markdown.py` correctly use `yaml.dump` and are not affected.
-
-**`json.loads(tags)` crashes on corrupt rows (`memory_service.py:158`).**
-In `list_notes`, the tags column is decoded with `json.loads(row["tags"])` with no exception handling. If any row in the notes table has a malformed tags value (e.g. from a manual DB edit or a past bug), the entire listing call raises an unhandled `json.JSONDecodeError` rather than skipping or substituting the bad row.
-
-**`folder` form field in file upload is not validated against path traversal (`memory.py:84–108`).**
-The `folder` parameter accepted by `POST /ingest` is passed directly to `fast_ingest` as `target_folder`, which appends it to the memory directory path without checking for `..` segments or absolute path prefixes. The `UrlIngestRequest` schema validates the equivalent field with a regex pattern; the file upload endpoint has no equivalent guard.

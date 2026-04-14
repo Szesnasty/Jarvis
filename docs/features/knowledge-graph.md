@@ -40,9 +40,9 @@ The completed graph is serialised to `{workspace}/graph/graph.json` and held in 
 
 ### Rebuild flow
 
-The `/api/graph/rebuild` endpoint clears the cache and triggers a full re-scan of the `memory/` directory. The graph page calls `rebuildGraph()` automatically on every mount, so visiting the graph view always triggers a full rescan rather than loading the cached graph. A `Rebuild` button in the toolbar allows the user to trigger another rescan manually.
+The `/api/graph/rebuild` endpoint clears the cache and triggers a full re-scan of the `memory/` directory. The graph page calls `loadGraph()` on mount to fetch the already-built graph without triggering a rescan. A `Rebuild` button in the toolbar triggers `rebuildGraph()` when the user explicitly requests a full rescan.
 
-`rebuild_graph` is also called inline — without offloading to a thread — from `session_service.py` after a conversation is saved to memory, and from `ingest.py` and `url_ingest.py` after files are ingested. All of these call sites are inside async functions, meaning the synchronous file scan blocks the event loop until it completes.
+`rebuild_graph` is now wrapped in `asyncio.to_thread` at all async call sites: the `/api/graph/rebuild` endpoint in `graph.py` and `session_service.save_conversation`. This means the synchronous file scan runs in a thread pool worker and no longer blocks the event loop.
 
 ### Visualisation
 
@@ -50,7 +50,7 @@ The frontend renders the graph using `force-graph` (a D3-force-backed Canvas lib
 
 Labels are shown selectively: always for `area` nodes, always for nodes with 4+ connections, and for any hovered or highlighted node. At zoom levels above 1.2 all labels appear. Labels longer than 25 characters are truncated with an ellipsis unless the node is hovered.
 
-The `GraphCanvas` component destroys and recreates the entire `force-graph` instance whenever the node or edge data changes (`watch` on `[props.nodes, props.edges]`). This is a full teardown-and-rebuild rather than an incremental update. A `ResizeObserver` is attached once on mount and kept alive; however, when `buildGraph` is called again due to data changes, a new `force-graph` instance is created without re-attaching or replacing the existing `ResizeObserver`, leaving the old observer orphaned. The observer is only cleaned up in `onBeforeUnmount`.
+The `GraphCanvas` component destroys and recreates the entire `force-graph` instance whenever the node or edge data changes (`watch` on `[props.nodes, props.edges]`). This is a full teardown-and-rebuild rather than an incremental update. The `ResizeObserver` is now disconnected at the start of `buildGraph()` and re-attached to the new instance's container after the graph is built, preventing orphaned observer registrations on repeated data refreshes.
 
 ## Key Files
 
@@ -141,28 +141,12 @@ defineExpose({
 
 **Wiki link targets may not exist as nodes.** When `rebuild_graph` encounters a `[[Link]]` it unconditionally creates an edge to `note:Link.md`. If that file does not exist in `memory/`, the target node will be referenced by an edge but will not exist in `graph.nodes`. The graph data structure allows dangling edges, so the visualiser must tolerate them — `force-graph` does, but any code doing `graph.nodes[targetId]` lookups should guard for `undefined`.
 
-**The in-process cache is never automatically invalidated.** Writing or deleting a memory file does not update the graph until either the server restarts or a `POST /api/graph/rebuild` is issued. The graph page triggers a rebuild on every mount, which is the primary refresh mechanism. Background writes (e.g. saving a chat result to memory) do not update the graph automatically.
+**The in-process cache is invalidated on destructive operations but not on every write.** Deleting a memory note (`memory_service.delete_note`) and deleting a session (`DELETE /api/sessions/{id}`) both call `invalidate_cache()` so the graph rebuilds from the current filesystem state on next access. However, creating or updating a memory note does not invalidate the cache automatically — those changes only appear after a `POST /api/graph/rebuild` or server restart. The graph page triggers a rebuild on every mount, which is the primary refresh mechanism for non-destructive changes.
 
-**`rebuild_graph` is synchronous and blocks the event loop.** It calls `Path.rglob()` and reads every `.md` file before returning. It is called directly (without `asyncio.to_thread`) from three async contexts: the `/api/graph/rebuild` endpoint, `session_service.save_conversation`, and the ingest pipeline. On large workspaces this will stall all concurrent requests. Acceptable for MVP but needs to move to a background task or async file I/O if memory grows large.
+**`rebuild_graph` is synchronous but wrapped in `asyncio.to_thread`.** It calls `Path.rglob()` and reads every `.md` file before returning. All async call sites (the `/api/graph/rebuild` endpoint and `session_service.save_conversation`) run it via `asyncio.to_thread` so the file scan executes in a thread pool worker rather than blocking the event loop. On very large workspaces it will still occupy a thread for the duration of the scan.
 
 **`force-graph` is dynamically imported.** The `import('force-graph')` call inside `buildGraph` happens lazily on first render. If the module fails to load (e.g. network issue in dev mode), `buildGraph` will throw silently and the canvas will remain blank.
 
 **Tooltip position is not updated from mouse events.** `tooltipStyle` is initialised to `{left: '0px', top: '0px'}` and never changed at runtime. The tooltip renders at the top-left corner of the canvas, not at the cursor. This is a known visual limitation.
 
 **`rebuildGraph` in `useGraph` calls `apiRebuild` then `fetchGraph` separately.** The rebuild endpoint returns only stats, not the full graph, so a second request is required. These two requests are not atomic — a concurrent rebuild triggered from elsewhere could cause the stats and graph data to be inconsistent for the brief window between the two calls.
-
-## Known Issues
-
-### High severity
-
-**Duplicate edges accumulate on every rebuild** (`graph_service.py:36`). `Graph.add_edge` always appends to `self.edges` without checking whether the same `(source, target, type)` triple already exists. Because `rebuild_graph` creates a fresh `Graph()` instance each time this does not cause accumulation across rebuilds in isolation — but `load_graph` also calls `add_edge` for every edge in the persisted JSON, and if `graph.json` was written with duplicates (e.g. from two rapid rebuilds before a cache hit) those duplicates are loaded faithfully. More importantly, the `Graph` dataclass has no dedup invariant, so any future code path that adds edges to an existing instance will silently accumulate duplicates. The `stats()` method counts edges naively, so duplicate edges inflate degree counts and the top-connected list.
-
-**`rebuild_graph` called synchronously inside async handler** (`session_service.py:349`, via `graph_service.py`). After `save_conversation` writes a conversation note to disk it calls `graph_service.rebuild_graph(...)` directly — a fully synchronous, blocking function — from inside an `async def`. This occupies the event loop for as long as the full memory scan takes. The call is wrapped in a bare `try/except` that swallows all exceptions, so failures are silent. Fix: wrap with `await asyncio.to_thread(graph_service.rebuild_graph, ...)` or move to a background task.
-
-### Medium severity
-
-**Unbounded `depth` parameter on `/api/graph/neighbors`** (`graph.py:25`). The endpoint accepts `depth: int = 1` with no upper bound. A caller passing `depth=999` on a graph with many interconnected nodes will trigger a BFS that walks the entire graph repeatedly. There is no rate limit, authentication, or cap. Fix: clamp depth server-side, e.g. `depth = min(depth, 5)`.
-
-**`rebuildGraph()` called on every mount instead of `loadGraph()`** (`graph.vue:63`). `onMounted` calls `rebuildGraph()`, which issues a `POST /api/graph/rebuild` followed by a `GET /api/graph`. Every navigation to the graph page rescans all memory files from disk regardless of whether anything changed since the last visit. `loadGraph()` exists specifically to fetch the already-built graph without triggering a rescan, but it is not used here. Fix: call `loadGraph()` on mount and reserve `rebuildGraph()` for the explicit toolbar button.
-
-**Orphaned `ResizeObserver` on graph data changes** (`GraphCanvas.vue:297-304`). The `ResizeObserver` is created once in `onMounted` and stored in the module-level `resizeObserver` variable. When the `watch` on `[props.nodes, props.edges]` fires and calls `buildGraph()`, the old `force-graph` instance is destroyed and a new one is created, but the `ResizeObserver` is not disconnected and re-attached to the new instance's container reference. The observer continues to fire against the old DOM element, calling `graph.width()` and `graph.height()` on the now-replaced instance. Over multiple data refreshes within a single page visit this leaks observer registrations. Fix: disconnect and re-attach the `ResizeObserver` inside `buildGraph`, or use a separate `watch` that only resizes without rebuilding.
