@@ -72,7 +72,12 @@ export function useChat() {
 
     if (event.type === 'done') {
       if (currentResponse.value) {
-        messages.value.push({ role: 'assistant', content: currentResponse.value })
+        messages.value.push({
+          role: 'assistant',
+          content: currentResponse.value,
+          model: event.model,
+          provider: event.provider,
+        })
         currentResponse.value = ''
       }
       isLoading.value = false

@@ -75,7 +75,7 @@ def get_session(session_id: str) -> Optional[dict]:
     return _sessions.get(session_id)
 
 
-def add_message(session_id: str, role: str, content: str) -> None:
+def add_message(session_id: str, role: str, content: str, **meta) -> None:
     """Add a message to session history, trimming if needed.
 
     Auto-persists only after assistant messages to halve disk I/O.
@@ -86,7 +86,12 @@ def add_message(session_id: str, role: str, content: str) -> None:
     if not session:
         return
 
-    session["messages"].append({"role": role, "content": content})
+    msg: dict = {"role": role, "content": content}
+    if meta.get("model"):
+        msg["model"] = meta["model"]
+    if meta.get("provider"):
+        msg["provider"] = meta["provider"]
+    session["messages"].append(msg)
 
     if len(session["messages"]) > MAX_HISTORY_MESSAGES:
         session["messages"] = session["messages"][-MAX_HISTORY_MESSAGES:]

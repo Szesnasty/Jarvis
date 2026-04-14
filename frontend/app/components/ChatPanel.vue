@@ -3,12 +3,19 @@ import type { ChatMessage, DuelConfig, OrbState, UrlIngestResult } from '~/types
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import { useSpecialists } from '~/composables/useSpecialists'
+import { MODEL_CATALOG } from '~/composables/useApiKeys'
 
 marked.setOptions({ breaks: true, gfm: true })
 
 function renderMarkdown(text: string): string {
   const html = marked.parse(text) as string
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } })
+}
+
+function modelLabel(provider?: string, model?: string): string {
+  if (!provider || !model) return ''
+  const catalog = MODEL_CATALOG[provider]
+  return catalog?.find(m => m.id === model)?.label ?? model
 }
 
 const { activeSpecialists, deactivate, specialists: allSpecialists, load: loadSpecialists } = useSpecialists()
@@ -145,6 +152,9 @@ watch(
           :class="{ 'chat-panel__bubble--md': msg.role === 'assistant' }"
           v-html="msg.role === 'assistant' ? renderMarkdown(msg.content) : msg.content"
         />
+        <span v-if="msg.role === 'assistant' && msg.model" class="chat-panel__model-tag">
+          {{ modelLabel(msg.provider, msg.model) }}
+        </span>
       </div>
 
       <div v-if="currentResponse" class="chat-panel__message assistant">
@@ -391,6 +401,16 @@ watch(
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
+}
+
+.chat-panel__model-tag {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+  padding-left: 0.25rem;
+  opacity: 0.7;
+  user-select: none;
 }
 
 .chat-panel__cursor {

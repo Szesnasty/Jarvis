@@ -44,6 +44,8 @@ export interface ReindexResponse {
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+  model?: string
+  provider?: string
 }
 
 export interface WsTextDelta {
@@ -66,6 +68,8 @@ export interface WsToolResult {
 export interface WsDone {
   type: 'done'
   session_id: string
+  model?: string
+  provider?: string
 }
 
 export interface WsError {

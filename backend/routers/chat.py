@@ -225,7 +225,11 @@ async def _handle_message(
         )
 
     if assistant_text:
-        session_service.add_message(session_id, "assistant", assistant_text)
+        session_service.add_message(
+            session_id, "assistant", assistant_text,
+            model=model or "claude-sonnet-4-20250514",
+            provider=provider or "anthropic",
+        )
     else:
         # No text response (e.g. pure tool-use) — still persist so session
         # state stays consistent, but add_message already auto-saves on the
@@ -243,7 +247,12 @@ async def _handle_message(
         except Exception:
             logger.warning("Failed to log token usage")
 
-    await _send_event(ws, "done", session_id=session_id)
+    await _send_event(
+        ws, "done",
+        session_id=session_id,
+        model=model or "claude-sonnet-4-20250514",
+        provider=provider or "anthropic",
+    )
 
 
 def _parse_message(raw: str) -> tuple:
