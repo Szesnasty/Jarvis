@@ -23,7 +23,6 @@ if (!existsSync(fullPath)) {
 const probe = spawnSync(venvPython, ['-c', 'import uvicorn, main'], {
   cwd: 'backend',
   stdio: 'pipe',
-  shell: isWin,
   encoding: 'utf8',
   timeout: 20000,
 });
@@ -38,7 +37,7 @@ if (probe.error || probe.status !== 0) {
 const child = spawn(
   venvPython,
   ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8000'],
-  { cwd: 'backend', stdio: 'inherit', shell: isWin },
+  { cwd: 'backend', stdio: 'inherit' },
 );
 
 const forward = (sig) => () => child.kill(sig);

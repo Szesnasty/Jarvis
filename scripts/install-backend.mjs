@@ -55,7 +55,6 @@ const pythonCandidates = isWin
 function tryCommand(cmd, baseArgs) {
   const r = spawnSync(cmd, [...baseArgs, '--version'], {
     stdio: 'pipe',
-    shell: isWin,
     encoding: 'utf8',
   });
   if (r.error || r.status !== 0) return null;
@@ -98,7 +97,7 @@ function isStandalonePython(py) {
 }
 
 function run(cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: isWin, ...opts });
+  const r = spawnSync(cmd, args, { stdio: 'inherit', ...opts });
   if (r.error) {
     console.error(`[install-backend] failed to run ${cmd}: ${r.error.message}`);
     if (r.error.code === 'ENOENT') {
@@ -114,7 +113,7 @@ function run(cmd, args, opts = {}) {
 
 // Like `run`, but returns a result object instead of exiting on failure.
 function tryRun(cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { stdio: 'inherit', shell: isWin, ...opts });
+  const r = spawnSync(cmd, args, { stdio: 'inherit', ...opts });
   return r;
 }
 
@@ -122,7 +121,6 @@ function tryRun(cmd, args, opts = {}) {
 function tryRunQuiet(cmd, args, opts = {}) {
   return spawnSync(cmd, args, {
     stdio: 'pipe',
-    shell: isWin,
     encoding: 'utf8',
     ...opts,
   });
@@ -224,10 +222,8 @@ async function downloadStandalonePython() {
   console.log(`${DIM}[install-backend] from: ${asset.url}${RESET}`);
 
   // curl is built into Windows 10+ (1803), macOS, and Linux.
-  // On Windows with shell:true, cmd.exe resolves `curl` to curl.exe (not the PowerShell alias).
   const dl = spawnSync('curl', ['-fSL', '--progress-bar', '-o', dest, asset.url], {
     stdio: 'inherit',
-    shell: isWin,
   });
   if (dl.error || dl.status !== 0) {
     console.error('[install-backend] download failed. Check your internet connection.');
@@ -236,9 +232,9 @@ async function downloadStandalonePython() {
 
   console.log('[install-backend] extracting…');
   // tar is built into Windows 10+ (1803), macOS, and Linux.
+  // tar is built into Windows 10+ (1803), macOS, and Linux.
   const ext = spawnSync('tar', ['-xzf', dest, '-C', LOCAL_PYTHON_DIR], {
     stdio: 'inherit',
-    shell: isWin,
   });
   if (ext.error || ext.status !== 0) {
     console.error('[install-backend] extraction failed.');
@@ -269,7 +265,6 @@ async function bootstrapPipIntoVenv() {
 
   const dl = spawnSync('curl', ['-fSL', '--progress-bar', '-o', getPipPath, GET_PIP_URL], {
     stdio: 'inherit',
-    shell: isWin,
   });
   if (dl.error || dl.status !== 0) {
     console.error(`${RED}[install-backend] failed to download get-pip.py${RESET}`);

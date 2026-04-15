@@ -61,8 +61,11 @@ function cmpPython(major, minor) {
 
 // --- npm ---
 {
-  const npmCmd = isWin ? 'npm.cmd' : 'npm';
-  const r = spawnSync(npmCmd, ['--version'], { stdio: 'pipe', shell: isWin, encoding: 'utf8' });
+  // npm.cmd is a batch file — needs shell on Windows. Use single-string form
+  // to avoid DEP0190 ("args + shell: true" deprecation).
+  const r = isWin
+    ? spawnSync('npm.cmd --version', { stdio: 'pipe', shell: true, encoding: 'utf8' })
+    : spawnSync('npm', ['--version'], { stdio: 'pipe', encoding: 'utf8' });
   if (r.error || r.status !== 0) {
     record('npm', 'fail', 'not found', REQUIRED.npm.label, 'npm ships with Node.js — reinstall Node.js');
   } else {
@@ -88,7 +91,6 @@ function cmpPython(major, minor) {
   for (const [cmd, baseArgs] of candidates) {
     const r = spawnSync(cmd, [...baseArgs, '--version'], {
       stdio: 'pipe',
-      shell: isWin,
       encoding: 'utf8',
     });
     if (r.error || r.status !== 0) continue;

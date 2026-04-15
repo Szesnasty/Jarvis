@@ -8,10 +8,12 @@ if (!existsSync(serverEntry)) {
   process.exit(1);
 }
 
-const isWin = process.platform === 'win32';
+// Do NOT set shell:true here. process.execPath on Windows is typically
+// "C:\Program Files\nodejs\node.exe" — with shell:true cmd.exe splits at the
+// first space and blows up with "'C:\Program' is not recognized". Without a
+// shell, CreateProcess handles the absolute path with spaces correctly.
 const child = spawn(process.execPath, [serverEntry], {
   stdio: 'inherit',
-  shell: isWin,
   env: {
     ...process.env,
     NITRO_PORT: process.env.NITRO_PORT || '3000',

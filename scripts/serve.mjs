@@ -1,7 +1,16 @@
 import { spawn } from 'node:child_process';
 
 const isWin = process.platform === 'win32';
-const npm = isWin ? 'npm.cmd' : 'npm';
+
+// On Windows, npm.cmd is a batch file that requires a shell. We pass the full
+// command as a single string so cmd.exe doesn't split paths with spaces and
+// Node doesn't fire DEP0190 ("args + shell: true" deprecation).
+function spawnNpm(args, opts = {}) {
+  if (isWin) {
+    return spawn(['npm.cmd', ...args].join(' '), { ...opts, shell: true });
+  }
+  return spawn('npm', args, opts);
+}
 
 const procs = [
   { name: 'backend', color: '\x1b[36m', child: null },
@@ -9,8 +18,8 @@ const procs = [
 ];
 const reset = '\x1b[0m';
 
-procs[0].child = spawn(npm, ['run', 'serve:backend'], { stdio: 'inherit', shell: isWin });
-procs[1].child = spawn(npm, ['run', 'serve:frontend'], { stdio: 'inherit', shell: isWin });
+procs[0].child = spawnNpm(['run', 'serve:backend'], { stdio: 'inherit' });
+procs[1].child = spawnNpm(['run', 'serve:frontend'], { stdio: 'inherit' });
 
 let shuttingDown = false;
 function shutdown() {

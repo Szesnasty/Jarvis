@@ -1,7 +1,16 @@
 import { spawnSync } from 'node:child_process';
 
 const isWin = process.platform === 'win32';
-const npm = isWin ? 'npm.cmd' : 'npm';
+
+// On Windows, npm.cmd is a batch file that requires a shell. We pass the full
+// command as a single string so cmd.exe doesn't split paths with spaces and
+// Node doesn't fire DEP0190 ("args + shell: true" deprecation).
+function npmRunSync(args, opts = {}) {
+  if (isWin) {
+    return spawnSync(['npm.cmd', ...args].join(' '), { ...opts, shell: true });
+  }
+  return spawnSync('npm', args, opts);
+}
 
 const CYAN = '\x1b[36m';
 const GREEN = '\x1b[32m';
@@ -25,25 +34,21 @@ const steps = [
   {
     label: 'Running system check',
     detail: 'verifying Node, npm, Python versions',
-    cmd: npm,
     args: ['run', 'preflight'],
   },
   {
     label: 'Waking up the backend',
     detail: 'creating Python venv + installing dependencies',
-    cmd: npm,
     args: ['run', 'install:backend'],
   },
   {
     label: 'Waking up the frontend',
     detail: 'installing Node dependencies',
-    cmd: npm,
     args: ['run', 'install:frontend'],
   },
   {
     label: 'Building the interface',
     detail: 'compiling the production Nuxt bundle',
-    cmd: npm,
     args: ['run', 'build'],
   },
 ];
@@ -52,7 +57,7 @@ function step(n, total, s) {
   console.log();
   console.log(`${MAGENTA}${BOLD}[${n}/${total}] ${s.label}${RESET}  ${DIM}${s.detail}${RESET}`);
   console.log(`${DIM}${'─'.repeat(60)}${RESET}`);
-  const r = spawnSync(s.cmd, s.args, { stdio: 'inherit', shell: isWin });
+  const r = npmRunSync(s.args, { stdio: 'inherit' });
   if (r.error) {
     console.error(`\n${YELLOW}!${RESET} ${s.label} failed: ${r.error.message}`);
     process.exit(1);
@@ -91,5 +96,5 @@ console.log(
 console.log(`${DIM}Press Ctrl+C to put Jarvis back to sleep.${RESET}`);
 console.log();
 
-const serve = spawnSync(npm, ['run', 'serve'], { stdio: 'inherit', shell: isWin });
+const serve = npmRunSync(['run', 'serve'], { stdio: 'inherit' });
 process.exit(serve.status ?? 0);
