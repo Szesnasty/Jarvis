@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
+import { flushPromises } from '@vue/test-utils'
 import MainPage from '~/pages/main.vue'
 
 function registerDefaults() {
@@ -67,6 +68,7 @@ describe('pages/main.vue', () => {
   it('shows empty state when no sessions', async () => {
     registerDefaults()
     const wrapper = await mountSuspended(MainPage)
+    await flushPromises()
     expect(wrapper.find('.session-history__empty').exists()).toBe(true)
   })
 })

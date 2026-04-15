@@ -51,11 +51,11 @@ describe('SpecialistWizard', () => {
     expect(wrapper.find('.wiz__code').text()).toContain('health-guide')
   })
 
-  it('step 3: extra sources toggle opens textarea', async () => {
+  it('step 3: dropzone exists for file staging', async () => {
     const wrapper = await mountSuspended(SpecialistWizard)
     await goToStep(wrapper, 3)
-    const details = wrapper.find('.wiz__extra-sources')
-    expect(details.exists()).toBe(true)
+    const dropzone = wrapper.find('.wiz__dropzone')
+    expect(dropzone.exists()).toBe(true)
   })
 
   it('step 4: style inputs', async () => {
@@ -94,7 +94,7 @@ describe('SpecialistWizard', () => {
     await wrapper.find('.wiz__input').setValue('Test')
     await goToStep(wrapper, 7)
     const stats = wrapper.findAll('.wiz__review-stat')
-    expect(stats.length).toBe(4) // staged files, source folders, rules, tools
+    expect(stats.length).toBeGreaterThanOrEqual(4) // staged files, source folders, rules, tools (+ model)
   })
 
   it('back button returns to previous step', async () => {

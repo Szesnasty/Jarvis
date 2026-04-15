@@ -3,7 +3,7 @@ import { useChat } from '~/composables/useChat'
 
 // Mock useWebSocket at module level
 const mockConnect = vi.fn()
-const mockSend = vi.fn()
+const mockSend = vi.fn().mockReturnValue(true)
 const mockClose = vi.fn()
 let messageHandler: ((event: any) => void) | null = null
 
@@ -13,6 +13,8 @@ vi.mock('~/composables/useWebSocket', () => ({
     connect: mockConnect,
     send: mockSend,
     close: mockClose,
+    setSessionId: vi.fn(),
+    onReconnect: () => () => {},
     onMessage: (handler: (event: any) => void) => {
       messageHandler = handler
       return () => { messageHandler = null }

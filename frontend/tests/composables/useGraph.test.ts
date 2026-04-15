@@ -10,6 +10,7 @@ vi.mock('~/composables/useApi', () => ({
     fetchGraph: mockFetchGraph,
     fetchGraphStats: mockFetchGraphStats,
     fetchGraphNeighbors: mockFetchGraphNeighbors,
+    fetchOrphans: vi.fn().mockResolvedValue([]),
     rebuildGraph: mockRebuildGraph,
   }),
 }))

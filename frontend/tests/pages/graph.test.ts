@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
+import { flushPromises } from '@vue/test-utils'
 import GraphPage from '~/pages/graph.vue'
 
 const MOCK_GRAPH = {
@@ -19,11 +20,13 @@ const MOCK_STATS = { node_count: 3, edge_count: 2, top_connected: [] }
 function registerDefaults() {
   registerEndpoint('/api/graph', () => MOCK_GRAPH)
   registerEndpoint('/api/graph/stats', () => MOCK_STATS)
+  registerEndpoint('/api/graph/orphans', () => [])
 }
 
 function registerEmpty() {
   registerEndpoint('/api/graph', () => ({ nodes: [], edges: [] }))
   registerEndpoint('/api/graph/stats', () => ({ node_count: 0, edge_count: 0, top_connected: [] }))
+  registerEndpoint('/api/graph/orphans', () => [])
 }
 
 describe('pages/graph.vue', () => {
@@ -76,9 +79,9 @@ describe('pages/graph.vue', () => {
     registerDefaults()
     const wrapper = await mountSuspended(GraphPage)
     await new Promise(r => setTimeout(r, 50))
-    // Check that CSS classes are applied based on type
-    const html = wrapper.html()
-    expect(html).toContain('graph-canvas__dot--note')
+    // Graph canvas uses force-graph which renders to a canvas element,
+    // not HTML DOM nodes — verify the canvas container is present
+    expect(wrapper.find('.graph-canvas__container').exists()).toBe(true)
   })
 
   it('shows rebuild button', async () => {
@@ -91,6 +94,8 @@ describe('pages/graph.vue', () => {
     registerEmpty()
     const wrapper = await mountSuspended(GraphPage)
     await new Promise(r => setTimeout(r, 50))
-    expect(wrapper.find('.graph-canvas__empty').exists()).toBe(true)
+    await flushPromises()
+    // Stats bar shows 0 nodes when graph is empty
+    expect(wrapper.find('.graph-view__stats').text()).toContain('0 nodes')
   })
 })

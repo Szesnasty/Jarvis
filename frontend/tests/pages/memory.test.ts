@@ -32,7 +32,8 @@ const MOCK_DETAIL = {
 
 function registerNotesEndpoints(notes = MOCK_NOTES) {
   registerEndpoint('/api/memory/notes', () => notes)
-  registerEndpoint('/api/memory/notes/inbox/hello.md', () => MOCK_DETAIL)
+  // Path is URL-encoded when fetched via encodeURIComponent(path)
+  registerEndpoint('/api/memory/notes/inbox%2Fhello.md', () => MOCK_DETAIL)
 }
 
 describe('pages/memory.vue', () => {
