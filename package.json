@@ -1,8 +1,23 @@
-
 {
   "name": "jarvis",
   "type": "module",
   "private": true,
+  "scripts": {
+    "preflight": "node scripts/preflight.mjs",
+    "install:backend": "node scripts/install-backend.mjs",
+    "install:frontend": "npm --prefix frontend install",
+    "install:all": "npm run install:backend && npm run install:frontend",
+    "build": "node scripts/build-frontend.mjs",
+    "serve:backend": "node scripts/serve-backend.mjs",
+    "serve:frontend": "node scripts/serve-frontend.mjs",
+    "serve": "node scripts/serve.mjs",
+    "wake-up-jarvis": "node scripts/wake-up-jarvis.mjs",
+    "wake": "node scripts/wake-up-jarvis.mjs",
+    "start": "node scripts/wake-up-jarvis.mjs",
+    "dev:backend": "node scripts/dev-backend.mjs",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev": "npm run preflight && npm run install:all && node scripts/dev.mjs"
+  },
   "devDependencies": {
     "codument": "0.3.0"
   }

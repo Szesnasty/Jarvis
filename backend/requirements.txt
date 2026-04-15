@@ -13,7 +13,7 @@ markdownify==1.2.2
 lxml_html_clean==0.4.4
 pdfplumber==0.11.8
 litellm==1.83.7
-fastembed==0.7.4  # local embeddings for semantic search (optional)
+fastembed==0.7.4  # local embeddings for semantic search
 
 # testing
 pytest==8.4.2

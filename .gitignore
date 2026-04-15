@@ -9,6 +9,12 @@ __pycache__/
 venv/
 env/
 
+# Standalone Python (auto-downloaded by install-backend)
+backend/.python-local/
+
+# Standalone Node.js (auto-downloaded by bootstrap installers)
+.node-local/
+
 # Node
 node_modules/
 dist/
