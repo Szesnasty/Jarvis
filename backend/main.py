@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +20,10 @@ from routers.workspace import router as workspace_router
 
 logger = logging.getLogger(__name__)
 
-APP_VERSION = "0.1.0"
+try:
+    APP_VERSION = version("jarvis-backend")
+except PackageNotFoundError:
+    APP_VERSION = "0.1.0"
 
 
 @asynccontextmanager

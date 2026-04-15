@@ -1,5 +1,10 @@
 # Jarvis
 
+[![CI](https://github.com/lukaszkuczynski/jarvis/actions/workflows/ci.yml/badge.svg)](https://github.com/lukaszkuczynski/jarvis/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/lukaszkuczynski/jarvis/actions/workflows/codeql.yml/badge.svg)](https://github.com/lukaszkuczynski/jarvis/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/lukaszkuczynski/jarvis?include_prereleases&label=version)](https://github.com/lukaszkuczynski/jarvis/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **A personal knowledge operating system that turns notes, files, links, and AI conversations into durable memory.**
 
 Most AI tools give you answers.

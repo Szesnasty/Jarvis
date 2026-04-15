@@ -138,7 +138,8 @@ def activate_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> 
     if any(s["id"] == spec_id for s in _active_specialists):
         _active_specialists = [s for s in _active_specialists if s["id"] != spec_id]
         return specialist
-    _active_specialists.append(specialist)
+    # Prepend so the most recently activated specialist is always first
+    _active_specialists = [specialist] + [s for s in _active_specialists if s["id"] != spec_id]
     return specialist
 
 

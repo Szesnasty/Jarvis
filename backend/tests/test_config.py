@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 
 
-def test_default_workspace_path():
+def test_default_workspace_path(monkeypatch):
+    monkeypatch.delenv("JARVIS_WORKSPACE_PATH", raising=False)
     from config import Settings
 
     s = Settings()

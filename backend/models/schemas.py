@@ -9,17 +9,7 @@ class HealthResponse(BaseModel):
 
 
 class WorkspaceInitRequest(BaseModel):
-    api_key: Optional[str] = None
-
-    @field_validator("api_key")
-    @classmethod
-    def validate_api_key(cls, v: Optional[str]) -> Optional[str]:
-        if v is None:
-            return None
-        v = v.strip()
-        if not v:
-            return None
-        return v
+    """Workspace creation request. No API key — keys live in the browser."""
 
 
 class WorkspaceInitResponse(BaseModel):

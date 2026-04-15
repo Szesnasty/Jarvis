@@ -33,6 +33,11 @@ def isolate_workspace(tmp_path, monkeypatch):
     for d in ["app", "app/sessions", "app/logs", "memory", "memory/inbox",
               "memory/preferences", "graph"]:
         (tmp_path / d).mkdir(parents=True, exist_ok=True)
+    # Initialise the SQLite schema so retrieval queries don't fail
+    import sqlite3
+    from models.database import SCHEMA_SQL, FTS_SQL, TRIGGER_SQL
+    with sqlite3.connect(str(tmp_path / "app" / "jarvis.db")) as conn:
+        conn.executescript(SCHEMA_SQL + FTS_SQL + TRIGGER_SQL)
 
 
 def _fake_stream(*events):

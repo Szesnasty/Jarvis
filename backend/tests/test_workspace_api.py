@@ -10,14 +10,6 @@ def ws_path(tmp_path):
     return tmp_path / "Jarvis"
 
 
-@pytest.fixture
-def mock_settings(ws_path):
-    with patch("services.workspace_service.get_settings") as mock_s:
-        mock_s.return_value.workspace_path = ws_path
-        with patch("routers.workspace.get_workspace_status", wraps=None) as _:
-            yield mock_s
-
-
 @pytest.mark.anyio
 async def test_get_status_no_workspace(client, ws_path):
     with patch("services.workspace_service.get_settings") as mock_s:
@@ -29,26 +21,18 @@ async def test_get_status_no_workspace(client, ws_path):
 
 @pytest.mark.anyio
 async def test_post_init_creates_workspace(client, ws_path):
-    with patch("services.workspace_service.get_settings") as mock_s, \
-         patch("services.workspace_service.keyring"):
+    with patch("services.workspace_service.get_settings") as mock_s:
         mock_s.return_value.workspace_path = ws_path
-        response = await client.post(
-            "/api/workspace/init",
-            json={"api_key": "sk-ant-test-key-12345678901234"},
-        )
+        response = await client.post("/api/workspace/init", json={})
     assert response.status_code == 201
     assert (ws_path / "app" / "config.json").exists()
 
 
 @pytest.mark.anyio
 async def test_post_init_returns_structure(client, ws_path):
-    with patch("services.workspace_service.get_settings") as mock_s, \
-         patch("services.workspace_service.keyring"):
+    with patch("services.workspace_service.get_settings") as mock_s:
         mock_s.return_value.workspace_path = ws_path
-        response = await client.post(
-            "/api/workspace/init",
-            json={"api_key": "sk-ant-test-key-12345678901234"},
-        )
+        response = await client.post("/api/workspace/init", json={})
     data = response.json()
     assert data["status"] == "ok"
     assert "workspace_path" in data
@@ -57,86 +41,45 @@ async def test_post_init_returns_structure(client, ws_path):
 @pytest.mark.anyio
 async def test_get_status_after_init(client, ws_path):
     with patch("services.workspace_service.get_settings") as mock_s, \
-         patch("services.workspace_service.keyring"):
+         patch("services.workspace_service.os") as mock_os:
+        mock_os.environ.get.return_value = None
         mock_s.return_value.workspace_path = ws_path
-        await client.post(
-            "/api/workspace/init",
-            json={"api_key": "sk-ant-test-key-12345678901234"},
-        )
+        await client.post("/api/workspace/init", json={})
         response = await client.get("/api/workspace/status")
     assert response.status_code == 200
     data = response.json()
     assert data["initialized"] is True
-    assert data["api_key_set"] is True
+    # Without env var, api_key_set reflects browser-only mode
+    assert data["api_key_set"] is False
+    assert data["key_storage"] == "browser"
 
 
 @pytest.mark.anyio
 async def test_post_init_duplicate(client, ws_path):
-    with patch("services.workspace_service.get_settings") as mock_s, \
-         patch("services.workspace_service.keyring"):
+    with patch("services.workspace_service.get_settings") as mock_s:
         mock_s.return_value.workspace_path = ws_path
-        await client.post(
-            "/api/workspace/init",
-            json={"api_key": "sk-ant-test-key-12345678901234"},
-        )
-        response = await client.post(
-            "/api/workspace/init",
-            json={"api_key": "sk-ant-test-key-12345678901234"},
-        )
+        await client.post("/api/workspace/init", json={})
+        response = await client.post("/api/workspace/init", json={})
     assert response.status_code == 409
 
 
 @pytest.mark.anyio
-async def test_post_init_keyless_creates_workspace(client, ws_path):
-    """Workspace creation works without any API key (browser-managed keys)."""
-    with patch("services.workspace_service.get_settings") as mock_s, \
-         patch("services.workspace_service.keyring"):
+async def test_workspace_always_browser_key_storage(client, ws_path):
+    """Workspace always uses browser key storage — no server-side key."""
+    with patch("services.workspace_service.get_settings") as mock_s:
         mock_s.return_value.workspace_path = ws_path
-        response = await client.post("/api/workspace/init", json={})
-    assert response.status_code == 201
-    assert (ws_path / "app" / "config.json").exists()
+        await client.post("/api/workspace/init", json={})
     config = json.loads((ws_path / "app" / "config.json").read_text())
     assert config["api_key_set"] is False
     assert config["key_storage"] == "browser"
 
 
 @pytest.mark.anyio
-async def test_post_init_empty_api_key_treated_as_keyless(client, ws_path):
-    """Empty string api_key is treated as no key."""
-    with patch("services.workspace_service.get_settings") as mock_s, \
-         patch("services.workspace_service.keyring"):
-        mock_s.return_value.workspace_path = ws_path
-        response = await client.post(
-            "/api/workspace/init",
-            json={"api_key": ""},
-        )
-    assert response.status_code == 201
-    config = json.loads((ws_path / "app" / "config.json").read_text())
-    assert config["api_key_set"] is False
-
-
-@pytest.mark.anyio
-async def test_post_init_with_key_stores_on_server(client, ws_path):
-    """When api_key is provided, key_storage is 'server'."""
-    with patch("services.workspace_service.get_settings") as mock_s, \
-         patch("services.workspace_service.keyring"):
-        mock_s.return_value.workspace_path = ws_path
-        response = await client.post(
-            "/api/workspace/init",
-            json={"api_key": "sk-ant-test-key-12345678901234"},
-        )
-    assert response.status_code == 201
-    config = json.loads((ws_path / "app" / "config.json").read_text())
-    assert config["api_key_set"] is True
-    assert config["key_storage"] == "server"
-
-
-@pytest.mark.anyio
 async def test_keyless_workspace_status(client, ws_path):
     """Status for keyless workspace shows api_key_set=False."""
     with patch("services.workspace_service.get_settings") as mock_s, \
-         patch("services.workspace_service.keyring") as mock_kr:
-        mock_kr.get_password.return_value = None
+         patch("services.workspace_service.os") as mock_os:
+        mock_os.environ.get.return_value = None
         mock_s.return_value.workspace_path = ws_path
         await client.post("/api/workspace/init", json={})
         response = await client.get("/api/workspace/status")
@@ -147,12 +90,27 @@ async def test_keyless_workspace_status(client, ws_path):
 
 
 @pytest.mark.anyio
-async def test_api_key_not_in_any_response(client, ws_path):
-    key = "sk-ant-secret-key-99999999"
+async def test_env_var_key_reflected_in_status(client, ws_path):
+    """If ANTHROPIC_API_KEY env var is set, status reports api_key_set=True."""
     with patch("services.workspace_service.get_settings") as mock_s, \
-         patch("services.workspace_service.keyring"):
+         patch("services.workspace_service.os") as mock_os:
+        mock_os.environ.get.return_value = "sk-ant-env-key"
         mock_s.return_value.workspace_path = ws_path
-        r1 = await client.post("/api/workspace/init", json={"api_key": key})
+        await client.post("/api/workspace/init", json={})
+        response = await client.get("/api/workspace/status")
+    data = response.json()
+    assert data["api_key_set"] is True
+    assert data["key_storage"] == "environment"
+
+
+@pytest.mark.anyio
+async def test_api_key_not_in_any_response(client, ws_path):
+    """API key must never appear in any HTTP response body."""
+    key = "sk-ant-secret-key-99999999"
+    with patch("services.workspace_service.get_settings") as mock_s:
+        mock_s.return_value.workspace_path = ws_path
+        r1 = await client.post("/api/workspace/init", json={})
         r2 = await client.get("/api/workspace/status")
     assert key not in r1.text
     assert key not in r2.text
+

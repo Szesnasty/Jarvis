@@ -7,6 +7,7 @@ from services.workspace_service import (
     get_workspace_status,
 )
 
+
 router = APIRouter(prefix="/api/workspace", tags=["workspace"])
 
 
@@ -19,7 +20,7 @@ async def workspace_status() -> WorkspaceStatusResponse:
 @router.post("/init", response_model=WorkspaceInitResponse, status_code=status.HTTP_201_CREATED)
 async def workspace_init(body: WorkspaceInitRequest) -> WorkspaceInitResponse:
     try:
-        result = create_workspace(api_key=body.api_key)
+        result = create_workspace()
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
     except WorkspaceExistsError:

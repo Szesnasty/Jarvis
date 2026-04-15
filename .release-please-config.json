@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "include-v-in-tag": true,
+  "changelog-sections": [
+    { "type": "feat",     "section": "✨ Features" },
+    { "type": "fix",      "section": "🐛 Bug Fixes" },
+    { "type": "perf",     "section": "⚡ Performance" },
+    { "type": "revert",   "section": "⏪ Reverts" },
+    { "type": "docs",     "section": "📝 Documentation" },
+    { "type": "refactor", "section": "♻️ Refactoring" },
+    { "type": "test",     "section": "🧪 Tests" },
+    { "type": "build",    "section": "🏗️ Build" },
+    { "type": "ci",       "section": "🤖 CI/CD" },
+    { "type": "chore",    "section": "🔧 Chores", "hidden": true }
+  ],
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "jarvis",
+      "component": "jarvis"
+    },
+    "backend": {
+      "release-type": "python",
+      "package-name": "jarvis-backend",
+      "component": "backend",
+      "bump-minor-pre-major": true
+    },
+    "frontend": {
+      "release-type": "node",
+      "package-name": "frontend",
+      "component": "frontend",
+      "bump-minor-pre-major": true
+    }
+  }
+}

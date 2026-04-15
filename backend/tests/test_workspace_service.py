@@ -1,4 +1,5 @@
 import json
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,8 +23,7 @@ def test_workspace_not_exists_initially(ws_path):
 
 
 def test_create_workspace_creates_dirs(ws_path):
-    with patch("services.workspace_service.keyring") as mock_kr:
-        create_workspace("sk-ant-test-key-12345678901234", ws_path)
+    create_workspace(ws_path)
     assert (ws_path / "memory").is_dir()
     assert (ws_path / "memory" / "inbox").is_dir()
     assert (ws_path / "memory" / "daily").is_dir()
@@ -41,76 +41,45 @@ def test_create_workspace_creates_dirs(ws_path):
 
 
 def test_create_workspace_creates_config(ws_path):
-    with patch("services.workspace_service.keyring") as mock_kr:
-        create_workspace("sk-ant-test-key-12345678901234", ws_path)
+    create_workspace(ws_path)
     assert (ws_path / "app" / "config.json").exists()
 
 
-def test_config_contains_api_key_set_true(ws_path):
-    with patch("services.workspace_service.keyring") as mock_kr:
-        create_workspace("sk-ant-test-key-12345678901234", ws_path)
-    config = json.loads((ws_path / "app" / "config.json").read_text())
-    assert config["api_key_set"] is True
-
-
-def test_config_does_not_contain_raw_key(ws_path):
-    key = "sk-ant-test-key-12345678901234"
-    with patch("services.workspace_service.keyring") as mock_kr:
-        create_workspace(key, ws_path)
-    config_text = (ws_path / "app" / "config.json").read_text()
-    assert key not in config_text
-
-
-def test_api_key_stored_in_keyring(ws_path):
-    key = "sk-ant-test-key-12345678901234"
-    with patch("services.workspace_service.keyring") as mock_kr:
-        create_workspace(key, ws_path)
-    mock_kr.set_password.assert_called_once_with("jarvis", "anthropic_api_key", key)
-
-
-def test_workspace_exists_after_creation(ws_path):
-    with patch("services.workspace_service.keyring") as mock_kr:
-        create_workspace("sk-ant-test-key-12345678901234", ws_path)
-    assert workspace_exists(ws_path) is True
-
-
-def test_create_workspace_twice_raises(ws_path):
-    with patch("services.workspace_service.keyring") as mock_kr:
-        create_workspace("sk-ant-test-key-12345678901234", ws_path)
-    with pytest.raises(WorkspaceExistsError):
-        with patch("services.workspace_service.keyring") as mock_kr:
-            create_workspace("sk-ant-test-key-12345678901234", ws_path)
-
-
-def test_workspace_path_from_settings(ws_path):
-    with patch("services.workspace_service.get_settings") as mock_settings:
-        mock_settings.return_value.workspace_path = ws_path
-        with patch("services.workspace_service.keyring"):
-            create_workspace("sk-ant-test-key-12345678901234")
-    assert workspace_exists(ws_path) is True
-
-
-def test_create_workspace_with_empty_key_creates_keyless(ws_path):
-    """Empty key is treated as no key — workspace still created."""
-    create_workspace("", ws_path)
-    assert workspace_exists(ws_path) is True
+def test_config_api_key_set_false_browser_storage(ws_path):
+    """Browser-only architecture: config always has api_key_set=False, key_storage=browser."""
+    create_workspace(ws_path)
     config = json.loads((ws_path / "app" / "config.json").read_text())
     assert config["api_key_set"] is False
     assert config["key_storage"] == "browser"
 
 
-def test_create_workspace_with_whitespace_key_creates_keyless(ws_path):
-    """Whitespace-only key is treated as no key."""
-    create_workspace("   ", ws_path)
+def test_config_does_not_contain_raw_key(ws_path):
+    """No API key should ever appear in config.json."""
+    create_workspace(ws_path)
+    config_text = (ws_path / "app" / "config.json").read_text()
+    assert "sk-ant" not in config_text
+
+
+def test_workspace_exists_after_creation(ws_path):
+    create_workspace(ws_path)
     assert workspace_exists(ws_path) is True
-    config = json.loads((ws_path / "app" / "config.json").read_text())
-    assert config["api_key_set"] is False
+
+
+def test_create_workspace_twice_raises(ws_path):
+    create_workspace(ws_path)
+    with pytest.raises(WorkspaceExistsError):
+        create_workspace(ws_path)
+
+
+def test_workspace_path_from_settings(ws_path):
+    with patch("services.workspace_service.get_settings") as mock_settings:
+        mock_settings.return_value.workspace_path = ws_path
+        create_workspace()
+    assert workspace_exists(ws_path) is True
 
 
 def test_workspace_folder_permissions(ws_path):
-    with patch("services.workspace_service.keyring") as mock_kr:
-        create_workspace("sk-ant-test-key-12345678901234", ws_path)
-    # Check that workspace dirs exist and are readable
-    import stat
+    create_workspace(ws_path)
     mode = ws_path.stat().st_mode
     assert mode & stat.S_IRUSR  # owner-readable
+

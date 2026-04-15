@@ -1,13 +1,9 @@
 import json
 import logging
 import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
-
-import keyring
-from keyring.errors import NoKeyringError
 
 from config import get_settings
 
@@ -58,20 +54,18 @@ def get_workspace_status(workspace_path: Optional[Path] = None) -> dict:
         logger.warning("Could not read config.json: %s", exc)
         return {"initialized": False}
 
-    # Verify key actually exists rather than trusting the flag alone
-    key_exists = get_api_key(path) is not None
+    # Keys live in the browser (localStorage/sessionStorage).
+    # The env var is only used for dev/CI — never stored server-side.
+    env_key_available = bool(os.environ.get("ANTHROPIC_API_KEY"))
     return {
         "initialized": True,
         "workspace_path": str(path),
-        "api_key_set": key_exists,
-        "key_storage": config.get("key_storage", get_key_storage_method(path)),
+        "api_key_set": env_key_available,
+        "key_storage": "environment" if env_key_available else "browser",
     }
 
 
-def create_workspace(api_key: Optional[str] = None, workspace_path: Optional[Path] = None) -> dict:
-    if api_key:
-        api_key = api_key.strip() or None
-
+def create_workspace(workspace_path: Optional[Path] = None) -> dict:
     path = workspace_path or get_settings().workspace_path
 
     if workspace_exists(path):
@@ -81,22 +75,19 @@ def create_workspace(api_key: Optional[str] = None, workspace_path: Optional[Pat
     for d in WORKSPACE_DIRS:
         (path / d).mkdir(parents=True, exist_ok=True)
 
-    # Store API key and config atomically — rollback on failure
     try:
-        if api_key:
-            _store_api_key(api_key, path)
-
         config = {
             "version": "0.1.0",
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "api_key_set": bool(api_key),
-            "key_storage": "server" if api_key else "browser",
+            # Keys are managed entirely in the browser (localStorage/sessionStorage).
+            # The backend never stores or retrieves API keys.
+            "api_key_set": False,
+            "key_storage": "browser",
             "workspace_path": str(path),
         }
         config_file = path / "app" / "config.json"
         config_file.write_text(json.dumps(config, indent=2))
     except Exception:
-        # Rollback: remove partially created workspace
         import shutil
         shutil.rmtree(path, ignore_errors=True)
         raise
@@ -104,61 +95,7 @@ def create_workspace(api_key: Optional[str] = None, workspace_path: Optional[Pat
     return {"status": "ok", "workspace_path": str(path)}
 
 
-def _store_api_key(api_key: str, workspace_path: Path) -> None:
-    try:
-        keyring.set_password("jarvis", "anthropic_api_key", api_key)
-        return
-    except NoKeyringError as exc:
-        logger.warning("keyring unavailable (%s), falling back to file", exc)
-    except Exception as exc:
-        logger.warning("keyring error (%s), falling back to file", exc)
-    # File fallback — let OSError propagate to caller
-    key_file = workspace_path / "app" / "api_key.json"
-    key_file.write_text(json.dumps({"api_key": api_key}))
-    if sys.platform != "win32":
-        key_file.chmod(0o600)
-
-
-def get_key_storage_method(workspace_path: Optional[Path] = None) -> str:
-    """Return how the API key is currently stored."""
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return "environment"
-    try:
-        key = keyring.get_password("jarvis", "anthropic_api_key")
-        if key:
-            return "keyring"
-    except (NoKeyringError, Exception):
-        pass
-    path = workspace_path or get_settings().workspace_path
-    key_file = path / "app" / "api_key.json"
-    if key_file.exists():
-        return "file"
-    return "none"
-
-
 def get_api_key(workspace_path: Optional[Path] = None) -> Optional[str]:
-    env_key = os.environ.get("ANTHROPIC_API_KEY")
-    if env_key:
-        return env_key
-
-    try:
-        key = keyring.get_password("jarvis", "anthropic_api_key")
-        if key:
-            return key
-    except (NoKeyringError, Exception):
-        pass
-
-    path = workspace_path or get_settings().workspace_path
-    key_file = path / "app" / "api_key.json"
-    if key_file.exists():
-        try:
-            data = json.loads(key_file.read_text())
-            key = data.get("api_key")
-            if not key:
-                logger.warning("API key file exists but key field is empty")
-            return key
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("Failed to read API key file: %s", exc)
-            return None
-
-    return None
+    """Return key from environment only (used for dev/CI). Browser keys are
+    sent per-request and never reach this function in production."""
+    return os.environ.get("ANTHROPIC_API_KEY") or None

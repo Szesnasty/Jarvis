@@ -11,7 +11,6 @@ os.environ.setdefault("JARVIS_DISABLE_EMBEDDINGS", "1")
 
 from main import app
 
-
 @pytest.fixture(autouse=True)
 def _no_auto_persist():
     """Prevent add_message from auto-persisting sessions to the real workspace during tests."""
