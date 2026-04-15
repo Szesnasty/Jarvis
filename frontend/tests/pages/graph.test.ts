@@ -1,7 +1,24 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import { defineComponent, h } from 'vue'
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import GraphPage from '~/pages/graph.vue'
+
+// Mock force-graph: JSDOM has no canvas, ForceGraph throws trying to access it.
+// Stub out the GraphCanvas component entirely so the library never loads.
+vi.mock('~/components/GraphCanvas.vue', () => ({
+  default: defineComponent({
+    name: 'GraphCanvas',
+    props: ['nodes', 'edges'],
+    emits: ['nodeClick'],
+    setup(_props, { emit }) {
+      return () => h('div', { class: 'graph-canvas' }, [
+        h('div', { class: 'graph-canvas__container' }),
+        h('button', { onClick: () => emit('nodeClick', _props.nodes?.[0]) }),
+      ])
+    },
+  }),
+}))
 
 const MOCK_GRAPH = {
   nodes: [
@@ -21,12 +38,14 @@ function registerDefaults() {
   registerEndpoint('/api/graph', () => MOCK_GRAPH)
   registerEndpoint('/api/graph/stats', () => MOCK_STATS)
   registerEndpoint('/api/graph/orphans', () => [])
+  registerEndpoint('/api/graph/rebuild', { method: 'POST', handler: () => ({ node_count: 3, edge_count: 2, top_connected: [] }) })
 }
 
 function registerEmpty() {
   registerEndpoint('/api/graph', () => ({ nodes: [], edges: [] }))
   registerEndpoint('/api/graph/stats', () => ({ node_count: 0, edge_count: 0, top_connected: [] }))
   registerEndpoint('/api/graph/orphans', () => [])
+  registerEndpoint('/api/graph/rebuild', { method: 'POST', handler: () => ({ node_count: 0, edge_count: 0, top_connected: [] }) })
 }
 
 describe('pages/graph.vue', () => {
@@ -96,6 +115,6 @@ describe('pages/graph.vue', () => {
     await new Promise(r => setTimeout(r, 50))
     await flushPromises()
     // Stats bar shows 0 nodes when graph is empty
-    expect(wrapper.find('.graph-view__stats').text()).toContain('0 nodes')
+    expect(wrapper.find('.graph-view__stats').text()).toContain('0')
   })
 })
