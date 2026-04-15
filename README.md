@@ -1,172 +1,375 @@
 # Jarvis
 
-Personal memory, planning, and knowledge system.
-Local Markdown memory + knowledge graph + Claude API.
+**A personal knowledge operating system that turns notes, files, links, and AI conversations into durable memory.**
 
-Works on **macOS, Linux, and Windows** — one command, same on every OS.
+Most AI tools give you answers.
+Most note apps give you storage.
+**Jarvis gives you continuity.**
 
-## Requirements
+Jarvis helps you:
+- import notes, files, URLs, and YouTube sources into one system
+- retrieve context through keyword + semantic + graph search
+- turn useful outputs into reusable notes, plans, and summaries
+- create custom specialists directly from the UI
+- run structured debates between specialists with **Duel Mode**
+- search the web via DuckDuckGo when local memory isn't enough
+- use Anthropic, OpenAI, or Google models — your choice
+- keep your memory local-first and Obsidian-compatible
 
-If you use the direct npm flow, install these **before** running Jarvis.
-If you use the bootstrap installers in Quick start, Node.js can be downloaded locally on demand.
+> **Jarvis is not another AI chat with memory.**
+> **It is a personal knowledge system that gets more useful every time you use it.**
 
-### 1. Node.js 20+
-Comes with `npm`. Check: `node --version`
+<!-- Coming soon: hero screenshot or demo GIF — place image at docs/assets/hero.png -->
+![Jarvis hero](./docs/assets/hero.png)
 
-> **Don't have Node.js?** Use a bootstrap installer below. It can download a local Node runtime after confirmation (no admin rights needed).
+---
 
-- macOS: `brew install node`
-- Linux: [nodejs.org](https://nodejs.org/) or [nvm](https://github.com/nvm-sh/nvm)
-- Windows: [nodejs.org installer](https://nodejs.org/) or [nvm-windows](https://github.com/coreybutler/nvm-windows)
+## Why this exists
 
-### 2. Python 3.12 or 3.13
-Check: `python3 --version` (macOS/Linux) or `py --version` / `python --version` (Windows).
-**Python 3.14+ is not yet supported** — many ML packages lack prebuilt wheels for it.
+Knowledge work is fragmented. Ideas live in notes. Context lives in files. Research lives in links. Decisions disappear into chat history. Useful AI outputs vanish after the session ends.
 
-> **Don't have Python?** The install script will offer to download a local copy automatically — no admin rights needed.
+That creates real costs:
+- repeated thinking
+- lost context
+- higher AI spend rebuilding context over and over
+- no compounding value from what you already know
 
-- macOS: `brew install python@3.12`
-- Linux (Debian/Ubuntu): `sudo apt install python3.12 python3.12-venv`
-- Windows: download **3.12.x** or **3.13.x** from [python.org](https://www.python.org/downloads/) — **tick "Add Python to PATH"** during install (the installer also adds the `py` launcher which the script will use automatically)
+Jarvis fixes the loop: **input → retrieve → reason → write back → better retrieval next time.**
 
-### 3. Anthropic API key
-Get one at https://console.anthropic.com — you'll paste it into the app on first run.
+---
+
+## What makes Jarvis different
+
+### Your memory belongs to you
+Local Markdown files are the source of truth. Not a proprietary memory layer. Not a database you can't read.
+
+### Retrieval before reasoning
+Jarvis does the expensive work locally first — BM25, semantic search, graph expansion, ranking, compression — then sends only a small, high-signal context to the model. Fewer tokens, lower cost, better answers.
+
+### A real knowledge graph
+Notes, people, projects, topics, and sources are connected through a graph that is part of retrieval and reasoning — not just a visualization.
+
+### Multi-provider
+Anthropic, OpenAI, and Google models via LiteLLM. Switch models per conversation. No vendor lock-in.
+
+### Specialists from the UI
+Create reusable roles — Weekly Planner, Health Guide, Study Coach, Research Assistant — directly from the interface. No prompt engineering required.
+
+### Duel Mode
+Pick a topic, pick two specialists. They debate. Jarvis judges. The outcome is saved back into memory. Structured argumentation that produces reusable outputs.
+
+### Web search
+When local memory isn't enough, Jarvis searches the web via DuckDuckGo — no extra API keys needed.
+
+### Write-back by design
+Useful outputs become notes, summaries, plans, graph links, and durable context. Every useful interaction makes the system better.
+
+### Obsidian-compatible
+Your `Jarvis/memory/` folder works as a valid Obsidian vault — plain Markdown, YAML frontmatter, wiki-links, human-readable structure.
+
+---
+
+## How it works in practice
+
+**Imported:** project notes, 2 URLs, 1 YouTube video.
+
+**Asked Jarvis:** *"What should we do next?"*
+
+**Jarvis:**
+1. Retrieved relevant notes from memory (BM25 + embeddings)
+2. Expanded context through graph links
+3. Ranked and compressed candidates
+4. Produced a practical plan via Claude
+5. Saved the result to `memory/plans/`
+6. Updated graph relationships for future use
+
+**Result:** not just a better answer — a better system after the answer.
+
+---
+
+## Why this is not ChatGPT, NotebookLM, or Obsidian
+
+| Tool | What it does well | Where Jarvis differs |
+|---|---|---|
+| **ChatGPT** | Great general AI assistant | Jarvis writes outputs back into structured, local memory |
+| **NotebookLM** | Source-grounded research | Jarvis turns sources into a living memory + graph + specialist system |
+| **Obsidian** | Local note-taking and vault management | Jarvis adds retrieval, reasoning, specialists, graph-aware context, and write-back |
+
+**Jarvis is the layer that turns information into working memory.**
+
+---
+
+## Interface
+
+<!-- TODO: take screenshots, save to docs/assets/ -->
+
+### Chat
+<!-- TODO: place screenshot at docs/assets/chat.png -->
+![Chat](./docs/assets/chat.png)
+
+### Memory
+<!-- TODO: place screenshot at docs/assets/memory.png -->
+![Memory](./docs/assets/memory.png)
+
+### Graph
+<!-- TODO: place screenshot at docs/assets/graph.png -->
+![Graph](./docs/assets/graph.png)
+
+### Specialists
+<!-- TODO: place screenshot at docs/assets/specialists.png -->
+![Specialists](./docs/assets/specialists.png)
+
+### Duel Mode
+<!-- TODO: place screenshot at docs/assets/duel.png -->
+![Duel](./docs/assets/duel.png)
+
+### Settings
+<!-- TODO: place screenshot at docs/assets/settings.png -->
+![Settings](./docs/assets/settings.png)
+
+---
+
+## What works today
+
+- Browser-based UI with chat, memory browser, graph view, settings
+- Local workspace with Markdown memory
+- File, URL, and YouTube ingest (including PDF)
+- Interactive graph visualization (D3-based)
+- Graph-guided hybrid retrieval (BM25 + semantic + graph scoring)
+- Local embeddings via fastembed (multilingual, no API calls)
+- Specialist system with full UI wizard
+- Duel Mode with round-based debate and scored verdict
+- Multi-provider support (Anthropic, OpenAI, Google)
+- Web search via DuckDuckGo (no extra API key)
+- Token tracking with budget controls
+- Session-to-memory write-back with graph updates
+- Secure API key handling
+- Obsidian-compatible memory structure
+
+---
 
 ## Quick start
 
-After unzipping/cloning the repo, open a terminal in the project folder and run:
+### Requirements
 
-### Zero-prereq bootstrap (recommended for non-programmers)
+- **Node.js 20+** — check: `node --version`
+- **Python 3.12 or 3.13** — check: `python3 --version` (macOS/Linux) or `py --version` (Windows)
+- **Anthropic API key** — get one at [console.anthropic.com](https://console.anthropic.com)
 
-- Windows (PowerShell):
+> Don't have Node.js or Python? Use a [bootstrap installer](#zero-prereq-bootstrap) — it can download local runtimes automatically, no admin rights needed.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\bootstrap\install.ps1
+### One command
+
+```bash
+git clone https://github.com/YOUR_USERNAME/jarvis.git
+cd jarvis
+npm run wake-up-jarvis
 ```
 
-- macOS / Linux:
+**That's it. One command to install and start Jarvis.** It will:
 
+1. **Preflight check** — verify Node 20+, npm 9+, Python 3.12–3.13
+2. **Backend** — create venv, install Python deps
+3. **Frontend** — install Node deps, build production Nuxt bundle
+4. **Start both servers** — backend on :8000, frontend on :3000
+
+Open **http://localhost:3000**, paste your API key, create your workspace.
+
+> Aliases: `npm run wake`, `npm start`. Stop with **Ctrl+C**.
+
+<details>
+<summary><strong>Zero-prereq bootstrap</strong></summary>
+
+Recommended if you don't have Node.js or Python installed.
+
+**macOS / Linux:**
 ```bash
 bash ./bootstrap/install.sh
 ```
 
-Bootstrap scripts ask for confirmation before downloading local runtimes, then run the same `wake-up-jarvis` flow.
-
-### npm flow (when Node.js is already installed)
-
-```bash
-npm run wake-up-jarvis
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy Bypass -File .\bootstrap\install.ps1
 ```
 
-> Shorter aliases all do the same thing: `npm run wake`, `npm start`.
-> If you happen to use Yarn instead of npm, `yarn wake-up-jarvis` / `yarn wake` / `yarn start` work too — but **you don't need Yarn**, npm ships with Node.js.
+Scripts ask for confirmation before downloading local runtimes, then run the same `wake-up-jarvis` flow.
 
-**That's it. One command, same on every OS.** It will:
+</details>
 
-1. **Run a preflight check** — verify Node 20+, npm 9+, and Python 3.12–3.13 are installed
-2. **Wake up the backend** — find (or download) Python, create a venv, install backend deps
-3. **Wake up the frontend** — install Node deps
-4. **Build the interface** — compile the production Nuxt bundle
-5. **Start both servers** in parallel:
-   - **Backend** on http://localhost:8000
-   - **Frontend** on http://localhost:3000
-
-When you see both servers ready, open **http://localhost:3000** and paste your Anthropic API key on the onboarding screen.
-
-Put Jarvis back to sleep with **`Ctrl+C`**.
-
-> Run `npm run preflight` on its own to just check your system without installing anything.
-> The first run takes a minute or two (install + build); subsequent runs are faster because deps are cached, but the frontend is rebuilt each time to guarantee you're running the latest code.
-
-## Already installed? Just run it
-
-If Jarvis is already installed and built and you only want to start the servers again (skipping install + build):
+<details>
+<summary><strong>Already installed? Just run it</strong></summary>
 
 ```bash
 npm run serve
 ```
 
-## Developer mode (HMR + auto-reload)
-
-If you're editing the code and want hot module replacement and backend auto-reload:
+Starts both servers without reinstalling. Dev mode with HMR:
 
 ```bash
 npm run dev
 ```
 
-Dev mode runs Vite's dev server for the frontend and uvicorn with `--reload` for the backend. Slower to start, hotter feedback loop.
+</details>
 
-## All commands
+<details>
+<summary><strong>All commands</strong></summary>
 
 ```bash
 # Preflight
-npm run preflight          # check Node / npm / Python versions, no side effects
+npm run preflight          # check versions, no side effects
 
 # Install
-npm run install:all        # backend (venv + pip) and frontend (npm)
+npm run install:all        # backend + frontend
 npm run install:backend    # backend only
 npm run install:frontend   # frontend only
 
-# Production (optimized build)
-npm run wake-up-jarvis     # preflight + install + build + serve (the full experience)
-npm run wake               # alias for wake-up-jarvis
-npm start                  # alias for wake-up-jarvis
+# Production
+npm run wake-up-jarvis     # preflight + install + build + serve
+npm run wake               # alias
+npm start                  # alias
 npm run build              # nuxt build → frontend/.output
-npm run serve              # serve backend (:8000) + frontend (:3000) in parallel
-npm run serve:backend      # production backend only (uvicorn, no --reload)
-npm run serve:frontend     # production frontend only (node .output/server/index.mjs)
+npm run serve              # serve both servers
+npm run serve:backend      # backend only (uvicorn)
+npm run serve:frontend     # frontend only
 
-# Development (HMR + auto-reload)
-npm run dev                # dev backend + dev frontend in parallel
+# Development
+npm run dev                # HMR frontend + auto-reload backend
 npm run dev:backend        # uvicorn --reload
 npm run dev:frontend       # nuxt dev
 ```
 
-## How it works (cross-platform, zero extra deps)
+</details>
 
-Jarvis uses small launcher scripts (in [`bootstrap/`](bootstrap/) and [`scripts/`](scripts/)) instead of shell-specific glue — no `concurrently`, no `cross-env`, no extra npm dependencies:
+<details>
+<summary><strong>Troubleshooting</strong></summary>
 
-- [`bootstrap/install.ps1`](bootstrap/install.ps1) / [`bootstrap/install.sh`](bootstrap/install.sh) — optional bootstrap entrypoints that check Node.js and offer local runtime download before invoking `wake-up-jarvis`
-- [`scripts/wake-up-jarvis.mjs`](scripts/wake-up-jarvis.mjs) — the immersive one-command entry point; runs preflight → install → build → serve in sequence with a themed banner and step-by-step status
-- [`scripts/preflight.mjs`](scripts/preflight.mjs) — verifies Node, npm, and Python versions on your system before anything else runs
-- [`scripts/install-backend.mjs`](scripts/install-backend.mjs) — prefers Python 3.12/3.13 probes first and can offer local Python download before creating the venv and installing requirements
-- [`scripts/build-frontend.mjs`](scripts/build-frontend.mjs) — runs `nuxt build`
-- [`scripts/serve-backend.mjs`](scripts/serve-backend.mjs) — runs uvicorn from the venv (`.venv/bin/python` on Unix, `.venv\Scripts\python.exe` on Windows)
-- [`scripts/serve-frontend.mjs`](scripts/serve-frontend.mjs) — runs `node .output/server/index.mjs`
-- [`scripts/serve.mjs`](scripts/serve.mjs) / [`scripts/dev.mjs`](scripts/dev.mjs) — run backend and frontend in parallel, forward `Ctrl+C` to both
+#### Any platform
+- **Port 8000 or 3000 in use** — find and stop the other process (`lsof -i :8000` on macOS/Linux)
+- **Broken venv** — delete `backend/.venv` and re-run `npm run wake-up-jarvis`
 
-Because everything goes through Node + `spawn`, there are no shell-isms (`&`, `wait`, backticks), no path-separator issues, and no assumptions about bash vs PowerShell vs cmd.
+#### Windows
+- **Install looks stuck during venv creation** — antivirus scanning. Give it 2–5 minutes. Don't Ctrl+C.
+- **Too slow?** Add Windows Defender exclusion for `backend\.venv`
+- **Scripts disabled** — use `powershell -ExecutionPolicy Bypass -File .\bootstrap\install.ps1`
 
-## Troubleshooting
+#### macOS
+- **"xcrun: error"** — run `xcode-select --install`
+- **Python 3.14+** — not yet supported. Use 3.12 or 3.13.
 
-### Any platform
+</details>
 
-- **"Node.js 20+ not found"** — run `bootstrap/install.ps1` (Windows) or `bootstrap/install.sh` (macOS/Linux) and accept local runtime download
-- **"could not find Python 3.x on PATH"** — install Python and make sure `python3` (macOS/Linux) or `py` / `python` (Windows) runs in your terminal
-- **Port 8000 or 3000 already in use** — another process is holding it; find and stop it (`lsof -i :8000` on macOS/Linux, `netstat -ano | findstr :8000` on Windows)
-- **"backend venv is missing dependencies"** — a previous install was interrupted. Run `npm run install:backend` again (or delete `backend/.venv` and re-run `npm run wake-up-jarvis`)
+---
 
-### Windows-specific
+## Architecture
 
-- **Install looks stuck during "creating Python venv"** — this is almost always antivirus (Windows Defender, etc.) scanning every file pip writes. First install can take 30–90 seconds just for the venv, and another 2–5 minutes to download ~400 MB of ML wheels. **Do not press Ctrl+C** — give it time. If you did press Ctrl+C, the script will detect the broken venv on the next run and rebuild it cleanly.
-- **If it's too slow**, add an exclusion in Windows Defender for the project folder (Settings → Virus & threat protection → Exclusions → Add a folder → select `backend\.venv` and `backend\.python-local`).
-- **`.venv\Scripts\activate` : The term is not recognized** — you don't need to activate the venv manually. Just use `npm run wake-up-jarvis` (or `npm run serve` if already installed). If you really want to activate it in PowerShell, the command is `.\.venv\Scripts\Activate.ps1` — and PowerShell may require `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` first.
-- **"cannot be loaded because running scripts is disabled on this system"** — PowerShell's default ExecutionPolicy blocks `.ps1` files. Either use the `powershell -ExecutionPolicy Bypass -File .\bootstrap\install.ps1` form from Quick start, or run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
-- **"`py` works but `python` doesn't"** — the `py` launcher is fine, the install script handles it automatically.
-- **"could not remove backend/.venv"** — a previous Jarvis backend may still be running and holding files. Close any `python.exe` / `uvicorn` in Task Manager, then re-run.
-- **Long-path errors** (`FileNotFoundError`, paths over 260 chars) — enable long paths: run PowerShell as Administrator and execute `New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force`, then reboot.
+### Source of truth doctrine
 
-### macOS-specific
+- `Jarvis/memory/` Markdown files = canonical
+- SQLite = operational index/cache (rebuildable)
+- Graph = derived relationship layer (rebuildable)
+- Embeddings = derived semantic layer (rebuildable)
 
-- **"xcrun: error: invalid active developer path"** — install the Command Line Tools: `xcode-select --install`. This is required for any package that builds from source.
-- **`brew install python@3.14` installed, but it's too new** — many ML packages (fastembed, onnxruntime) don't yet ship wheels for 3.14. Install `python@3.12` or `python@3.13` instead, or let the install script download a local standalone Python.
-- **Apple Silicon + old Python** — make sure your Python is arm64-native (`python3 -c "import platform; print(platform.machine())"` should print `arm64`). A Rosetta x86_64 Python will install slower and may pull in x86 wheels.
+If you delete everything except `memory/`, the system rebuilds itself.
 
-## Structure
+### User workspace (created on first run)
 
-- `backend/` — FastAPI + SQLite + Anthropic SDK
-- `bootstrap/` — zero-prereq installers (download local Node runtime when needed)
-- `frontend/` — Nuxt 3 + Vue 3 + TypeScript
-- `scripts/` — cross-platform Node launchers used by npm scripts
-- `docs/` — project documentation
-- `CLAUDE.md` — full project plan
+When you create a workspace in the app, Jarvis generates this structure at your chosen location (default: `~/Jarvis/`).
+This is **not** the source code — it's your personal data directory.
+
+```
+~/Jarvis/
+├── app/
+│   ├── config.json        # metadata + flags
+│   ├── sessions/          # chat session history (JSON)
+│   ├── cache/             # retrieval cache
+│   ├── logs/              # token usage logs
+│   ├── audio/             # voice recordings
+│   └── jarvis.db          # SQLite operational DB
+├── memory/
+│   ├── inbox/             # quick captures
+│   ├── daily/             # daily notes
+│   ├── projects/          # project notes
+│   ├── people/            # people notes
+│   ├── areas/             # life areas
+│   ├── plans/             # plans & checklists
+│   ├── summaries/         # AI-generated summaries
+│   ├── knowledge/         # imported sources
+│   ├── preferences/       # user rules
+│   ├── examples/          # good output examples
+│   ├── conversations/     # saved chat sessions (auto-created)
+│   └── attachments/       # files, PDFs
+├── graph/
+│   └── graph.json         # knowledge graph data
+└── agents/                # specialist definitions (JSON)
+```
+
+### Retrieval pipeline
+
+```
+Query → BM25 → Semantic similarity → Graph expansion → Ranking → Compression → Model
+```
+
+Only a small, high-signal context reaches the model. Fewer tokens, lower cost, better signal density per dollar of API spend.
+
+---
+
+## Design principles
+
+- Local-first — all data on your machine
+- Memory belongs to the user — Markdown, not a proprietary layer
+- Derived layers (SQLite, graph, embeddings) must be rebuildable
+- Retrieval gets smarter before prompts get bigger
+- Useful outputs write back into the system
+- Every interaction should make the next one better
+
+---
+
+## Who this is for
+
+Founders. Researchers. Builders. Students. Knowledge workers.
+Anyone who thinks in notes and wants continuity, not just output.
+
+> *"I don't need another answer. I need a system that helps me stop losing context."*
+
+---
+
+## Current status
+
+**Working now:** local workspace, memory CRUD, file/URL/YouTube ingest, hybrid retrieval, graph visualization, specialists, Duel Mode, multi-provider LLM, token tracking, session write-back, web search.
+
+**Planned next:** stronger feedback loops, smarter graph enrichment, Council Mode, improved local model support, voice (once quality is reliable).
+
+---
+
+## Contributing
+
+Contributions welcome. Strong areas: retrieval quality, graph UX, specialist templates, ingest pipelines, local model support, Obsidian workflows, onboarding polish.
+
+Open an issue or send a PR.
+
+---
+
+## Repository structure
+
+```
+jarvis/
+├── backend/            # FastAPI + SQLite + LiteLLM
+│   ├── models/         # Pydantic schemas, DB setup
+│   ├── routers/        # API endpoints (chat, memory, graph, specialists…)
+│   ├── services/       # Core logic (retrieval, graph, embeddings, ingest…)
+│   ├── tests/          # 39 test files, ~7k LOC
+│   └── utils/          # Markdown parsing helpers
+├── frontend/           # Nuxt 3 + Vue 3 + TypeScript
+│   ├── app/
+│   │   ├── components/ # 26 Vue components
+│   │   ├── composables/# State & logic (chat, duel, graph, voice…)
+│   │   └── pages/      # 7 pages (main, memory, graph, specialists…)
+│   └── tests/
+├── bootstrap/          # Zero-prereq installers (local runtime download)
+├── scripts/            # Cross-platform Node launchers
+└── docs/               # Project documentation
+```
+
+---
+
+**Jarvis is not an AI chat with memory — it is a personal knowledge system that turns notes, files, links, and AI interactions into lasting, reusable intelligence.**
