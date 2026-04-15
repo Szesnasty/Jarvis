@@ -101,30 +101,28 @@ Your `Jarvis/memory/` folder works as a valid Obsidian vault — plain Markdown,
 
 ## Interface
 
-<!-- TODO: take screenshots, save to docs/assets/ -->
-
-### Chat
-<!-- TODO: place screenshot at docs/assets/chat.png -->
+### Chat — your memory-aware assistant
+Ask questions, get answers grounded in your own notes. Context is retrieved automatically — you just talk.
 ![Chat](./docs/assets/chat.png)
 
-### Memory
-<!-- TODO: place screenshot at docs/assets/memory.png -->
+### Memory — browse and manage your knowledge
+All your notes in one place. Search, filter by folder, edit inline. Everything is plain Markdown — open it in Obsidian anytime.
 ![Memory](./docs/assets/memory.png)
 
-### Graph
-<!-- TODO: place screenshot at docs/assets/graph.png -->
+### Graph — see how your knowledge connects
+People, projects, topics, and sources linked visually. Click any node to explore. The graph isn't decoration — it powers retrieval.
 ![Graph](./docs/assets/graph.png)
 
-### Specialists
-<!-- TODO: place screenshot at docs/assets/specialists.png -->
+### Specialists — custom roles, no code required
+Create focused advisors with their own knowledge, rules, and style. A Growth Strategist thinks differently than an Operations Advisor — and that's the point.
 ![Specialists](./docs/assets/specialists.png)
 
-### Duel Mode
-<!-- TODO: place screenshot at docs/assets/duel.png -->
+### Duel Mode — structured debate that produces decisions
+Two specialists argue. Jarvis judges. The verdict, scores, and action items are saved to memory. Turn hard decisions into documented reasoning.
 ![Duel](./docs/assets/duel.png)
 
-### Settings
-<!-- TODO: place screenshot at docs/assets/settings.png -->
+### Settings — your setup, your control
+API keys, model selection, token budgets, workspace path. Everything stays local.
 ![Settings](./docs/assets/settings.png)
 
 ---
@@ -154,15 +152,18 @@ Your `Jarvis/memory/` folder works as a valid Obsidian vault — plain Markdown,
 
 - **Node.js 20+** — check: `node --version`
 - **Python 3.12 or 3.13** — check: `python3 --version` (macOS/Linux) or `py --version` (Windows)
-- **Anthropic API key** — get one at [console.anthropic.com](https://console.anthropic.com)
+- **One API key** from any supported provider:
+  - [Anthropic](https://console.anthropic.com) (Claude)
+  - [OpenAI](https://platform.openai.com/api-keys) (GPT-4o)
+  - [Google AI](https://aistudio.google.com/apikey) (Gemini)
 
 > Don't have Node.js or Python? Use a [bootstrap installer](#zero-prereq-bootstrap) — it can download local runtimes automatically, no admin rights needed.
 
 ### One command
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/jarvis.git
-cd jarvis
+git clone https://github.com/Szesnasty/Jarvis.git
+cd Jarvis
 npm run wake-up-jarvis
 ```
 
@@ -343,9 +344,40 @@ Anyone who thinks in notes and wants continuity, not just output.
 
 ## Contributing
 
-Contributions welcome. Strong areas: retrieval quality, graph UX, specialist templates, ingest pipelines, local model support, Obsidian workflows, onboarding polish.
+Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+Strong areas: retrieval quality, graph UX, specialist templates, ingest pipelines, local model support, Obsidian workflows, onboarding polish.
 
 Open an issue or send a PR.
+
+---
+
+## Contributors
+
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/Szesnasty"><img src="https://github.com/Szesnasty.png" width="80" style="border-radius:50%;" /><br /><b>Łukasz Jakubowski</b></a></td>
+    <td align="center"><a href="https://github.com/jakubsuplicki"><img src="https://github.com/jakubsuplicki.png" width="80" style="border-radius:50%;" /><br /><b>Jakub Suplicki</b></a></td>
+  </tr>
+</table>
+
+---
+
+## Security
+
+Found a vulnerability? See [SECURITY.md](SECURITY.md) for responsible disclosure guidelines. Do not open a public issue.
+
+---
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+---
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
 
 ---
 

@@ -30,7 +30,16 @@ export function useDuel() {
     currentTexts.value = {}
     errorMsg.value = ''
     showSetup.value = false
-    _send({ type: 'duel_start', ...config })
+
+    // Attach API key, provider, model — same as regular chat messages
+    const { activeProvider, activeKey, activeModel } = useApiKeys()
+    const payload: Record<string, unknown> = { type: 'duel_start', ...config }
+    payload.provider = activeProvider.value
+    payload.model = activeModel.value
+    if (activeKey.value) {
+      payload.api_key = activeKey.value
+    }
+    _send(payload)
   }
 
   function handleWsEvent(raw: DuelEvent): void {
