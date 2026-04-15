@@ -323,15 +323,25 @@ async def test_ingest_rejects_traversal_folder(client):
 
 
 @pytest.mark.anyio
-async def test_update_api_key_requires_workspace(client):
-    with patch("routers.settings.workspace_service") as mock_ws:
-        mock_ws.workspace_exists.return_value = False
-        r = await client.patch(
-            "/api/settings/api-key",
-            json={"api_key": "sk-ant-test123"},
-        )
-        assert r.status_code == 400
-        assert "not initialized" in r.json()["detail"]
+async def test_update_api_key_browser_managed(client):
+    """PATCH /api/settings/api-key is a no-op — keys are browser-managed.
+    It validates the key is non-empty but always returns 200 (no server storage)."""
+    r = await client.patch(
+        "/api/settings/api-key",
+        json={"api_key": "sk-ant-test123"},
+    )
+    assert r.status_code == 200
+    assert r.json()["api_key_set"] is True
+
+
+@pytest.mark.anyio
+async def test_update_api_key_empty_still_rejected(client):
+    """Empty key is still rejected with 422 even in browser-managed mode."""
+    r = await client.patch(
+        "/api/settings/api-key",
+        json={"api_key": ""},
+    )
+    assert r.status_code == 422
 
 
 # ── Smart enrich path validation ─────────────────────────────────────

@@ -20,7 +20,7 @@ async def get_settings_view():
     return {
         "workspace_path": str(ws),
         "api_key_set": status.get("api_key_set", False),
-        "key_storage": workspace_service.get_key_storage_method(ws),
+        "key_storage": "browser",
         "voice": voice_prefs,
     }
 
@@ -30,18 +30,8 @@ async def update_api_key(body: dict):
     key = body.get("api_key", "").strip()
     if not key:
         raise HTTPException(status_code=422, detail="API key must not be empty")
-    ws = get_settings().workspace_path
-    if not workspace_service.workspace_exists(ws):
-        raise HTTPException(status_code=400, detail="Workspace not initialized")
-    workspace_service._store_api_key(key, ws)
-    # Sync config.json flag so status checks stay consistent
-    config_file = ws / "app" / "config.json"
-    try:
-        config = json.loads(config_file.read_text())
-        config["api_key_set"] = True
-        config_file.write_text(json.dumps(config, indent=2))
-    except (OSError, json.JSONDecodeError):
-        pass  # Non-critical — get_workspace_status now verifies key directly
+    # Keys are managed in the browser (localStorage/sessionStorage).
+    # This endpoint is a no-op kept for API compatibility.
     return {"api_key_set": True}
 
 
