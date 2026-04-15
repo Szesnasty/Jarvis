@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.2.0...jarvis-v0.2.1) (2026-04-15)
+
+
+### 🐛 Bug Fixes
+
+* remove top-level await in index.vue to fix blank page on first load ([49db6bd](https://github.com/Szesnasty/Jarvis/commit/49db6bd49363c257f4d1c129ecced6422033601f))
+* remove top-level await in index.vue to fix blank page on first load ([fb83bdf](https://github.com/Szesnasty/Jarvis/commit/fb83bdff35a5ed5b528209b8ccef2a6d76bf4ff4))
+
 ## [0.2.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.1.0...jarvis-v0.2.0) (2026-04-15)
 
 
