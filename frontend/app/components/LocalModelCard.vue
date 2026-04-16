@@ -6,22 +6,13 @@ const props = defineProps<{
   pulling: boolean
   progress: PullProgressType | null
   disabled?: boolean
+  compact?: boolean
 }>()
 
 const emit = defineEmits<{
   pull: [modelId: string]
   select: [modelId: string]
 }>()
-
-const compatBadge = computed(() => {
-  const map: Record<string, { label: string; cssClass: string }> = {
-    great: { label: 'Recommended', cssClass: 'compat--great' },
-    good: { label: 'Compatible', cssClass: 'compat--good' },
-    warning: { label: 'May be slow', cssClass: 'compat--warning' },
-    unsupported: { label: 'Not enough resources', cssClass: 'compat--unsupported' },
-  }
-  return map[props.model.compatibility] ?? map.good
-})
 
 const presetLabel = computed(() => {
   const map: Record<string, string> = {
@@ -54,7 +45,7 @@ const buttonState = computed(() => {
 </script>
 
 <template>
-  <div class="model-card" :class="{ 'model-card--active': model.active, 'model-card--disabled': disabled }">
+  <div class="model-card" :class="{ 'model-card--active': model.active, 'model-card--disabled': disabled, 'model-card--compact': compact }">
     <div class="model-card__top">
       <span class="model-card__name">{{ model.label }}</span>
       <span class="model-card__preset">{{ presetLabel }}</span>
@@ -63,21 +54,33 @@ const buttonState = computed(() => {
     <div class="model-card__meta">
       <span>{{ model.download_size_gb }} GB</span>
       <span class="model-card__sep">·</span>
-      <span>Context {{ model.context_window }}</span>
+      <span>Max context {{ model.context_window }}</span>
     </div>
 
-    <div class="model-card__tags">
-      <span v-for="s in model.strengths" :key="s" class="model-card__tag">{{ s }}</span>
-    </div>
+    <template v-if="!compact">
+      <div class="model-card__tags">
+        <span v-for="s in model.strengths.slice(0, 3)" :key="s" class="model-card__tag">{{ s }}</span>
+      </div>
 
-    <div class="model-card__tool-badge" :class="toolBadge.cssClass" :title="toolBadge.label">
+      <div class="model-card__tool-badge" :class="toolBadge.cssClass" :title="toolBadge.label">
+        <span class="model-card__tool-icon">{{ toolBadge.icon }}</span>
+        <span>{{ toolBadge.label }}</span>
+      </div>
+
+      <p v-if="model.best_for && model.best_for.length" class="model-card__best-for">
+        Best for: {{ model.best_for.slice(0, 2).join(', ') }}
+      </p>
+
+      <p v-if="model.context_window === '40K'" class="model-card__ctx-hint">
+        Good for everyday chat. For long documents, choose a 128K–384K model.
+      </p>
+
+      <p v-if="model.reason && model.compatibility !== 'great'" class="model-card__reason">{{ model.reason }}</p>
+    </template>
+
+    <div v-if="compact" class="model-card__tool-badge model-card__tool-badge--inline" :class="toolBadge.cssClass" :title="toolBadge.label">
       <span class="model-card__tool-icon">{{ toolBadge.icon }}</span>
       <span>{{ toolBadge.label }}</span>
-    </div>
-
-    <div class="model-card__compat" :class="compatBadge.cssClass">
-      {{ compatBadge.label }}
-      <template v-if="model.reason"> — {{ model.reason }}</template>
     </div>
 
     <!-- Actions -->
@@ -138,6 +141,18 @@ const buttonState = computed(() => {
 
 .model-card--disabled {
   opacity: 0.55;
+}
+
+.model-card--compact {
+  padding: 0.55rem 0.75rem;
+}
+
+.model-card--compact .model-card__name {
+  font-size: 0.85rem;
+}
+
+.model-card--compact .model-card__meta {
+  margin-bottom: 0.25rem;
 }
 
 .model-card__top {
@@ -220,31 +235,32 @@ const buttonState = computed(() => {
   background: rgba(255, 255, 255, 0.03);
 }
 
-.model-card__compat {
+.model-card__reason {
   font-size: 0.78rem;
-  margin-bottom: 0.65rem;
-  padding: 0.3rem 0.5rem;
-  border-radius: 5px;
+  color: var(--text-secondary);
+  margin-bottom: 0.55rem;
+  line-height: 1.4;
 }
 
-.compat--great {
-  color: #34d399;
-  background: rgba(52, 211, 153, 0.06);
+.model-card__best-for {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.45rem;
 }
 
-.compat--good {
-  color: #60a5fa;
-  background: rgba(96, 165, 250, 0.06);
-}
-
-.compat--warning {
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.06);
-}
-
-.compat--unsupported {
+.model-card__ctx-hint {
+  font-size: 0.72rem;
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.02);
+  margin-bottom: 0.45rem;
+  line-height: 1.4;
+  padding: 0.25rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-subtle);
+}
+
+.model-card__tool-badge--inline {
+  margin-bottom: 0.3rem;
 }
 
 .model-card__action {

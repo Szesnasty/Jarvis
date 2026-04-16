@@ -534,10 +534,14 @@ def score_model(
 
     # Bonuses
     score = base_score
-    if model.cpu_friendly and not has_gpu:
+    # cpu_friendly bonus only for pure CPU machines (not Apple Silicon, which has unified memory GPU)
+    if model.cpu_friendly and not has_gpu and not hw.is_apple_silicon:
         score += 10
     if ram < model.recommended_ram_min_gb:
         score -= 20
+    # On strong hardware (32+ GB), prefer higher-context models so they rank above tiny ones
+    if hw.tier in ("strong", "workstation") and model.context_tokens >= 131072:
+        score += 8
     # Clamp
     score = max(0, min(100, score))
 
