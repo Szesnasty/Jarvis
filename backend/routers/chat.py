@@ -266,12 +266,23 @@ async def _handle_message(
         except Exception:
             logger.warning("Failed to log token usage")
 
-    await _send_event(
-        ws, "done",
-        session_id=session_id,
-        model=model or "claude-sonnet-4-20250514",
-        provider=provider or "anthropic",
-    )
+    done_fields = {
+        "session_id": session_id,
+        "model": model or "claude-sonnet-4-20250514",
+        "provider": provider or "anthropic",
+    }
+    # Include tool_mode for local models so the frontend can show tool support info
+    if provider == "ollama" and model:
+        from services.ollama_service import MODEL_CATALOG, _tool_mode_for
+        ollama_name = model.replace("ollama_chat/", "") if model.startswith("ollama_chat/") else model
+        for entry in MODEL_CATALOG:
+            if entry.ollama_model == ollama_name:
+                done_fields["tool_mode"] = _tool_mode_for(entry)
+                break
+        else:
+            done_fields["tool_mode"] = "json_fallback"
+
+    await _send_event(ws, "done", **done_fields)
 
     # Save conversation to memory after every assistant reply.
     # First save happens after the first exchange; subsequent saves update the

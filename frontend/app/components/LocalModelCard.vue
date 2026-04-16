@@ -35,6 +35,13 @@ const presetLabel = computed(() => {
   return map[props.model.preset] ?? props.model.preset
 })
 
+const toolBadge = computed(() => {
+  const mode = props.model.tool_mode
+  if (mode === 'native') return { label: 'Native tools', cssClass: 'tool-badge--native', icon: '✅' }
+  if (mode === 'json_fallback') return { label: 'Tools via prompt', cssClass: 'tool-badge--fallback', icon: '⚠️' }
+  return { label: 'Limited tool support', cssClass: 'tool-badge--limited', icon: '❌' }
+})
+
 const buttonState = computed(() => {
   if (props.pulling) return 'pulling'
   if (props.model.active) return 'active'
@@ -59,6 +66,11 @@ const buttonState = computed(() => {
 
     <div class="model-card__tags">
       <span v-for="s in model.strengths" :key="s" class="model-card__tag">{{ s }}</span>
+    </div>
+
+    <div class="model-card__tool-badge" :class="toolBadge.cssClass" :title="toolBadge.label">
+      <span class="model-card__tool-icon">{{ toolBadge.icon }}</span>
+      <span>{{ toolBadge.label }}</span>
     </div>
 
     <div class="model-card__compat" :class="compatBadge.cssClass">
@@ -166,6 +178,35 @@ const buttonState = computed(() => {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
+}
+
+.model-card__tool-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  margin-bottom: 0.45rem;
+}
+
+.model-card__tool-icon {
+  font-size: 0.65rem;
+}
+
+.tool-badge--native {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.tool-badge--fallback {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.tool-badge--limited {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .model-card__compat {

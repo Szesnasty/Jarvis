@@ -5,7 +5,7 @@
 > and runtime health monitoring. Make local models a first-class citizen
 > in the chat pipeline.
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete
 **Depends on**: Step 21a (backend), Step 21b (frontend), Step 21c (onboarding)
 **Effort**: ~1–2 days
 **Branch**: `feat/local-models-integration`
