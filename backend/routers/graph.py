@@ -87,3 +87,32 @@ async def rebuild_graph():
     graph_service.invalidate_cache()
     graph = await asyncio.to_thread(graph_service.rebuild_graph)
     return graph.stats()
+
+
+class MergeRequest(BaseModel):
+    source_id: str
+    target_id: str
+    entity_type: str = "person"
+
+
+@router.post("/merge-entities")
+async def merge_entities_endpoint(body: MergeRequest):
+    """Manually merge two entity nodes."""
+    import asyncio
+    from services.entity_canonicalization import merge_entities
+
+    db_path = memory_service._db_path()
+    await merge_entities(body.source_id, body.target_id, body.entity_type, db_path)
+    # Rebuild graph to reflect merge
+    graph_service.invalidate_cache()
+    await asyncio.to_thread(graph_service.rebuild_graph)
+    return {"status": "ok", "merged": body.source_id, "into": body.target_id}
+
+
+@router.get("/merge-candidates")
+async def get_merge_candidates(entity_type: str = "person"):
+    """Find pairs of entities that might be duplicates."""
+    from services.entity_canonicalization import find_merge_candidates
+
+    db_path = memory_service._db_path()
+    return await find_merge_candidates(entity_type, db_path)
