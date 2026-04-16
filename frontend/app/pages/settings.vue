@@ -134,6 +134,7 @@
             :disabled="!localModels.isOllamaReady()"
             @pull="localModels.pullModel($event)"
             @select="localModels.selectModel($event)"
+            @cancel="localModels.cancelPull()"
           />
         </div>
       </div>
@@ -154,6 +155,7 @@
             compact
             @pull="localModels.pullModel($event)"
             @select="localModels.selectModel($event)"
+            @cancel="localModels.cancelPull()"
           />
         </div>
       </details>
