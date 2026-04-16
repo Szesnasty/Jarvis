@@ -16,6 +16,7 @@ from services.ollama_service import (
     TestResponse,
     WarmUpRequest,
     build_catalog,
+    clear_active_local_model,
     delete_model,
     get_active_local_model,
     list_installed_models,
@@ -95,6 +96,10 @@ async def remove_model(
     """Delete a model from Ollama."""
     success = await delete_model(model_name, base_url)
     if success:
+        # If this was the active model, clear it from config
+        active = get_active_local_model()
+        if active and active.get("litellm_model", "").endswith(model_name):
+            clear_active_local_model()
         return {"status": "ok", "deleted": model_name}
     return {"status": "error", "message": "Failed to delete model"}
 
