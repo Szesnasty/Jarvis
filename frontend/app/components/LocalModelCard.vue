@@ -5,6 +5,7 @@ const props = defineProps<{
   model: ModelRecommendation
   pulling: boolean
   progress: PullProgressType | null
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +44,7 @@ const toolBadge = computed(() => {
 })
 
 const buttonState = computed(() => {
+  if (props.disabled) return 'disabled'
   if (props.pulling) return 'pulling'
   if (props.model.active) return 'active'
   if (props.model.installed) return 'installed'
@@ -52,7 +54,7 @@ const buttonState = computed(() => {
 </script>
 
 <template>
-  <div class="model-card" :class="{ 'model-card--active': model.active }">
+  <div class="model-card" :class="{ 'model-card--active': model.active, 'model-card--disabled': disabled }">
     <div class="model-card__top">
       <span class="model-card__name">{{ model.label }}</span>
       <span class="model-card__preset">{{ presetLabel }}</span>
@@ -80,7 +82,12 @@ const buttonState = computed(() => {
 
     <!-- Actions -->
     <div class="model-card__action">
-      <template v-if="buttonState === 'pulling'">
+      <template v-if="buttonState === 'disabled'">
+        <button class="model-card__btn" disabled>
+          Start Ollama first
+        </button>
+      </template>
+      <template v-else-if="buttonState === 'pulling'">
         <PullProgress :model-name="model.ollama_model" :progress="progress" />
       </template>
       <template v-else-if="buttonState === 'active'">
@@ -127,6 +134,10 @@ const buttonState = computed(() => {
 .model-card--active {
   border-color: var(--neon-cyan-30);
   box-shadow: 0 0 12px var(--neon-cyan-08);
+}
+
+.model-card--disabled {
+  opacity: 0.55;
 }
 
 .model-card__top {
