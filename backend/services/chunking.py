@@ -11,7 +11,7 @@ from typing import List, Optional
 
 from utils.markdown import parse_frontmatter
 
-_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
+_HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*$", re.MULTILINE)
 
 
 @dataclass

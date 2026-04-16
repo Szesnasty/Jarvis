@@ -15,6 +15,10 @@ from utils.markdown import add_frontmatter, parse_frontmatter
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_for_log(value: object) -> str:
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 class NoteNotFoundError(Exception):
     pass
 
@@ -397,7 +401,8 @@ async def _index_note(
         except ImportError:
             pass
         except Exception as exc:
-            logger.warning("embed_note failed for %s: %s", note_path, exc)
+            logger.warning("embed_note failed for %s: %s",
+                           _sanitize_for_log(note_path), exc)
 
         # Auto-embed chunks for chunk-level semantic search
         try:
@@ -406,7 +411,8 @@ async def _index_note(
         except ImportError:
             pass
         except Exception as exc:
-            logger.warning("embed_note_chunks failed for %s: %s", note_path, exc)
+            logger.warning("embed_note_chunks failed for %s: %s",
+                           _sanitize_for_log(note_path), exc)
 
 
 def _note_metadata(note_path: str, fm: Dict, body: str) -> Dict:
