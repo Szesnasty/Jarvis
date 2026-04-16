@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { useApiKeys, MODEL_CATALOG, type ModelInfo } from '~/composables/useApiKeys'
+import { useLocalModels } from '~/composables/useLocalModels'
 
 const { activeProvider, activeModel, selectModel, configuredProviders, providers } = useApiKeys()
+const { installedModels } = useLocalModels()
 
 const isOpen = ref(false)
 const selectorRef = ref<HTMLElement | null>(null)
 
 const currentModelInfo = computed<ModelInfo | undefined>(() => {
+  // Check local models first
+  if (activeProvider.value === 'ollama') {
+    const local = installedModels.value.find(m => m.litellm_model === activeModel.value)
+    if (local) return { id: local.litellm_model, label: local.label, cost: 0 as 0 }
+  }
   const catalog = MODEL_CATALOG[activeProvider.value]
   return catalog?.find(m => m.id === activeModel.value)
 })
@@ -22,13 +29,15 @@ function handleSelect(providerId: string, modelId: string): void {
   isOpen.value = false
 }
 
-function costBadge(cost: 1 | 2 | 3): string {
+function costBadge(cost: 0 | 1 | 2 | 3): string {
+  if (cost === 0) return '🖥️'
   if (cost === 1) return '$'
   if (cost === 2) return '$$'
   return '$$$'
 }
 
-function costClass(cost: 1 | 2 | 3): string {
+function costClass(cost: 0 | 1 | 2 | 3): string {
+  if (cost === 0) return 'model-selector__cost--local'
   if (cost === 1) return 'model-selector__cost--budget'
   if (cost === 2) return 'model-selector__cost--standard'
   return 'model-selector__cost--premium'
@@ -86,7 +95,32 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
           </button>
         </template>
 
-        <div v-if="availableProviders.length === 0" class="model-selector__empty">
+        <!-- Local models group -->
+        <template v-if="installedModels.length > 0">
+          <div class="model-selector__group-header">
+            <span>Local</span>
+          </div>
+          <button
+            v-for="lm in installedModels"
+            :key="lm.litellm_model"
+            class="model-selector__option"
+            :class="{ 'model-selector__option--active': activeModel === lm.litellm_model && activeProvider === 'ollama' }"
+            @click="handleSelect('ollama', lm.litellm_model)"
+          >
+            <span class="model-selector__option-label">{{ lm.label }}</span>
+            <span class="model-selector__cost model-selector__cost--local">🖥️</span>
+            <svg
+              v-if="activeModel === lm.litellm_model && activeProvider === 'ollama'"
+              class="model-selector__check"
+              width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+            >
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </button>
+        </template>
+
+        <div v-if="availableProviders.length === 0 && installedModels.length === 0" class="model-selector__empty">
           No API keys configured
         </div>
       </div>

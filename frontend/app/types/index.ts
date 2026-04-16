@@ -280,3 +280,58 @@ export interface DuelVerdict {
 }
 
 export type DuelPhase = 'idle' | 'setup' | 'round1' | 'round2' | 'judging' | 'verdict' | 'done' | 'error'
+
+// --- Local Models (Ollama) ---
+
+export type HardwareTier = 'light' | 'balanced' | 'strong' | 'workstation'
+export type ModelCompatibility = 'great' | 'good' | 'warning' | 'unsupported'
+export type LocalModelPreset = 'fast' | 'everyday' | 'balanced' | 'long-docs'
+  | 'reasoning' | 'code' | 'best-local'
+
+export interface HardwareProfile {
+  os: string
+  arch: string
+  total_ram_gb: number
+  free_disk_gb: number
+  cpu_cores: number
+  gpu_vendor?: string
+  gpu_vram_gb?: number
+  is_apple_silicon: boolean
+  tier: HardwareTier
+}
+
+export interface RuntimeStatus {
+  runtime: string
+  installed: boolean
+  running: boolean
+  base_url: string
+  version?: string
+  reachable: boolean
+}
+
+export interface ModelRecommendation {
+  model_id: string
+  preset: LocalModelPreset
+  label: string
+  ollama_model: string
+  litellm_model: string
+  download_size_gb: number
+  context_window: string
+  strengths: string[]
+  best_for: string[]
+  recommended_ram: string
+  native_tools: boolean
+  compatibility: ModelCompatibility
+  score: number
+  recommended: boolean
+  reason: string
+  installed: boolean
+  active: boolean
+}
+
+export interface PullProgress {
+  status: string
+  digest?: string
+  total?: number
+  completed?: number
+}

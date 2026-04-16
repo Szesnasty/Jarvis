@@ -105,6 +105,11 @@ const _keyVersions = () => useState<number>('apiKeyVersion', () => 0)
 export function useApiKeys() {
   const keyVersion = _keyVersions()
   const activeProvider = useState<string>('activeProvider', () => {
+    // Check if ollama was saved as active provider
+    try {
+      const saved = localStorage.getItem('jarvis_active_provider')
+      if (saved === 'ollama') return 'ollama'
+    } catch { /* ignore */ }
     // Default to first configured provider, or anthropic
     for (const p of PROVIDERS) {
       if (_readKey(p.id)) return p.id
@@ -116,6 +121,8 @@ export function useApiKeys() {
     try {
       const saved = localStorage.getItem('jarvis_active_model')
       const savedProvider = localStorage.getItem('jarvis_active_provider')
+      // Ollama models don't need key verification
+      if (saved && savedProvider === 'ollama') return saved
       // Verify saved model belongs to a provider with a configured key
       if (saved && savedProvider && _readKey(savedProvider)) {
         const catalog = MODEL_CATALOG[savedProvider]
@@ -177,6 +184,7 @@ export function useApiKeys() {
   }
 
   function isConfigured(providerId: string): boolean {
+    if (providerId === 'ollama') return true  // no key needed
     return !!getKey(providerId)
   }
 
@@ -197,6 +205,16 @@ export function useApiKeys() {
   }
 
   function selectModel(providerId: string, modelId: string): void {
+    // Allow ollama models without catalog check
+    if (providerId === 'ollama') {
+      activeProvider.value = providerId
+      activeModel.value = modelId
+      try {
+        localStorage.setItem('jarvis_active_model', modelId)
+        localStorage.setItem('jarvis_active_provider', providerId)
+      } catch { /* ignore */ }
+      return
+    }
     const catalog = MODEL_CATALOG[providerId]
     if (!catalog?.some(m => m.id === modelId)) return
     activeProvider.value = providerId

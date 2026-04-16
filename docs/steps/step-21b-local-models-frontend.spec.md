@@ -5,7 +5,7 @@
 > progress bar, and model activation. Integrate local models into the
 > existing ModelSelector dropdown.
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete
 **Depends on**: Step 21a (backend endpoints)
 **Effort**: ~2–3 days
 **Branch**: `feat/local-models-frontend`

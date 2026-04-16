@@ -51,6 +51,79 @@
       @saved="onKeySaved"
     />
 
+    <!-- Local Models (Ollama) -->
+    <section class="settings-page__section local-models-section">
+      <h2 class="settings-page__section-title">Local Models</h2>
+      <p class="settings-page__hint">
+        Run Jarvis locally — private on-device AI. Models are downloaded to your computer.
+        <strong>No API key needed.</strong>
+      </p>
+
+      <OllamaStatus
+        :runtime="localModels.runtime.value"
+        :hardware="localModels.hardware.value"
+        :loading="localModels.loading.value"
+        @refresh="localModels.refreshAll()"
+      />
+
+      <template v-if="localModels.isOllamaReady()">
+        <!-- Recommended models -->
+        <div v-if="localModels.recommendedModels.value.length > 0" class="local-models__group">
+          <h3 class="local-models__group-title">Recommended for your hardware</h3>
+          <div class="local-models__grid">
+            <LocalModelCard
+              v-for="m in localModels.recommendedModels.value"
+              :key="m.model_id"
+              :model="m"
+              :pulling="localModels.pulling.value === m.model_id"
+              :progress="localModels.pulling.value === m.model_id ? localModels.pullProgress.value : null"
+              @pull="localModels.pullModel($event)"
+              @select="localModels.selectModel($event)"
+            />
+          </div>
+        </div>
+
+        <!-- All models (collapsible) -->
+        <details v-if="localModels.catalog.value.length > 0" class="local-models__all">
+          <summary class="local-models__all-toggle">
+            All models ({{ localModels.catalog.value.length }})
+          </summary>
+          <div class="local-models__grid">
+            <LocalModelCard
+              v-for="m in localModels.catalog.value"
+              :key="m.model_id"
+              :model="m"
+              :pulling="localModels.pulling.value === m.model_id"
+              :progress="localModels.pulling.value === m.model_id ? localModels.pullProgress.value : null"
+              @pull="localModels.pullModel($event)"
+              @select="localModels.selectModel($event)"
+            />
+          </div>
+        </details>
+      </template>
+
+      <!-- Base URL setting -->
+      <div class="local-models__url">
+        <label class="local-models__url-label">Ollama URL</label>
+        <div class="local-models__url-row">
+          <input
+            type="text"
+            class="settings-page__input"
+            :value="localModels.baseUrl.value"
+            @change="localModels.setBaseUrl(($event.target as HTMLInputElement).value)"
+            placeholder="http://localhost:11434"
+          />
+          <button class="settings-page__btn" @click="localModels.refreshAll()">
+            Test Connection
+          </button>
+        </div>
+      </div>
+
+      <p v-if="localModels.error.value" class="local-models__error">
+        {{ localModels.error.value }}
+      </p>
+    </section>
+
     <!-- Workspace -->
     <section class="settings-page__section">
       <h2 class="settings-page__section-title">Workspace</h2>
@@ -212,6 +285,8 @@ import { ICON_LOCK } from '~/composables/providerIcons'
 
 const lockIcon = ICON_LOCK
 
+const localModels = useLocalModels()
+
 const settingsLoaded = ref(false)
 const serverKeyConfigured = ref(false)
 const keyStorage = ref('')
@@ -305,6 +380,9 @@ onMounted(async () => {
     const h = await $fetch<{ date: string; total_tokens: number }[]>('/api/settings/usage/history')
     history.value = h.slice(0, 14)
   } catch { /* non-critical */ }
+
+  // Load local models state
+  localModels.refreshAll()
 })
 
 async function updateVoicePrefs() {
@@ -836,5 +914,62 @@ async function rebuildGraphAction() {
   border-radius: 4px;
   font-size: 0.9rem;
   color: var(--neon-cyan);
+}
+
+/* ---- Local Models Section ---- */
+.local-models__group {
+  margin-top: 1rem;
+}
+.local-models__group-title {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.65rem;
+  font-weight: 600;
+}
+.local-models__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.local-models__all {
+  margin-top: 1rem;
+}
+.local-models__all-toggle {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.4rem 0;
+  user-select: none;
+}
+.local-models__all-toggle:hover {
+  color: var(--text-primary);
+}
+.local-models__all[open] .local-models__grid {
+  margin-top: 0.65rem;
+}
+.local-models__url {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-subtle);
+}
+.local-models__url-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  display: block;
+  margin-bottom: 0.35rem;
+}
+.local-models__url-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.local-models__error {
+  margin-top: 0.65rem;
+  font-size: 0.8rem;
+  color: rgba(248, 113, 113, 0.9);
+  background: rgba(248, 113, 113, 0.06);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 6px;
+  padding: 0.45rem 0.7rem;
 }
 </style>
