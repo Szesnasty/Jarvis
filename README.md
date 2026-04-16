@@ -5,27 +5,70 @@
 [![Release](https://img.shields.io/github/v/release/Szesnasty/Jarvis?include_prereleases&label=version)](https://github.com/Szesnasty/Jarvis/releases)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**A personal knowledge operating system that turns notes, files, links, and AI conversations into durable memory.**
+**An AI workspace that remembers what matters.**
 
-Most AI tools give you answers.
-Most note apps give you storage.
-**Jarvis gives you continuity.**
+Local-first memory, hybrid retrieval, and durable context.
+Run Jarvis on your machine with Ollama or connect your preferred cloud provider.
+Every useful interaction makes the system better over time.
 
 Jarvis helps you:
 - import notes, files, URLs, and YouTube sources into one system
 - retrieve context through keyword + semantic + graph search
 - turn useful outputs into reusable notes, plans, and summaries
-- create custom specialists directly from the UI
-- run structured debates between specialists with **Duel Mode**
+- run locally with Ollama — no API key required
+- use Anthropic, OpenAI, or Google models when you want cloud power
+- create custom specialists and run structured debates
 - search the web via DuckDuckGo when local memory isn't enough
-- use Anthropic, OpenAI, or Google models — your choice
 - keep your memory local-first and Obsidian-compatible
 
 > **Jarvis is not another AI chat with memory.**
 > **It is a personal knowledge system that gets more useful every time you use it.**
 
-<!-- Coming soon: hero screenshot or demo GIF — place image at docs/assets/hero.png -->
 ![Jarvis hero](./docs/assets/hero.png)
+
+---
+
+## Run it your way
+
+### Local mode — private, on-device, no API key required
+
+Use [Ollama](https://ollama.com) and downloadable models directly on your computer. Your data and your model stay on your machine.
+
+### Cloud mode — bring your own provider
+
+Use Anthropic, OpenAI, or Google via API key. Access the most capable models when you need them.
+
+### Hybrid mode — mix local and cloud
+
+Use local models for everyday work and switch to cloud for heavier tasks. Change providers per conversation from Settings.
+
+---
+
+## Local models you can start with
+
+Jarvis includes 7 curated model presets that run through Ollama. It recommends models based on your hardware and lets you download, switch, and manage them directly from Settings.
+
+| Preset | Model | Best for |
+|---|---|---|
+| **Fast** | Qwen3 1.7B | Weakest laptops, quick local chat |
+| **Everyday** | Qwen3 4B | Lightweight everyday use |
+| **Balanced** | Qwen3 8B | Best default for most users |
+| **Long Docs** | Ministral 3 8B | Long documents, larger context windows |
+| **Reasoning** | Gemma 4 E4B | Stronger reasoning on better hardware |
+| **Code** | Devstral Small 2 24B | Repo work and multi-file edits |
+| **Best Local** | Gemma 4 27B | Best quality, complex tasks |
+
+Start with **Qwen3 8B** if you want the safest default. You can add cloud providers later in Settings.
+
+---
+
+## Why local mode matters
+
+- No API key required — start using Jarvis immediately
+- Private in local mode — prompts and memory stay on your machine
+- Lower recurring cost — no per-token charges
+- Good fit for memory-heavy workflows — retrieval runs locally too
+- Great for notes, documents, planning, and retrieval
 
 ---
 
@@ -54,8 +97,8 @@ Jarvis does the expensive work locally first — BM25, semantic search, graph ex
 ### A real knowledge graph
 Notes, people, projects, topics, and sources are connected through a graph that is part of retrieval and reasoning — not just a visualization.
 
-### Multi-provider
-Anthropic, OpenAI, and Google models via LiteLLM. Switch models per conversation. No vendor lock-in.
+### Local or cloud — your choice
+Run fully local with Ollama and downloadable models, or connect Anthropic, OpenAI, or Google via API key. Switch between local and cloud per conversation. No vendor lock-in.
 
 ### Specialists from the UI
 Create reusable roles — Weekly Planner, Health Guide, Study Coach, Research Assistant — directly from the interface. No prompt engineering required.
@@ -71,6 +114,27 @@ Useful outputs become notes, summaries, plans, graph links, and durable context.
 
 ### Obsidian-compatible
 Your `Jarvis/memory/` folder works as a valid Obsidian vault — plain Markdown, YAML frontmatter, wiki-links, human-readable structure.
+
+---
+
+## What works today
+
+- Browser-based UI with chat, memory browser, graph view, settings
+- Local workspace with Markdown memory
+- **Local models via Ollama** — 7 curated presets, no API key required
+- **Hardware-aware model recommendations** based on your RAM, disk, and GPU
+- Download, manage, and switch models directly from Settings
+- File, URL, and YouTube ingest (including PDF)
+- Interactive graph visualization (D3-based)
+- Graph-guided hybrid retrieval (BM25 + semantic + graph scoring)
+- Local embeddings via fastembed (multilingual, no API calls)
+- Specialist system with full UI wizard
+- Duel Mode with round-based debate and scored verdict
+- Multi-provider support (Anthropic, OpenAI, Google, Ollama)
+- Web search via DuckDuckGo (no extra API key)
+- Token tracking with budget controls
+- Session-to-memory write-back with graph updates
+- Obsidian-compatible memory structure
 
 ---
 
@@ -92,19 +156,9 @@ Your `Jarvis/memory/` folder works as a valid Obsidian vault — plain Markdown,
 
 ---
 
-## Why this is not ChatGPT, NotebookLM, or Obsidian
-
-| Tool | What it does well | Where Jarvis differs |
-|---|---|---|
-| **ChatGPT** | Great general AI assistant | Jarvis writes outputs back into structured, local memory |
-| **NotebookLM** | Source-grounded research | Jarvis turns sources into a living memory + graph + specialist system |
-| **Obsidian** | Local note-taking and vault management | Jarvis adds retrieval, reasoning, specialists, graph-aware context, and write-back |
-
-**Jarvis is the layer that turns information into working memory.**
-
----
-
 ## Interface
+
+Jarvis can be powered by cloud providers or run fully locally with downloadable models.
 
 ### Chat — your memory-aware assistant
 Ask questions, get answers grounded in your own notes. Context is retrieved automatically — you just talk.
@@ -130,41 +184,27 @@ Two specialists argue. Jarvis judges. The verdict, scores, and action items are 
 API keys, model selection, token budgets, workspace path. Everything stays local.
 ![Settings](./docs/assets/settings.png)
 
----
+<details>
+<summary><strong>Why this is not ChatGPT, NotebookLM, or Obsidian</strong></summary>
 
-## What works today
+| Tool | What it does well | Where Jarvis differs |
+|---|---|---|
+| **ChatGPT** | Great general AI assistant | Jarvis writes outputs back into structured, local memory |
+| **NotebookLM** | Source-grounded research | Jarvis turns sources into a living memory + graph + specialist system |
+| **Obsidian** | Local note-taking and vault management | Jarvis adds retrieval, reasoning, specialists, graph-aware context, and write-back |
 
-- Browser-based UI with chat, memory browser, graph view, settings
-- Local workspace with Markdown memory
-- File, URL, and YouTube ingest (including PDF)
-- Interactive graph visualization (D3-based)
-- Graph-guided hybrid retrieval (BM25 + semantic + graph scoring)
-- Local embeddings via fastembed (multilingual, no API calls)
-- Specialist system with full UI wizard
-- Duel Mode with round-based debate and scored verdict
-- Multi-provider support (Anthropic, OpenAI, Google)
-- Web search via DuckDuckGo (no extra API key)
-- Token tracking with budget controls
-- Session-to-memory write-back with graph updates
-- Secure API key handling
-- Obsidian-compatible memory structure
+**Jarvis is the layer that turns information into working memory.**
+
+</details>
 
 ---
 
 ## Quick start
 
-### Requirements
+### 1. Install and launch Jarvis
 
 - **Node.js 20+** — check: `node --version`
 - **Python 3.12 or 3.13** — check: `python3 --version` (macOS/Linux) or `py --version` (Windows)
-- **One API key** from any supported provider:
-  - [Anthropic](https://console.anthropic.com) (Claude)
-  - [OpenAI](https://platform.openai.com/api-keys) (GPT-4o)
-  - [Google AI](https://aistudio.google.com/apikey) (Gemini)
-
-> Don't have Node.js or Python? Use a [bootstrap installer](#zero-prereq-bootstrap) — it can download local runtimes automatically, no admin rights needed.
-
-### One command
 
 ```bash
 git clone https://github.com/Szesnasty/Jarvis.git
@@ -172,16 +212,30 @@ cd Jarvis
 npm run wake-up-jarvis
 ```
 
-**That's it. One command to install and start Jarvis.** It will:
-
-1. **Preflight check** — verify Node 20+, npm 9+, Python 3.12–3.13
-2. **Backend** — create venv, install Python deps
-3. **Frontend** — install Node deps, build production Nuxt bundle
-4. **Start both servers** — backend on :8000, frontend on :3000
-
-Open **http://localhost:3000**, paste your API key, create your workspace.
+This will install dependencies, build the frontend, and start both servers.
+Open **http://localhost:3000** and create your workspace.
 
 > Aliases: `npm run wake`, `npm start`. Stop with **Ctrl+C**.
+> Don't have Node.js or Python? Use a [bootstrap installer](#zero-prereq-bootstrap).
+
+### 2. Choose how to run it
+
+#### Local mode — no API key
+
+1. Install [Ollama](https://ollama.com) and start it
+2. Open Settings in Jarvis → go to Local Models
+3. Pick a model preset and click Pull to download it
+4. Select the model as active and start chatting
+
+No API key needed. Everything runs on your machine.
+
+#### Cloud mode
+
+1. Get an API key from [Anthropic](https://console.anthropic.com), [OpenAI](https://platform.openai.com/api-keys), or [Google AI](https://aistudio.google.com/apikey)
+2. Open Settings in Jarvis → paste your API key
+3. Select your preferred model and start chatting
+
+Both options are first-class. You can switch between them anytime.
 
 <details>
 <summary><strong>Zero-prereq bootstrap</strong></summary>
@@ -256,7 +310,7 @@ npm run dev:frontend       # nuxt dev
 #### Windows
 - **Install looks stuck during venv creation** — antivirus scanning. Give it 2–5 minutes. Don't Ctrl+C.
 - **Too slow?** Add Windows Defender exclusion for `backend\.venv`
-- **Scripts disabled** — use `powershell -ExecutionPolicy Bypass -File .\bootstrap\install.ps1`
+- **Scripts disabled** — use `powershell -ExecutionPolicy Bypass -File \.\bootstrap\install.ps1`
 
 #### macOS
 - **"xcrun: error"** — run `xcode-select --install`
@@ -341,9 +395,9 @@ Anyone who thinks in notes and wants continuity, not just output.
 
 ## Current status
 
-**Working now:** local workspace, memory CRUD, file/URL/YouTube ingest, hybrid retrieval, graph visualization, specialists, Duel Mode, multi-provider LLM, token tracking, session write-back, web search.
+**Working now:** local workspace, memory CRUD, file/URL/YouTube ingest, hybrid retrieval, graph visualization, specialists, Duel Mode, multi-provider LLM (cloud + local), local models via Ollama with hardware-aware recommendations, token tracking, session write-back, web search.
 
-**Planned next:** stronger feedback loops, smarter graph enrichment, Council Mode, improved local model support, voice (once quality is reliable).
+**Planned next:** stronger feedback loops, smarter graph enrichment, Council Mode, voice (once quality is reliable).
 
 ---
 
