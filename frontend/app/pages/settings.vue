@@ -78,41 +78,41 @@
         @refresh="localModels.refreshAll()"
       />
 
-      <template v-if="localModels.isOllamaReady()">
-        <!-- Recommended models -->
-        <div v-if="localModels.recommendedModels.value.length > 0" class="local-models__group">
-          <h3 class="local-models__group-title">Recommended for your hardware</h3>
-          <div class="local-models__grid">
-            <LocalModelCard
-              v-for="m in localModels.recommendedModels.value"
-              :key="m.model_id"
-              :model="m"
-              :pulling="localModels.pulling.value === m.model_id"
-              :progress="localModels.pulling.value === m.model_id ? localModels.pullProgress.value : null"
-              @pull="localModels.pullModel($event)"
-              @select="localModels.selectModel($event)"
-            />
-          </div>
+      <!-- Recommended models — always show if catalog loaded -->
+      <div v-if="localModels.recommendedModels.value.length > 0" class="local-models__group">
+        <h3 class="local-models__group-title">Recommended for your hardware</h3>
+        <div class="local-models__grid">
+          <LocalModelCard
+            v-for="m in localModels.recommendedModels.value"
+            :key="m.model_id"
+            :model="m"
+            :pulling="localModels.pulling.value === m.model_id"
+            :progress="localModels.pulling.value === m.model_id ? localModels.pullProgress.value : null"
+            :disabled="!localModels.isOllamaReady()"
+            @pull="localModels.pullModel($event)"
+            @select="localModels.selectModel($event)"
+          />
         </div>
+      </div>
 
-        <!-- All models (collapsible) -->
-        <details v-if="localModels.catalog.value.length > 0" class="local-models__all">
-          <summary class="local-models__all-toggle">
-            All models ({{ localModels.catalog.value.length }})
-          </summary>
-          <div class="local-models__grid">
-            <LocalModelCard
-              v-for="m in localModels.catalog.value"
-              :key="m.model_id"
-              :model="m"
-              :pulling="localModels.pulling.value === m.model_id"
-              :progress="localModels.pulling.value === m.model_id ? localModels.pullProgress.value : null"
-              @pull="localModels.pullModel($event)"
-              @select="localModels.selectModel($event)"
-            />
-          </div>
-        </details>
-      </template>
+      <!-- All models (collapsible) — always show if catalog loaded -->
+      <details v-if="localModels.catalog.value.length > 0" class="local-models__all">
+        <summary class="local-models__all-toggle">
+          All models ({{ localModels.catalog.value.length }})
+        </summary>
+        <div class="local-models__grid">
+          <LocalModelCard
+            v-for="m in localModels.catalog.value"
+            :key="m.model_id"
+            :model="m"
+            :pulling="localModels.pulling.value === m.model_id"
+            :progress="localModels.pulling.value === m.model_id ? localModels.pullProgress.value : null"
+            :disabled="!localModels.isOllamaReady()"
+            @pull="localModels.pullModel($event)"
+            @select="localModels.selectModel($event)"
+          />
+        </div>
+      </details>
 
       <!-- Base URL setting -->
       <div class="local-models__url">

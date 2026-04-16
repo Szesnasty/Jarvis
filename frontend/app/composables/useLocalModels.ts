@@ -63,9 +63,8 @@ export function useLocalModels() {
     try {
       await fetchHardware()
       await fetchRuntime()
-      if (runtime.value?.running) {
-        await fetchCatalog()
-      }
+      // Always fetch catalog — models are scored by hardware even without Ollama
+      await fetchCatalog()
     } finally {
       loading.value = false
     }
