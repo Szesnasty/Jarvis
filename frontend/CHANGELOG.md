@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.4.0...frontend-v0.4.1) (2026-04-16)
+
+
+### 🐛 Bug Fixes
+
+* memory pipeline, entity extraction, chunk truncation ([cc2e91f](https://github.com/Szesnasty/Jarvis/commit/cc2e91fa9b3e21deeee00b4510bf0bd9f7db10f0))
+
 ## [0.4.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.3.0...frontend-v0.4.0) (2026-04-16)
 
 
