@@ -164,11 +164,18 @@ def ingest_note(note_path: str, workspace_path: Optional[Path] = None) -> None:
         graph.add_edge(note_id, area_id, "part_of")
 
     # Entity extraction on body (no API cost)
-    from services.entity_extraction import extract_entities
+    from services.entity_extraction import extract_entities, clean_conversation_text
     existing_people = [n.label for n in graph.nodes.values() if n.type == "person"]
     fm_people = {str(p).lower() for p in fm.get("people", [])}
-    for ent in extract_entities(body, existing_people):
-        if ent.type == "person" and ent.confidence >= 0.5:
+
+    # For conversation notes, clean markdown formatting before extraction
+    # and use a lower confidence threshold (conversation content is trusted)
+    is_conversation = fm.get("type") == "conversation" or note_path.startswith("conversations/")
+    extraction_text = clean_conversation_text(body) if is_conversation else body
+    min_confidence = 0.3 if is_conversation else 0.5
+
+    for ent in extract_entities(extraction_text, existing_people):
+        if ent.type == "person" and ent.confidence >= min_confidence:
             if ent.text.lower() not in fm_people:
                 pid = f"person:{ent.text}"
                 graph.add_node(pid, "person", ent.text)

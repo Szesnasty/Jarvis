@@ -46,6 +46,34 @@ function costClass(cost: 0 | 1 | 2 | 3): string {
   return 'model-selector__cost--premium'
 }
 
+type LocalModelPreset = 'fast' | 'everyday' | 'balanced' | 'long-docs' | 'reasoning' | 'code' | 'best-local'
+
+const PRESET_QUALITY: Record<LocalModelPreset, number> = {
+  'fast': 1,
+  'everyday': 2,
+  'balanced': 3,
+  'long-docs': 3,
+  'reasoning': 4,
+  'code': 4,
+  'best-local': 5,
+}
+
+const PRESET_LABEL: Record<LocalModelPreset, string> = {
+  'fast': 'Fast · light',
+  'everyday': 'Good · everyday',
+  'balanced': 'Solid · balanced',
+  'long-docs': 'Solid · long docs',
+  'reasoning': 'Strong · reasoning',
+  'code': 'Strong · coding',
+  'best-local': 'Best local',
+}
+
+function qualityDots(preset: string): { filled: number; empty: number; label: string } {
+  const q = PRESET_QUALITY[preset as LocalModelPreset] ?? 3
+  const label = PRESET_LABEL[preset as LocalModelPreset] ?? preset
+  return { filled: q, empty: 5 - q, label }
+}
+
 // Close on outside click
 function handleClickOutside(e: MouseEvent): void {
   if (selectorRef.value && !selectorRef.value.contains(e.target as Node)) {
@@ -108,10 +136,23 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
             :key="lm.litellm_model"
             class="model-selector__option"
             :class="{ 'model-selector__option--active': activeModel === lm.litellm_model && activeProvider === 'ollama' }"
+            :title="qualityDots(lm.preset).label"
             @click="handleSelect('ollama', lm.litellm_model)"
           >
             <span class="model-selector__option-label">{{ lm.label }}</span>
-            <span class="model-selector__cost model-selector__cost--local">🖥️</span>
+            <span class="model-selector__quality" :title="qualityDots(lm.preset).label">
+              <span
+                v-for="i in qualityDots(lm.preset).filled"
+                :key="'f'+i"
+                class="model-selector__dot model-selector__dot--filled"
+                :style="{ '--dot-index': i }"
+              />
+              <span
+                v-for="i in qualityDots(lm.preset).empty"
+                :key="'e'+i"
+                class="model-selector__dot model-selector__dot--empty"
+              />
+            </span>
             <svg
               v-if="activeModel === lm.litellm_model && activeProvider === 'ollama'"
               class="model-selector__check"
@@ -289,6 +330,31 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 .model-selector__cost--premium {
   color: rgba(251, 146, 60, 0.9);
   background: rgba(251, 146, 60, 0.1);
+}
+
+.model-selector__quality {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.model-selector__dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.model-selector__dot--filled {
+  background: color-mix(in srgb, var(--neon-cyan) calc(40% + var(--dot-index, 1) * 12%), #888);
+  box-shadow: 0 0 3px color-mix(in srgb, var(--neon-cyan) calc(var(--dot-index, 1) * 12%), transparent);
+}
+
+.model-selector__dot--empty {
+  background: var(--border-default);
+  opacity: 0.35;
 }
 
 .model-selector__check {

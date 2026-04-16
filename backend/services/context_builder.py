@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 _SPECIALIST_KNOWLEDGE_BUDGET = 4000
 
 _STOP_WORDS = frozenset({
+    # English
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
     "have", "has", "had", "do", "does", "did", "will", "would", "could",
     "should", "may", "might", "shall", "can", "need", "dare", "ought",
@@ -23,12 +24,23 @@ _STOP_WORDS = frozenset({
     "any", "each", "every", "both", "few", "more", "most", "some", "such",
     "tell", "know", "think", "want", "like", "get", "make", "go", "see",
     "come", "take", "give", "also", "back", "after", "only", "then",
+    # Polish
+    "jest", "są", "był", "była", "było", "jak", "nie", "tak",
+    "ale", "czy", "lub", "albo", "gdy", "kiedy", "gdzie",
+    "ten", "ta", "to", "te", "tego", "tej", "tym", "tych",
+    "mój", "moja", "moje", "twój", "twoja", "twoje",
+    "jego", "jej", "ich", "nas", "nam", "was", "wam",
+    "się", "sobie", "siebie", "już", "też", "jeszcze",
+    "może", "tylko", "bardzo", "tutaj", "tam", "teraz",
+    "co", "kto", "coś", "komu", "czym", "czego",
+    "na", "po", "do", "od", "za", "nad", "pod", "bez", "dla",
+    "przez", "przy", "przed",
 })
 
 
 def _extract_keywords(text: str) -> set[str]:
-    """Extract meaningful lowercase keywords from text."""
-    words = re.findall(r"[a-zA-Z]{3,}", text.lower())
+    """Extract meaningful lowercase keywords from text (Unicode-aware)."""
+    words = re.findall(r'[^\W\d_]{3,}', text.lower(), re.UNICODE)
     return {w for w in words if w not in _STOP_WORDS}
 
 
@@ -167,7 +179,7 @@ async def build_context(
                 section_label = f' section="{best_section}"' if best_section else ""
                 note_parts.append(
                     f'<retrieved_note path="{path}"{section_label}>\n'
-                    + best_chunk[:800]
+                    + best_chunk[:1200]
                     + "\n</retrieved_note>"
                 )
             else:

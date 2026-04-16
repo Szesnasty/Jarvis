@@ -30,6 +30,7 @@
           :nodes="filteredNodes"
           :edges="filteredEdges"
           :highlighted-node="highlightedNodeId"
+          :search-matched-ids="searchMatchedNodeIds"
           @node-click="handleNodeClick"
         />
       </div>
@@ -47,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import type { GraphNode } from '~/types'
 import { useGraph } from '~/composables/useGraph'
 import GraphCanvas from '~/components/GraphCanvas.vue'
@@ -56,7 +57,7 @@ import GraphFilterBar from '~/components/GraphFilterBar.vue'
 
 const {
   stats, selectedNode, orphans, filters,
-  filteredNodes, filteredEdges, highlightedNodeId, selectedSimilarEdges,
+  filteredNodes, filteredEdges, highlightedNodeId, searchMatchedNodeIds, selectedSimilarEdges,
   loadGraph, rebuildGraph, selectNode, setFilters,
 } = useGraph()
 
@@ -95,8 +96,18 @@ function handleFit(): void {
   canvasRef.value?.zoomToFit()
 }
 
+// Reload graph when memory changes from chat (write_note, append_note, etc.)
+function handleMemoryChanged(): void {
+  loadGraph()
+}
+
 onMounted(async () => {
-  await rebuildGraph()
+  await loadGraph()
+  window.addEventListener('jarvis:memory-changed', handleMemoryChanged)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('jarvis:memory-changed', handleMemoryChanged)
 })
 </script>
 

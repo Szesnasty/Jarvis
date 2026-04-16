@@ -35,11 +35,18 @@ export function useGraph() {
     if (!filters.value.showTags) nodes = nodes.filter(n => n.type !== 'tag')
     if (!filters.value.showPeople) nodes = nodes.filter(n => n.type !== 'person')
     if (!filters.value.showAreas) nodes = nodes.filter(n => n.type !== 'area')
-    if (filters.value.searchText) {
-      const q = filters.value.searchText.toLowerCase()
-      nodes = nodes.filter(n => n.label.toLowerCase().includes(q))
-    }
+    // Search text does NOT filter nodes — it highlights them via searchMatchedNodeIds
     return nodes
+  })
+
+  const searchMatchedNodeIds = computed(() => {
+    if (!filters.value.searchText) return new Set<string>()
+    const q = filters.value.searchText.toLowerCase()
+    return new Set(
+      graph.value.nodes
+        .filter(n => n.label.toLowerCase().includes(q))
+        .map(n => n.id)
+    )
   })
 
   const filteredEdges = computed(() => {
@@ -48,8 +55,8 @@ export function useGraph() {
   })
 
   const highlightedNodeId = computed(() => {
-    if (filters.value.searchText && filteredNodes.value.length === 1) {
-      return filteredNodes.value[0].id
+    if (searchMatchedNodeIds.value.size === 1) {
+      return [...searchMatchedNodeIds.value][0]
     }
     return selectedNode.value?.id ?? null
   })
@@ -100,7 +107,7 @@ export function useGraph() {
 
   return {
     graph, stats, selectedNode, orphans, isLoading, filters,
-    filteredNodes, filteredEdges, highlightedNodeId, selectedSimilarEdges,
+    filteredNodes, filteredEdges, highlightedNodeId, searchMatchedNodeIds, selectedSimilarEdges,
     loadGraph, rebuildGraph, queryNeighbors, selectNode, setFilters,
   }
 }

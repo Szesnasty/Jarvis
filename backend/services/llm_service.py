@@ -66,7 +66,7 @@ PROVIDER_TIMEOUTS = {
     "anthropic": 120,
     "openai": 120,
     "google": 120,
-    "ollama": 600,  # local models can be slow on CPU
+    "ollama": 1800,  # local models can be slow on CPU/first load
 }
 
 
