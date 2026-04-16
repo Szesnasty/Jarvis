@@ -5,13 +5,42 @@ with sliding window fallback for long sections. Each chunk carries
 context (title, section heading) so embeddings know provenance.
 """
 
-import re
 from dataclasses import dataclass
 from typing import List, Optional
 
 from utils.markdown import parse_frontmatter
 
-_HEADING_RE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+
+@dataclass
+class _HeadingMatch:
+    """Represents a markdown heading found by line-by-line scan."""
+    start: int   # byte offset in body where the heading line starts
+    end: int     # byte offset just past the heading line (before \n)
+    line: str    # the full heading line, stripped
+
+
+def _find_headings(body: str) -> List[_HeadingMatch]:
+    """Find markdown headings without regex to avoid ReDoS risk."""
+    matches: List[_HeadingMatch] = []
+    pos = 0
+    for raw_line in body.split("\n"):
+        stripped = raw_line.strip()
+        # A valid markdown heading: starts with 1-6 '#' followed by a space
+        if stripped and stripped[0] == "#":
+            hashes = 0
+            for ch in stripped:
+                if ch == "#":
+                    hashes += 1
+                else:
+                    break
+            if 1 <= hashes <= 6 and len(stripped) > hashes and stripped[hashes] == " ":
+                matches.append(_HeadingMatch(
+                    start=pos,
+                    end=pos + len(raw_line),
+                    line=stripped,
+                ))
+        pos += len(raw_line) + 1  # +1 for the \n
+    return matches
 
 
 @dataclass
@@ -91,21 +120,21 @@ def chunk_markdown(
 
     # Split body into sections by headings
     sections: List[tuple] = []  # (section_title, section_text)
-    heading_matches = list(_HEADING_RE.finditer(body))
+    heading_matches = _find_headings(body)
 
     if not heading_matches:
         # No headings — treat entire body as one section
         sections.append(("", body))
     else:
         # Text before first heading (intro)
-        intro = body[:heading_matches[0].start()].strip()
+        intro = body[:heading_matches[0].start].strip()
         if intro:
             sections.append(("", intro))
 
         for i, match in enumerate(heading_matches):
-            heading_text = match.group(0).strip()  # e.g. "## Goals"
-            start = match.end()
-            end = heading_matches[i + 1].start() if i + 1 < len(heading_matches) else len(body)
+            heading_text = match.line  # e.g. "## Goals"
+            start = match.end
+            end = heading_matches[i + 1].start if i + 1 < len(heading_matches) else len(body)
             section_body = body[start:end].strip()
             if section_body:
                 sections.append((heading_text, section_body))
