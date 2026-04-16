@@ -14,14 +14,18 @@ from services import graph_service, memory_service
 
 logger = logging.getLogger(__name__)
 
-# Default fusion weights
-WEIGHT_BM25 = 0.35
-WEIGHT_COSINE = 0.35
-WEIGHT_GRAPH = 0.30
+# Default fusion weights (rebalanced for chunk signal — step 20e)
+WEIGHT_BM25 = 0.25
+WEIGHT_COSINE = 0.40
+WEIGHT_GRAPH = 0.35
+
+# Semantic anchor matching thresholds (step 20b)
+_ANCHOR_SIMILARITY_THRESHOLD = 0.50
+_MAX_SEMANTIC_ANCHORS = 5
 
 
-def _extract_query_entities(query: str, graph: graph_service.Graph) -> List[str]:
-    """Match query tokens against known graph node labels."""
+def _extract_query_entities_fallback(query: str, graph: graph_service.Graph) -> List[str]:
+    """Legacy substring matching — used when semantic anchors unavailable."""
     query_lower = query.lower()
     matches = []
     for node in graph.nodes.values():
@@ -29,6 +33,44 @@ def _extract_query_entities(query: str, graph: graph_service.Graph) -> List[str]
             if node.label.lower() in query_lower:
                 matches.append(node.id)
     return matches
+
+
+async def _extract_query_anchors(
+    query: str,
+    graph: graph_service.Graph,
+    workspace_path=None,
+) -> List[str]:
+    """Find graph nodes relevant to the query using semantic + substring matching.
+
+    Strategy:
+    1. Try semantic matching (node embeddings) — covers synonyms, partial names
+    2. Fall back to substring matching if no node embeddings available
+    3. Merge results from both, deduplicating
+    """
+    anchors: List[str] = []
+
+    # Semantic matching (if node embeddings exist)
+    embeddings_disabled = os.environ.get("JARVIS_DISABLE_EMBEDDINGS") == "1"
+    if not embeddings_disabled:
+        try:
+            from services.embedding_service import find_similar_nodes, is_available
+            if is_available():
+                similar = await find_similar_nodes(
+                    query, limit=_MAX_SEMANTIC_ANCHORS, workspace_path=workspace_path,
+                )
+                for node_id, label, score in similar:
+                    if score >= _ANCHOR_SIMILARITY_THRESHOLD and node_id in graph.nodes:
+                        anchors.append(node_id)
+        except (ImportError, Exception):
+            pass
+
+    # Substring fallback (always runs — catches exact matches semantic might miss)
+    query_lower = query.lower()
+    for node in graph.nodes.values():
+        if node.label.lower() in query_lower and node.id not in anchors:
+            anchors.append(node.id)
+
+    return anchors[:_MAX_SEMANTIC_ANCHORS]
 
 
 def _shortest_weighted_path(
@@ -185,7 +227,7 @@ async def retrieve(
     limit: int = 5,
     workspace_path=None,
 ) -> List[Dict]:
-    """Hybrid retrieval combining BM25, cosine similarity and graph scoring."""
+    """Hybrid retrieval combining BM25, chunk cosine similarity and graph scoring."""
     if not query or not query.strip():
         return []
 
@@ -209,34 +251,71 @@ async def retrieve(
             "_bm25": bm25_norm,
             "_cosine": 0.0,
             "_graph": 0.0,
+            "_best_chunk": None,
+            "_best_section": None,
         }
 
-    # --- Signal 2: Cosine similarity (if embeddings available) ---
+    # --- Signal 2: Chunk cosine (preferred) or note-level cosine fallback ---
     cosine_available = False
     embeddings_disabled = os.environ.get("JARVIS_DISABLE_EMBEDDINGS") == "1"
     if not embeddings_disabled:
         try:
-            from services.embedding_service import is_available, search_similar
+            from services.embedding_service import is_available
 
             if is_available():
-                similar = await search_similar(
-                    query, limit=limit * 3, workspace_path=workspace_path
-                )
-                cosine_available = True
-                for path, score in similar:
-                    # Clamp similarity to [0, 1] — cosine can be negative
-                    norm_score = max(0.0, min(1.0, float(score)))
-                    if path in candidate_pool:
-                        candidate_pool[path]["_cosine"] = norm_score
-                    else:
-                        meta = await _get_note_meta(path, workspace_path)
-                        if meta:
-                            candidate_pool[path] = {
-                                **meta,
-                                "_bm25": 0.0,
-                                "_cosine": norm_score,
-                                "_graph": 0.0,
-                            }
+                # Try chunk-level search first
+                chunk_results = None
+                try:
+                    from services.embedding_service import search_similar_chunks
+                    chunk_results = await search_similar_chunks(
+                        query, limit=limit * 3, workspace_path=workspace_path,
+                    )
+                except Exception:
+                    pass
+
+                if chunk_results:
+                    cosine_available = True
+                    for cr in chunk_results:
+                        path = cr["path"]
+                        score = max(0.0, min(1.0, cr["best_chunk_score"]))
+                        if path in candidate_pool:
+                            candidate_pool[path]["_cosine"] = score
+                            candidate_pool[path]["_best_chunk"] = cr.get("best_chunk_text")
+                            candidate_pool[path]["_best_section"] = cr.get("best_chunk_section")
+                        else:
+                            meta = await _get_note_meta(path, workspace_path)
+                            if meta:
+                                candidate_pool[path] = {
+                                    **meta,
+                                    "_bm25": 0.0,
+                                    "_cosine": score,
+                                    "_graph": 0.0,
+                                    "_best_chunk": cr.get("best_chunk_text"),
+                                    "_best_section": cr.get("best_chunk_section"),
+                                }
+                else:
+                    # Fallback to note-level cosine
+                    from services.embedding_service import search_similar
+                    similar = await search_similar(
+                        query, limit=limit * 3, workspace_path=workspace_path,
+                    )
+                    if similar:
+                        cosine_available = True
+                        for path, score in similar:
+                            norm_score = max(0.0, min(1.0, float(score)))
+                            if path in candidate_pool:
+                                candidate_pool[path]["_cosine"] = norm_score
+                            else:
+                                meta = await _get_note_meta(path, workspace_path)
+                                if meta:
+                                    candidate_pool[path] = {
+                                        **meta,
+                                        "_bm25": 0.0,
+                                        "_cosine": norm_score,
+                                        "_graph": 0.0,
+                                        "_best_chunk": None,
+                                        "_best_section": None,
+                                    }
         except ImportError:
             pass
         except Exception as exc:
@@ -245,11 +324,16 @@ async def retrieve(
     if not candidate_pool:
         return []
 
-    # --- Signal 3: Graph scoring ---
+    # --- Signal 3: Graph scoring (with semantic anchors) ---
     graph = graph_service.load_graph(workspace_path)
     anchors: List[str] = []
     if graph:
-        anchors = _extract_query_entities(query, graph)
+        # Use semantic anchors if available, else substring fallback
+        try:
+            anchors = await _extract_query_anchors(query, graph, workspace_path)
+        except Exception:
+            anchors = _extract_query_entities_fallback(query, graph)
+
         candidate_ids = {f"note:{p}" for p in candidate_pool}
         for path, data in candidate_pool.items():
             node_id = f"note:{path}"
@@ -291,6 +375,7 @@ async def retrieve(
 
     result = _cluster_dedup(scored, limit)
 
+    # Clean internal fields but KEEP _best_chunk and _best_section for context_builder
     for r in result:
         r.pop("_score", None)
         r.pop("_bm25", None)

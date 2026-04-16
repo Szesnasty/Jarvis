@@ -157,13 +157,14 @@ async def test_graph_boost_from_similar_to_cluster(ws_db, fake_cosine):
 
     # Manually inject similar_to edges via a fake graph
     from services import graph_service
+    from services.graph_service import builder as _graph_builder
     graph = graph_service.Graph()
     graph.add_node("note:inbox/center.md", "note", "Center Topic", folder="inbox")
     graph.add_node("note:inbox/leaf1.md", "note", "Leaf One", folder="inbox")
     graph.add_node("note:inbox/leaf2.md", "note", "Leaf Two", folder="inbox")
     graph.add_edge("note:inbox/center.md", "note:inbox/leaf1.md", "similar_to", weight=0.9)
     graph.add_edge("note:inbox/center.md", "note:inbox/leaf2.md", "similar_to", weight=0.9)
-    graph_service._graph_cache = graph
+    _graph_builder._graph_cache = graph
 
     results = await retrieve("topic", limit=5, workspace_path=ws_db)
     assert len(results) >= 1

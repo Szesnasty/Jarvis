@@ -270,6 +270,8 @@ async def delete_note(
         async with aiosqlite.connect(str(db_p)) as db:
             await db.execute("DELETE FROM notes WHERE path = ?", (note_path,))
             await db.execute("DELETE FROM note_embeddings WHERE path = ?", (note_path,))
+            await db.execute("DELETE FROM chunk_embeddings WHERE path = ?", (note_path,))
+            await db.execute("DELETE FROM note_chunks WHERE path = ?", (note_path,))
             await db.commit()
 
     # Invalidate graph cache so it rebuilds without the deleted note
@@ -396,6 +398,15 @@ async def _index_note(
             pass
         except Exception as exc:
             logger.warning("embed_note failed for %s: %s", note_path, exc)
+
+        # Auto-embed chunks for chunk-level semantic search
+        try:
+            from services.embedding_service import embed_note_chunks
+            await embed_note_chunks(note_path, full_content, db_path)
+        except ImportError:
+            pass
+        except Exception as exc:
+            logger.warning("embed_note_chunks failed for %s: %s", note_path, exc)
 
 
 def _note_metadata(note_path: str, fm: Dict, body: str) -> Dict:

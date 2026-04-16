@@ -167,7 +167,7 @@ async def search_similar(
 
 
 async def reindex_all(workspace_path: Optional[Path] = None) -> int:
-    """Re-embed all notes from markdown files. Returns count embedded."""
+    """Re-embed all notes (note-level + chunk-level) from markdown files. Returns count embedded."""
     from config import get_settings
 
     ws = workspace_path or get_settings().workspace_path
@@ -184,6 +184,11 @@ async def reindex_all(workspace_path: Optional[Path] = None) -> int:
         embedded = await embed_note(rel_path, content, db_path)
         if embedded:
             count += 1
+        # Also embed chunks for this note
+        try:
+            await embed_note_chunks(rel_path, content, db_path)
+        except Exception:
+            pass
     return count
 
 
@@ -192,7 +197,245 @@ async def delete_embedding(note_path: str, db_path: Path) -> None:
     import aiosqlite
     async with aiosqlite.connect(str(db_path)) as db:
         await db.execute("DELETE FROM note_embeddings WHERE path = ?", (note_path,))
+        await db.execute("DELETE FROM chunk_embeddings WHERE path = ?", (note_path,))
+        await db.execute("DELETE FROM note_chunks WHERE path = ?", (note_path,))
         await db.commit()
+
+
+# --- Step 20a: Chunk-level embeddings ---
+
+
+async def embed_note_chunks(
+    note_path: str,
+    content: str,
+    db_path: Path,
+) -> int:
+    """Chunk a note, embed each chunk, store in SQLite.
+
+    Returns number of chunks embedded.
+    """
+    import aiosqlite
+    from services.chunking import chunk_markdown
+    from utils.markdown import parse_frontmatter
+
+    fm, body = parse_frontmatter(content)
+    chunks = chunk_markdown(
+        content,
+        title=fm.get("title", ""),
+        tags=[str(t) for t in fm.get("tags", [])],
+    )
+
+    async with aiosqlite.connect(str(db_path)) as db:
+        # Get note_id
+        cursor = await db.execute("SELECT id FROM notes WHERE path = ?", (note_path,))
+        row = await cursor.fetchone()
+        if not row:
+            return 0
+        note_id = row[0]
+
+        # Delete old chunks for this note
+        await db.execute("DELETE FROM chunk_embeddings WHERE path = ?", (note_path,))
+        await db.execute("DELETE FROM note_chunks WHERE path = ?", (note_path,))
+
+        now = datetime.now(timezone.utc).isoformat()
+        count = 0
+        for chunk in chunks:
+            # Insert chunk record
+            cursor = await db.execute(
+                "INSERT INTO note_chunks (note_id, path, chunk_index, section_title, chunk_text, token_count, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (note_id, note_path, chunk.index, chunk.section_title, chunk.text, chunk.token_count, now),
+            )
+            chunk_id = cursor.lastrowid
+
+            # Embed and store
+            vec = embed_text(chunk.text)
+            blob = vector_to_blob(vec)
+            c_hash = content_hash(chunk.text)
+            await db.execute(
+                "INSERT INTO chunk_embeddings (chunk_id, path, chunk_index, embedding, content_hash, model_name, dimensions, embedded_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (chunk_id, note_path, chunk.index, blob, c_hash, _MODEL_NAME, _DIMENSIONS, now),
+            )
+            count += 1
+
+        await db.commit()
+    return count
+
+
+async def search_similar_chunks(
+    query: str,
+    limit: int = 10,
+    workspace_path: Optional[Path] = None,
+) -> List[dict]:
+    """Find most similar chunks, grouped by parent note.
+
+    Returns list of dicts with keys: path, best_chunk_score,
+    best_chunk_text, best_chunk_section, chunk_scores.
+    """
+    import aiosqlite
+    from config import get_settings
+
+    db_path = (workspace_path or get_settings().workspace_path) / "app" / "jarvis.db"
+    if not db_path.exists():
+        return []
+
+    query_vec = embed_query(query)
+
+    async with aiosqlite.connect(str(db_path)) as db:
+        try:
+            cursor = await db.execute(
+                "SELECT ce.path, ce.chunk_index, ce.embedding, nc.chunk_text, nc.section_title "
+                "FROM chunk_embeddings ce "
+                "JOIN note_chunks nc ON ce.chunk_id = nc.id"
+            )
+            rows = await cursor.fetchall()
+        except Exception:
+            return []
+
+    if not rows:
+        return []
+
+    # Score all chunks
+    scored = []
+    for path, idx, blob, text, section in rows:
+        vec = blob_to_vector(blob)
+        sim = cosine_similarity(query_vec, vec)
+        scored.append((path, idx, sim, text, section))
+
+    scored.sort(key=lambda x: x[2], reverse=True)
+
+    # Group by parent note, keep best chunk per note
+    note_groups: dict = {}
+    for path, idx, sim, text, section in scored:
+        if path not in note_groups:
+            note_groups[path] = {
+                "path": path,
+                "best_chunk_score": sim,
+                "best_chunk_text": text[:500],
+                "best_chunk_section": section,
+                "chunk_scores": [],
+            }
+        note_groups[path]["chunk_scores"].append(round(sim, 4))
+
+    # Sort notes by best chunk score, return top-K
+    results = sorted(
+        note_groups.values(),
+        key=lambda x: x["best_chunk_score"],
+        reverse=True,
+    )
+    return results[:limit]
+
+
+async def reindex_all_chunks(workspace_path: Optional[Path] = None) -> int:
+    """Re-chunk and re-embed all notes. Returns count of chunks embedded."""
+    from config import get_settings
+
+    ws = workspace_path or get_settings().workspace_path
+    mem = ws / "memory"
+    db_path = ws / "app" / "jarvis.db"
+
+    if not mem.exists():
+        return 0
+
+    count = 0
+    for md_file in mem.rglob("*.md"):
+        content = md_file.read_text(encoding="utf-8", errors="replace")
+        rel_path = str(md_file.relative_to(mem))
+        try:
+            n = await embed_note_chunks(rel_path, content, db_path)
+            count += n
+        except Exception as e:
+            logger.warning("Failed to embed chunks for %s: %s", rel_path, e)
+    return count
+
+
+# --- Step 20b: Node embeddings for semantic graph anchoring ---
+
+
+async def embed_graph_nodes(
+    graph_nodes: List[dict],
+    db_path: Path,
+) -> int:
+    """Embed graph node labels in batch. Returns count of newly embedded nodes."""
+    import aiosqlite
+
+    embeddable = [n for n in graph_nodes if len(n.get("label", "")) >= 2]
+    if not embeddable:
+        return 0
+
+    # Batch embed all labels
+    texts = [n["label"] for n in embeddable]
+    vectors = embed_texts(texts)
+
+    async with aiosqlite.connect(str(db_path)) as db:
+        count = 0
+        for node, vec in zip(embeddable, vectors):
+            c_hash = content_hash(node["label"])
+
+            # Check if already embedded with same label
+            cursor = await db.execute(
+                "SELECT content_hash FROM node_embeddings WHERE node_id = ?",
+                (node["id"],),
+            )
+            row = await cursor.fetchone()
+            if row and row[0] == c_hash:
+                continue  # unchanged
+
+            blob = vector_to_blob(vec)
+            now = datetime.now(timezone.utc).isoformat()
+            await db.execute("""
+                INSERT OR REPLACE INTO node_embeddings
+                (node_id, node_type, label, embedding, content_hash, model_name, dimensions, embedded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (node["id"], node["type"], node["label"], blob, c_hash, _MODEL_NAME, _DIMENSIONS, now))
+            count += 1
+
+        await db.commit()
+    return count
+
+
+async def find_similar_nodes(
+    query: str,
+    limit: int = 5,
+    node_types: Optional[List[str]] = None,
+    workspace_path: Optional[Path] = None,
+) -> List[Tuple[str, str, float]]:
+    """Find graph nodes whose labels are semantically similar to query.
+
+    Returns: [(node_id, label, similarity_score), ...]
+    """
+    import aiosqlite
+    from config import get_settings
+
+    db_path = (workspace_path or get_settings().workspace_path) / "app" / "jarvis.db"
+    if not db_path.exists():
+        return []
+
+    query_vec = embed_query(query)
+
+    async with aiosqlite.connect(str(db_path)) as db:
+        try:
+            if node_types:
+                placeholders = ",".join("?" * len(node_types))
+                cursor = await db.execute(
+                    f"SELECT node_id, label, embedding FROM node_embeddings WHERE node_type IN ({placeholders})",
+                    node_types,
+                )
+            else:
+                cursor = await db.execute("SELECT node_id, label, embedding FROM node_embeddings")
+            rows = await cursor.fetchall()
+        except Exception:
+            return []
+
+    scored = []
+    for node_id, label, blob in rows:
+        vec = blob_to_vector(blob)
+        sim = cosine_similarity(query_vec, vec)
+        scored.append((node_id, label, sim))
+
+    scored.sort(key=lambda x: x[2], reverse=True)
+    return scored[:limit]
 
 
 def is_available() -> bool:
