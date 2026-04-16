@@ -14,6 +14,7 @@ lxml_html_clean==0.4.4
 pdfplumber==0.11.8
 litellm==1.83.7
 fastembed==0.7.4  # local embeddings for semantic search
+spacy>=3.8,<4.0  # NER for entity extraction (Polish + English)
 
 # testing
 pytest==8.4.2

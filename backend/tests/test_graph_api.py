@@ -39,7 +39,7 @@ async def ws_ready(ws):
 @pytest.fixture
 def patch_settings(ws_ready):
     with patch("services.memory_service.get_settings") as m1, \
-         patch("services.graph_service.get_settings") as m2:
+         patch("services.graph_service.builder.get_settings") as m2:
         for m in [m1, m2]:
             m.return_value.workspace_path = ws_ready
         yield ws_ready
