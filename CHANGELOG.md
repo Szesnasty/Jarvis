@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.1](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.4.0...jarvis-v0.4.1) (2026-04-16)
+
+
+### 🐛 Bug Fixes
+
+* memory pipeline, entity extraction, chunk truncation ([cc2e91f](https://github.com/Szesnasty/Jarvis/commit/cc2e91fa9b3e21deeee00b4510bf0bd9f7db10f0))
+
+
+### 🧪 Tests
+
+* update tests to match changed timeout and system prompt behavior ([a002ba0](https://github.com/Szesnasty/Jarvis/commit/a002ba062ebf95d66c1877d5a48157d4ab49e713))
+
 ## [0.4.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.3.0...jarvis-v0.4.0) (2026-04-16)
 
 
