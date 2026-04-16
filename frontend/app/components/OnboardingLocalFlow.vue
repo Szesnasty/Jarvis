@@ -236,7 +236,12 @@ const readyModel = computed(() => localModels.activeModel.value)
             </span>
           </div>
           <p class="local-flow__hw-card-specs">{{ flow.hardwareSummary.value.label }}</p>
-          <p class="local-flow__hw-card-rec">{{ flow.hardwareSummary.value.recommendation }}</p>
+          <p class="local-flow__hw-card-rec">
+            Runs comfortably: {{ flow.hardwareSummary.value.runsComfortably }}
+          </p>
+          <p v-if="flow.bestPicks.value.length" class="local-flow__hw-card-picks">
+            Best picks: {{ flow.bestPicks.value.join(', ') }}
+          </p>
         </div>
 
         <h3 class="local-flow__section-title">Choose a local model</h3>
@@ -787,6 +792,13 @@ const readyModel = computed(() => localModels.activeModel.value)
   font-size: 0.72rem;
   color: var(--text-muted);
   margin-top: 0.1rem;
+}
+
+.local-flow__hw-card-picks {
+  font-size: 0.72rem;
+  color: #34d399;
+  margin-top: 0.1rem;
+  opacity: 0.85;
 }
 
 .local-flow__model-list {

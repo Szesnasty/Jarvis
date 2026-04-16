@@ -57,6 +57,8 @@ const buttonState = computed(() => {
       <span>Max context {{ model.context_window }}</span>
     </div>
 
+    <p v-if="!compact" class="model-card__hw-req">Recommended hardware: {{ model.recommended_ram }}</p>
+
     <template v-if="!compact">
       <div class="model-card__tags">
         <span v-for="s in model.strengths.slice(0, 3)" :key="s" class="model-card__tag">{{ s }}</span>
@@ -182,6 +184,12 @@ const buttonState = computed(() => {
 
 .model-card__meta {
   font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+
+.model-card__hw-req {
+  font-size: 0.72rem;
   color: var(--text-muted);
   margin-bottom: 0.45rem;
 }

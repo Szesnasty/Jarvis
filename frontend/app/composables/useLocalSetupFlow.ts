@@ -58,13 +58,30 @@ export function useLocalSetupFlow() {
     const totalRam = hw.total_ram_gb
     const effectiveContext = totalRam >= 48 ? '256K' : totalRam >= 24 ? '32K' : '4K'
 
+    // Comfortable upper model size based on tier
+    const comfortableUpTo: Record<string, string> = {
+      light: 'up to 4B models',
+      balanced: 'up to 13B models',
+      strong: 'up to 24B models',
+      workstation: 'up to 64B+ models',
+    }
+    const runsComfortably = comfortableUpTo[hw.tier] ?? 'local models'
+
     return {
       ram,
       chip,
       label: chip ? `${ram} · ${chip}` : ram,
       recommendation: `Runs ${rec} local models comfortably`,
       effectiveContext,
+      runsComfortably,
     }
+  })
+
+  /** Top recommended model labels for the current hardware */
+  const bestPicks = computed(() => {
+    return localModels.recommendedModels.value
+      .slice(0, 3)
+      .map((m: ModelRecommendation) => m.label)
   })
 
   /** Determine initial state from runtime status */
@@ -199,6 +216,7 @@ export function useLocalSetupFlow() {
     downloadingModelId,
     detectedOS,
     hardwareSummary,
+    bestPicks,
     wizardStep,
     isPolling,
     initialize,
