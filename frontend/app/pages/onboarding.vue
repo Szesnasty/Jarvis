@@ -3,7 +3,7 @@
     <div class="onboarding__card" :class="{ 'onboarding__card--wide': phase === 'local' }">
       <div class="onboarding__brand">
         <h1 class="onboarding__title">Jarvis</h1>
-        <p class="onboarding__subtitle">Personal Memory &amp; Planning System</p>
+        <p class="onboarding__subtitle">An AI workspace that remembers what matters</p>
       </div>
 
       <!-- Phase: Choose -->
@@ -88,37 +88,11 @@
 
       <!-- Phase: Local -->
       <template v-if="phase === 'local'">
-        <template v-if="!localModelReady">
-          <OnboardingLocalFlow
-            @model-ready="localModelReady = true"
-            @back="phase = 'choose'"
-          />
-        </template>
-
-        <!-- Ready state after model downloaded -->
-        <template v-else>
-          <div class="onboarding__ready">
-            <p class="onboarding__ready-icon">✅</p>
-            <p class="onboarding__ready-title">Ready to go!</p>
-            <p class="onboarding__ready-desc">
-              {{ localModels.activeModel.value?.label ?? 'Local model' }} is ready on your computer.
-            </p>
-
-            <button
-              class="onboarding__button"
-              :disabled="loading"
-              @click="handleSubmit"
-            >
-              {{ loading ? 'Creating...' : 'Create Jarvis Workspace' }}
-            </button>
-
-            <p v-if="error" class="onboarding__error">{{ error }}</p>
-
-            <p class="onboarding__hint">
-              You can also add cloud AI keys later in Settings.
-            </p>
-          </div>
-        </template>
+        <OnboardingLocalFlow
+          @model-ready="handleSubmit"
+          @back="phase = 'choose'"
+        />
+        <p v-if="error" class="onboarding__error">{{ error }}</p>
       </template>
 
       <p class="onboarding__settings-hint" v-if="phase !== 'choose'">
@@ -138,16 +112,13 @@ const loading = ref(false)
 const error = ref('')
 const showAddKeyModal = ref(false)
 const apiKeys = useApiKeys()
-const localModels = useLocalModels()
 const addKeyProvider = ref<ProviderConfig>(apiKeys.providers[0]!)
-const localModelReady = ref(false)
 
 const { isInitialized } = useAppState()
 
 const canCreate = computed(() => {
   const hasCloudKey = apiKeys.hasAnyKey()
-  const hasLocalModel = localModels.catalog.value.some(m => m.installed && m.active)
-  return hasCloudKey || hasLocalModel || localModelReady.value
+  return hasCloudKey || phase.value === 'local'
 })
 
 function openAddKey(provider: ProviderConfig) {
@@ -166,41 +137,44 @@ async function handleSubmit() {
   const { initWorkspace } = useApi()
   try {
     await initWorkspace()
-    isInitialized.value = true
-    await navigateTo('/main', { replace: true })
   } catch (e: unknown) {
-    if (e && typeof e === 'object' && 'message' in e) {
-      error.value = (e as Error).message
-    } else {
-      error.value = 'Connection error. Is the backend running?'
+    // Non-fatal: workspace may already exist (e.g. re-running onboarding)
+    const msg = e && typeof e === 'object' && 'message' in e ? (e as Error).message : ''
+    if (!msg.includes('already') && !msg.includes('exists')) {
+      error.value = msg || 'Connection error. Is the backend running?'
+      loading.value = false
+      return
     }
-  } finally {
-    loading.value = false
   }
+  isInitialized.value = true
+  loading.value = false
+  await navigateTo('/main', { replace: true })
 }
 </script>
 
 <style scoped>
 .onboarding {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   min-height: 100vh;
-  padding: 1rem;
+  padding: 2rem 1rem 4rem;
+  overflow-y: auto;
 }
 
 .onboarding__card {
   background: var(--bg-surface, #111122);
   border: 1px solid var(--border-default, #222);
   border-radius: 10px;
-  padding: 2.5rem;
+  padding: 2rem 2.5rem 2.5rem;
   width: 100%;
   max-width: 520px;
+  margin: auto 0;
   transition: max-width 0.3s ease;
 }
 
 .onboarding__card--wide {
-  max-width: 600px;
+  max-width: 640px;
 }
 
 .onboarding__brand {
