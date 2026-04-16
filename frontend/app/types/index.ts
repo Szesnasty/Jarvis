@@ -129,11 +129,18 @@ export interface GraphNode {
   folder: string
 }
 
+export interface ChunkEvidence {
+  source_chunk: number
+  target_chunk: number
+  similarity: number
+}
+
 export interface GraphEdge {
   source: string
   target: string
   type: string
   weight?: number
+  evidence?: ChunkEvidence[]
 }
 
 export interface GraphData {

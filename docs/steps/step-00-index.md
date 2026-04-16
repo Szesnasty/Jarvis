@@ -103,6 +103,23 @@
 | [19b](step-19b-local-embedding-service.md) | Local embedding service (fastembed, SQLite storage, embed on write) | ✅ | → 2nd |
 | [19c](step-19c-hybrid-retrieval-graph-semantic.md) | Hybrid retrieval + graph-semantic integration (3-signal fusion, semantic edges) | ✅ | → 3rd |
 
+## Phase 14 — Semantic Node Connection
+
+> **Execution order**: 20f (baseline) → 20a → 20b → 20c ∥ 20d → 20e → 20f (re-run)
+> Establish eval baseline first. Chunking is the foundation. Entity canonicalization
+> runs in parallel with semantic anchors + chunk graph edges.
+
+| Step | Title | Status | Order |
+|------|-------|--------|-------|
+| [20-overview](step-20-semantic-overview.md) | Semantic Node Connection: overview + architecture | ✅ | — |
+| [20f](step-20f-eval-set.spec.md) | Evaluation benchmark (50 queries, baseline metrics) | ✅ | → 1st |
+| [20a](step-20a-chunking.spec.md) | Chunk-level embeddings (heading split + sliding window) | ✅ | → 2nd |
+| [20b](step-20b-semantic-anchors.spec.md) | Semantic graph anchors + node embeddings | ✅ | → 3rd |
+| [20c](step-20c-chunk-graph-edges.spec.md) | Chunk-level graph linking with evidence | ✅ | → 4th |
+| [20d](step-20d-entity-canonicalization.spec.md) | Entity deduplication + alias table | ✅ | → 4th ∥ |
+| [20e](step-20e-retrieval-rebalance.spec.md) | Retrieval rebalance + chunk-aware context | ✅ | → 5th |
+| [20g](step-20g-graph-evidence-ui.spec.md) | Graph evidence UI: edge tooltips + chunk preview | ✅ | → 6th |
+
 ---
 
 ## Execution Rule

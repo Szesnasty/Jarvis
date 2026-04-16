@@ -11,6 +11,25 @@
       <span class="graph-canvas__tooltip-type">{{ hoveredNode.type }}{{ hoveredNode.folder ? ' · ' + hoveredNode.folder : '' }}</span>
       <span class="graph-canvas__tooltip-degree" v-if="hoveredDegree > 0">{{ hoveredDegree }} connections</span>
     </div>
+    <div v-if="hoveredEdge && hoveredEdge.type === 'similar_to'" class="graph-canvas__edge-tooltip" :style="tooltipStyle">
+      <div class="graph-canvas__edge-tooltip-header">
+        <span class="graph-canvas__edge-tooltip-type">Semantic Connection</span>
+        <span class="graph-canvas__edge-tooltip-weight">{{ Math.round((hoveredEdge.weight ?? 0) * 100) }}%</span>
+      </div>
+      <div v-if="hoveredEdge.evidence?.length" class="graph-canvas__edge-tooltip-evidence">
+        <div
+          v-for="(ev, i) in hoveredEdge.evidence.slice(0, 3)"
+          :key="i"
+          class="graph-canvas__edge-tooltip-pair"
+        >
+          Section {{ ev.source_chunk }} ↔ Section {{ ev.target_chunk }}
+          <span class="graph-canvas__edge-tooltip-sim">{{ Math.round(ev.similarity * 100) }}%</span>
+        </div>
+      </div>
+      <div v-else class="graph-canvas__edge-tooltip-note">
+        Similarity based on note content
+      </div>
+    </div>
   </div>
 </template>
 
@@ -30,6 +49,7 @@ const emit = defineEmits<{
 
 const containerRef = ref<HTMLElement | null>(null)
 const hoveredNode = ref<GraphNode | null>(null)
+const hoveredEdge = ref<GraphEdge | null>(null)
 const hoveredDegree = ref(0)
 const tooltipStyle = ref({ left: '0px', top: '0px' })
 
@@ -220,13 +240,19 @@ async function buildGraph() {
     // --- Edge styling by type ---
     .linkColor((link: any) => {
       const type = link._type || 'tagged'
+      if (type === 'similar_to') {
+        const w = link._weight ?? 0.5
+        const alpha = 0.3 + w * 0.5
+        return `rgba(129, 140, 248, ${alpha})`
+      }
       return EDGE_COLOR[type] ?? 'rgba(100, 160, 220, 0.15)'
     })
     .linkWidth((link: any) => {
       const type = link._type || 'tagged'
       if (type === 'linked' || type === 'related') return 3.5
       if (type === 'part_of') return 1.2
-      if (type === 'similar_to' || type === 'temporal') return 1.0
+      if (type === 'similar_to') return 0.8 + (link._weight ?? 0) * 1.7
+      if (type === 'temporal') return 1.0
       return 2
     })
     .linkLineDash((link: any) => {
@@ -283,6 +309,18 @@ async function buildGraph() {
       const orig = props.nodes.find(n => n.id === node.id)
       if (orig) emit('nodeClick', orig)
     })
+    .onLinkHover((link: any) => {
+      if (link) {
+        const orig = props.edges.find(e => {
+          const srcId = typeof link.source === 'object' ? link.source.id : link.source
+          const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+          return e.source === srcId && e.target === tgtId && e.type === link._type
+        })
+        hoveredEdge.value = orig ?? null
+      } else {
+        hoveredEdge.value = null
+      }
+    })
     .onNodeHover((node: any) => {
       if (containerRef.value) {
         containerRef.value.style.cursor = node ? 'pointer' : 'default'
@@ -303,7 +341,7 @@ async function buildGraph() {
         nodes: nodes.map(n => ({ ...n })),
         links: edges
           .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
-          .map(e => ({ source: e.source, target: e.target, _type: e.type })),
+          .map(e => ({ source: e.source, target: e.target, _type: e.type, _weight: e.weight, _evidence: e.evidence })),
       }
     })())
 
@@ -358,9 +396,21 @@ watch(
   () => { graph?.nodeColor(graph.nodeColor()) },
 )
 
+function onMouseMove(e: MouseEvent) {
+  if (containerRef.value) {
+    const rect = containerRef.value.getBoundingClientRect()
+    tooltipStyle.value = {
+      left: `${e.clientX - rect.left + 12}px`,
+      top: `${e.clientY - rect.top - 10}px`,
+    }
+  }
+}
+
 onMounted(async () => {
   await nextTick()
   buildGraph()
+
+  containerRef.value?.addEventListener('mousemove', onMouseMove)
 
   if (containerRef.value) {
     resizeObserver = new ResizeObserver(() => {
@@ -374,6 +424,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  containerRef.value?.removeEventListener('mousemove', onMouseMove)
   resizeObserver?.disconnect()
   if (graph) {
     graph._destructor()
@@ -459,6 +510,66 @@ onBeforeUnmount(() => {
 .graph-canvas__tooltip-degree {
   font-size: 0.6rem;
   color: var(--text-muted);
+}
+
+.graph-canvas__edge-tooltip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 20;
+  background: rgba(6, 8, 13, 0.94);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(129, 140, 248, 0.3);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--text-primary);
+  box-shadow: 0 0 20px rgba(129, 140, 248, 0.08);
+  max-width: 260px;
+}
+
+.graph-canvas__edge-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.graph-canvas__edge-tooltip-type {
+  font-size: 0.6rem;
+  color: rgba(165, 180, 252, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.graph-canvas__edge-tooltip-weight {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(165, 180, 252, 1);
+}
+
+.graph-canvas__edge-tooltip-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.graph-canvas__edge-tooltip-pair {
+  font-size: 0.62rem;
+  color: var(--text-secondary);
+}
+
+.graph-canvas__edge-tooltip-sim {
+  color: rgba(165, 180, 252, 0.7);
+  margin-left: 0.3rem;
+}
+
+.graph-canvas__edge-tooltip-note {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 </style>
 

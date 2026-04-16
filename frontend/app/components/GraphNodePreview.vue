@@ -71,6 +71,22 @@
         </ul>
       </div>
 
+      <!-- Semantic connections -->
+      <div v-if="similarEdges?.length" class="node-preview__section">
+        <h4 class="node-preview__section-label">Semantic Connections</h4>
+        <ul class="node-preview__note-list">
+          <li
+            v-for="edge in similarEdges.slice(0, 5)"
+            :key="`${edge.source}-${edge.target}`"
+            class="node-preview__semantic-item"
+            @click="$emit('navigate-node', otherNodeId(edge))"
+          >
+            <span class="node-preview__semantic-label">{{ otherNodeLabel(edge) }}</span>
+            <span class="node-preview__semantic-weight">{{ Math.round((edge.weight ?? 0) * 100) }}%</span>
+          </li>
+        </ul>
+      </div>
+
       <!-- Actions -->
       <div class="node-preview__actions">
         <button class="node-preview__action-btn" @click="$emit('ask-about', node.id)">
@@ -92,11 +108,12 @@
 import { ref, watch, computed } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import type { GraphNode, GraphNodeDetail } from '~/types'
+import type { GraphNode, GraphNodeDetail, GraphEdge } from '~/types'
 import { useApi } from '~/composables/useApi'
 
 const props = defineProps<{
   node: GraphNode
+  similarEdges?: GraphEdge[]
 }>()
 
 defineEmits<{
@@ -140,6 +157,17 @@ async function loadDetail(nodeId: string) {
 }
 
 watch(() => props.node.id, (id) => loadDetail(id), { immediate: true })
+
+function otherNodeId(edge: GraphEdge): string {
+  return edge.source === props.node.id ? edge.target : edge.source
+}
+
+function otherNodeLabel(edge: GraphEdge): string {
+  const id = otherNodeId(edge)
+  // Strip prefix like "note:" or "tag:"
+  const colon = id.indexOf(':')
+  return colon >= 0 ? id.slice(colon + 1) : id
+}
 </script>
 
 <style scoped>
@@ -379,5 +407,36 @@ watch(() => props.node.id, (id) => loadDetail(id), { immediate: true })
 .node-preview__action-btn--secondary:hover {
   border-color: var(--neon-cyan-30);
   color: var(--text-primary);
+}
+
+.node-preview__semantic-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.node-preview__semantic-item:hover {
+  background: var(--bg-surface);
+}
+
+.node-preview__semantic-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.node-preview__semantic-weight {
+  font-size: 0.65rem;
+  color: rgba(165, 180, 252, 0.8);
+  font-weight: 600;
+  margin-left: 0.5rem;
+  flex-shrink: 0;
 }
 </style>
