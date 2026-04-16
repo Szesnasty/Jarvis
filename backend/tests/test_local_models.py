@@ -335,11 +335,11 @@ class TestMakeLlm:
         assert isinstance(llm, LLMService)
         assert llm.config.api_base == "http://myhost:9999"
 
-    def test_ollama_timeout_is_600(self):
+    def test_ollama_timeout_is_1800(self):
         from routers.chat import _make_llm
 
         llm = _make_llm("ollama", "ollama_chat/qwen3:8b", "")
-        assert llm.config.timeout == 600
+        assert llm.config.timeout == 1800
 
     def test_anthropic_returns_claude_service(self):
         from routers.chat import _make_llm
@@ -363,7 +363,7 @@ class TestMakeLlm:
 class TestProviderTimeouts:
     def test_ollama_timeout(self):
         from services.llm_service import PROVIDER_TIMEOUTS
-        assert PROVIDER_TIMEOUTS["ollama"] == 600
+        assert PROVIDER_TIMEOUTS["ollama"] == 1800
 
     def test_cloud_timeouts(self):
         from services.llm_service import PROVIDER_TIMEOUTS

@@ -55,7 +55,8 @@ async def test_build_system_prompt_no_context_when_empty():
         mock_prefs.format_for_prompt.return_value = ""
         prompt = await build_system_prompt("hello")
 
-    assert prompt == SYSTEM_PROMPT
+    assert prompt.startswith(SYSTEM_PROMPT)
+    assert "LANGUAGE REMINDER" in prompt
 
 
 @pytest.mark.anyio
