@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.3.0...backend-v0.4.0) (2026-04-16)
+
+
+### ✨ Features
+
+* local model setup flow — UX polish, cancel download, OS copy, hardware scoring ([eb3c8ea](https://github.com/Szesnasty/Jarvis/commit/eb3c8ea2d30530fd2602968d8aca0769c2b2d65c))
+* **local-models:** step 21a - Ollama backend service, hardware probe, model catalog & API ([8adecf2](https://github.com/Szesnasty/Jarvis/commit/8adecf20757f2e6d2d9548f1e6351fa546747b5b))
+* **local-models:** step 21d - tool mode detection, health polling, slow response indicator ([ddda282](https://github.com/Szesnasty/Jarvis/commit/ddda2828a7a345b7fc1ad5c467df1ba6dd60ab11))
+
+
+### 🐛 Bug Fixes
+
+* clear active local model from config when it gets deleted ([aa88d34](https://github.com/Szesnasty/Jarvis/commit/aa88d34266c3e081642b8b3efae9eb569c212f8e))
+* **security:** harden ollama base_url handling for CodeQL ([e608a17](https://github.com/Szesnasty/Jarvis/commit/e608a17117569087ccb5d629fc32a0fd60aeadd9))
+* use httpx.request() for DELETE body — AsyncClient.delete() doesn't accept json= kwarg ([9d08f76](https://github.com/Szesnasty/Jarvis/commit/9d08f76010376165c2cd19604fb6ee0b0411cf88))
+
 ## [0.3.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.2.0...backend-v0.3.0) (2026-04-16)
 
 

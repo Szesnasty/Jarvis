@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.4.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.3.0...jarvis-v0.4.0) (2026-04-16)
+
+
+### ✨ Features
+
+* cancel download button on LocalModelCard — works in settings and onboarding ([55cd9e7](https://github.com/Szesnasty/Jarvis/commit/55cd9e72053077331f9146470bfa50450773e7c0))
+* local model setup flow — UX polish, cancel download, OS copy, hardware scoring ([eb3c8ea](https://github.com/Szesnasty/Jarvis/commit/eb3c8ea2d30530fd2602968d8aca0769c2b2d65c))
+* **local-models:** step 21a - Ollama backend service, hardware probe, model catalog & API ([8adecf2](https://github.com/Szesnasty/Jarvis/commit/8adecf20757f2e6d2d9548f1e6351fa546747b5b))
+* **local-models:** step 21b - Settings UI, model cards, pull progress, ModelSelector integration ([faeddae](https://github.com/Szesnasty/Jarvis/commit/faeddaef2182c4ae1246c97dcf04f16966c8e634))
+* **local-models:** step 21c - two-path onboarding (Cloud vs Local), keyless workspace ([7ecfcb0](https://github.com/Szesnasty/Jarvis/commit/7ecfcb086f4df96c8b93a2f17ce2c29492672fc5))
+* **local-models:** step 21d - tool mode detection, health polling, slow response indicator ([ddda282](https://github.com/Szesnasty/Jarvis/commit/ddda2828a7a345b7fc1ad5c467df1ba6dd60ab11))
+* **onboarding:** redesign local setup as 3-step wizard with OS-aware install ([00d1c19](https://github.com/Szesnasty/Jarvis/commit/00d1c192727f52137373413cf626e7c69f70a718))
+* show recommended hardware per model card + best picks in hw summary card ([7b05512](https://github.com/Szesnasty/Jarvis/commit/7b0551220c3abf62e23a397518d3f191e4397c75))
+
+
+### 🐛 Bug Fixes
+
+* add missing imports in useLocalSetupFlow (useLocalModels, ModelRecommendation type) ([8a7b6c6](https://github.com/Szesnasty/Jarvis/commit/8a7b6c6888826194198d9a340ef6bc396e466b42))
+* clear active local model from config when it gets deleted ([aa88d34](https://github.com/Szesnasty/Jarvis/commit/aa88d34266c3e081642b8b3efae9eb569c212f8e))
+* **security:** harden ollama base_url handling for CodeQL ([e608a17](https://github.com/Szesnasty/Jarvis/commit/e608a17117569087ccb5d629fc32a0fd60aeadd9))
+* show all model info in compact mode; label recommended RAM explicitly ([54f3ebc](https://github.com/Szesnasty/Jarvis/commit/54f3ebcdbf39373ed5341003fdd0cc7b77635735))
+* strip ollama_chat/ prefix in ModelSelector trigger label ([e526992](https://github.com/Szesnasty/Jarvis/commit/e5269927d2ed74025e0e8bb96e6a2fbb4b909685))
+* sync model selection to useApiKeys + fix onboarding navigation ([db73ec0](https://github.com/Szesnasty/Jarvis/commit/db73ec06ede1ce7f17c477909577a0eb0d28e6e4))
+* use httpx.request() for DELETE body — AsyncClient.delete() doesn't accept json= kwarg ([9d08f76](https://github.com/Szesnasty/Jarvis/commit/9d08f76010376165c2cd19604fb6ee0b0411cf88))
+
+
+### 📝 Documentation
+
+* strengthen README local/cloud positioning ([fb10ca2](https://github.com/Szesnasty/Jarvis/commit/fb10ca2a72a137c122178009e006182bfb61aad2))
+
 ## [0.3.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.2.1...jarvis-v0.3.0) (2026-04-16)
 
 
