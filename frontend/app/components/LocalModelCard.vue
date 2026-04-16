@@ -58,33 +58,26 @@ const buttonState = computed(() => {
       <span>Max context {{ model.context_window }}</span>
     </div>
 
-    <p v-if="!compact" class="model-card__hw-req">Recommended hardware: {{ model.recommended_ram }}</p>
+    <p class="model-card__hw-req">Recommended RAM: {{ model.recommended_ram }}</p>
 
-    <template v-if="!compact">
-      <div class="model-card__tags">
-        <span v-for="s in model.strengths.slice(0, 3)" :key="s" class="model-card__tag">{{ s }}</span>
-      </div>
+    <div class="model-card__tags">
+      <span v-for="s in model.strengths.slice(0, 3)" :key="s" class="model-card__tag">{{ s }}</span>
+    </div>
 
-      <div class="model-card__tool-badge" :class="toolBadge.cssClass" :title="toolBadge.label">
-        <span class="model-card__tool-icon">{{ toolBadge.icon }}</span>
-        <span>{{ toolBadge.label }}</span>
-      </div>
-
-      <p v-if="model.best_for && model.best_for.length" class="model-card__best-for">
-        Best for: {{ model.best_for.slice(0, 2).join(', ') }}
-      </p>
-
-      <p v-if="model.context_window === '40K'" class="model-card__ctx-hint">
-        Good for everyday chat. For long documents, choose a 128K–384K model.
-      </p>
-
-      <p v-if="model.reason && model.compatibility !== 'great'" class="model-card__reason">{{ model.reason }}</p>
-    </template>
-
-    <div v-if="compact" class="model-card__tool-badge model-card__tool-badge--inline" :class="toolBadge.cssClass" :title="toolBadge.label">
+    <div class="model-card__tool-badge" :class="toolBadge.cssClass" :title="toolBadge.label">
       <span class="model-card__tool-icon">{{ toolBadge.icon }}</span>
       <span>{{ toolBadge.label }}</span>
     </div>
+
+    <p v-if="model.best_for && model.best_for.length" class="model-card__best-for">
+      Best for: {{ model.best_for.slice(0, 2).join(', ') }}
+    </p>
+
+    <p v-if="model.context_window === '40K'" class="model-card__ctx-hint">
+      Good for everyday chat. For long documents, choose a 128K–384K model.
+    </p>
+
+    <p v-if="model.reason && model.compatibility !== 'great'" class="model-card__reason">{{ model.reason }}</p>
 
     <!-- Actions -->
     <div class="model-card__action">
