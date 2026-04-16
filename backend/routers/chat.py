@@ -140,8 +140,18 @@ async def _stream_follow_up(
     return text
 
 
-def _make_llm(provider: Optional[str], model: Optional[str], api_key: str):
+def _make_llm(provider: Optional[str], model: Optional[str], api_key: str, base_url: Optional[str] = None):
     """Create an LLMService for the given provider, or ClaudeService as fallback."""
+    if provider == "ollama":
+        from services.ollama_service import DEFAULT_OLLAMA_BASE_URL
+        config = LLMConfig(
+            provider="ollama",
+            model=model or DEFAULT_MODELS.get("ollama", "ollama_chat/qwen3:8b"),
+            api_key="ollama",  # LiteLLM needs a non-empty string
+            api_base=base_url or DEFAULT_OLLAMA_BASE_URL,
+            timeout=600,
+        )
+        return LLMService(config)
     if provider and provider != "anthropic":
         config = LLMConfig(
             provider=provider,
@@ -162,9 +172,10 @@ async def _handle_message(
     client_api_key: Optional[str] = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
+    base_url: Optional[str] = None,
 ) -> None:
     api_key = client_api_key or get_api_key()
-    if not api_key:
+    if not api_key and provider != "ollama":
         await _send_event(ws, "error", content="API key not configured")
         return
 
@@ -182,7 +193,7 @@ async def _handle_message(
     if budget["level"] == "warning":
         await _send_event(ws, "warning", content=f"Approaching daily token budget ({budget['percent']:.0f}% used).")
 
-    claude = get_llm(api_key, provider, model) if get_llm else _make_llm(provider, model, api_key)
+    claude = get_llm(api_key or "", provider, model, base_url) if get_llm else _make_llm(provider, model, api_key or "", base_url)
     assistant_text = ""
     # Specialist attribution: prefix first text_delta with specialist names
     attribution_prefix = ""
@@ -381,13 +392,13 @@ async def chat_ws(websocket: WebSocket) -> None:
     # Reuse a single LLM service per connection to avoid per-message HTTP pool churn.
     # Cache is keyed on (api_key, provider, model) — changed key/provider creates new instance.
     _connection_llm = None
-    _connection_llm_key: tuple = (None, None, None)  # (api_key, provider, model)
+    _connection_llm_key: tuple = (None, None, None, None)  # (api_key, provider, model, base_url)
 
-    def _get_llm(api_key: str, provider: Optional[str] = None, model: Optional[str] = None):
+    def _get_llm(api_key: str, provider: Optional[str] = None, model: Optional[str] = None, base_url: Optional[str] = None):
         nonlocal _connection_llm, _connection_llm_key
-        cache_key = (api_key, provider, model)
+        cache_key = (api_key, provider, model, base_url)
         if _connection_llm is None or _connection_llm_key != cache_key:
-            _connection_llm = _make_llm(provider, model, api_key)
+            _connection_llm = _make_llm(provider, model, api_key, base_url)
             _connection_llm_key = cache_key
         return _connection_llm
 
@@ -408,6 +419,7 @@ async def chat_ws(websocket: WebSocket) -> None:
             client_api_key = data.get("api_key") or None
             client_provider = data.get("provider") or None
             client_model = data.get("model") or None
+            client_base_url = data.get("base_url") or None
 
             # Route duel messages
             if data.get("type") == "duel_start":
@@ -430,6 +442,7 @@ async def chat_ws(websocket: WebSocket) -> None:
                 websocket, session_id, content, _get_llm,
                 graph_scope=graph_scope, client_api_key=client_api_key,
                 provider=client_provider, model=client_model,
+                base_url=client_base_url,
             )
 
     except WebSocketDisconnect:
