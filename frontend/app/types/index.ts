@@ -71,6 +71,7 @@ export interface WsDone {
   session_id: string
   model?: string
   provider?: string
+  tool_mode?: string
 }
 
 export interface WsError {
@@ -321,6 +322,7 @@ export interface ModelRecommendation {
   best_for: string[]
   recommended_ram: string
   native_tools: boolean
+  tool_mode: string
   compatibility: ModelCompatibility
   score: number
   recommended: boolean

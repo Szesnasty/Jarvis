@@ -80,6 +80,7 @@ class ModelRecommendation(BaseModel):
     best_for: List[str]
     recommended_ram: str  # e.g. "16–32 GB"
     native_tools: bool
+    tool_mode: str = "limited"  # "native" | "json_fallback" | "limited"
     compatibility: str  # "great" | "good" | "warning" | "unsupported"
     score: int  # 0–100
     recommended: bool
@@ -114,6 +115,7 @@ class TestResponse(BaseModel):
     response_text: str = ""
     latency_ms: int = 0
     tokens_per_second: float = 0.0
+    tool_mode: str = ""  # "native" | "json_fallback" | "limited"
     error: str = ""
 
 
@@ -250,6 +252,16 @@ MODEL_CATALOG: List[ModelCatalogEntry] = [
 
 # Index for fast lookup
 _CATALOG_BY_ID: Dict[str, ModelCatalogEntry] = {m.id: m for m in MODEL_CATALOG}
+
+
+def _tool_mode_for(entry: ModelCatalogEntry) -> str:
+    """Derive tool_mode from catalog entry flags."""
+    if entry.native_tools:
+        return "native"
+    # Small models (< 3B params, heuristic: download < 2 GB) → limited
+    if entry.download_size_gb < 2.0:
+        return "limited"
+    return "json_fallback"
 
 
 def get_catalog() -> List[ModelCatalogEntry]:
@@ -476,6 +488,7 @@ def score_model(
             best_for=model.best_for,
             recommended_ram="%d\u2013%d GB" % (model.recommended_ram_min_gb, model.recommended_ram_max_gb),
             native_tools=model.native_tools,
+            tool_mode=_tool_mode_for(model),
             compatibility="unsupported",
             score=0,
             recommended=False,
@@ -559,6 +572,7 @@ def score_model(
         best_for=model.best_for,
         recommended_ram="%d\u2013%d GB" % (model.recommended_ram_min_gb, model.recommended_ram_max_gb),
         native_tools=model.native_tools,
+        tool_mode=_tool_mode_for(model),
         compatibility=compat,
         score=score,
         recommended=False,  # Set later by build_catalog
@@ -672,6 +686,14 @@ async def test_model(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL) -> Tes
     """Quick validation that a model works end-to-end."""
     import time
 
+    # Determine tool_mode from catalog (if known)
+    catalog_entry = None
+    for entry in MODEL_CATALOG:
+        if entry.ollama_model == model:
+            catalog_entry = entry
+            break
+    tool_mode = _tool_mode_for(catalog_entry) if catalog_entry else "json_fallback"
+
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:
             start = time.monotonic()
@@ -707,6 +729,7 @@ async def test_model(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL) -> Tes
                 response_text=text,
                 latency_ms=elapsed_ms,
                 tokens_per_second=tps,
+                tool_mode=tool_mode,
             )
     except httpx.TimeoutException:
         return TestResponse(success=False, error="Request timed out (120s)")

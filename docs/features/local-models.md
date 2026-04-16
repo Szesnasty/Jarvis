@@ -4,7 +4,7 @@ Run Jarvis with on-device AI via Ollama — no API key required.
 
 ## Summary
 
-The local models feature adds support for running Jarvis with locally-hosted LLMs via Ollama. It provides hardware detection, a curated catalog of 7 model presets with hardware-based recommendations, model download with streaming progress, and seamless integration with the existing multi-provider chat pipeline via LiteLLM.
+The local models feature adds support for running Jarvis with locally-hosted LLMs via Ollama. It provides hardware detection, a curated catalog of 7 model presets with hardware-based recommendations, model download with streaming progress, seamless integration with the existing multi-provider chat pipeline via LiteLLM, tool calling mode detection per model, runtime health monitoring with reconnection flow, and slow response indicators for local inference.
 
 ## How It Works
 
@@ -39,6 +39,23 @@ Seven curated presets cover the spectrum from weak laptops to workstations:
 
 `build_catalog()` scores all models, sorts by score, and marks top 3 as recommended.
 
+### Tool Calling Mode
+
+Each model gets a `tool_mode` classification:
+- **native** — model supports native function calling (e.g. qwen3:8b, gemma4 variants)
+- **json_fallback** — model doesn't natively support tools but can use JSON-mode fallback via LiteLLM (e.g. qwen3:4b, ministral-3:8b)
+- **limited** — very small models (< 2 GB) that may not reliably execute tools (e.g. qwen3:1.7b)
+
+`_tool_mode_for()` derives tool_mode from the catalog entry's `native_tools` flag and `download_size_gb`.
+
+### Runtime Health Monitoring
+
+`useLocalModels.ts` provides `startHealthPolling()` / `stopHealthPolling()` that periodically probe the Ollama runtime. When `activeProvider === 'ollama'`, the main chat page starts polling every 30s. If Ollama becomes unreachable, `ollamaDown` state triggers a banner in ChatPanel with Reconnect/Switch to Cloud options.
+
+### Slow Response Indicator
+
+`useChat.ts` starts a timer when sending a message with the ollama provider. After 10s with no text_delta, it shows "Local model is loading...". After 30s, it shows an extended message suggesting a smaller model. Cleared immediately when the first text arrives or the response completes.
+
 ### Model Pull
 
 `pull_model_stream()` proxies Ollama's `POST /api/pull` with `stream: true` and converts the progress events into SSE format for the frontend.
@@ -58,9 +75,11 @@ Seven curated presets cover the spectrum from weak laptops to workstations:
 | [test_local_models.py](../../backend/tests/test_local_models.py) | 45 tests covering scoring, probes, config, routing |
 | [useLocalModels.ts](../../frontend/app/composables/useLocalModels.ts) | Frontend composable: hardware/runtime/catalog state, pull SSE, model selection |
 | [OllamaStatus.vue](../../frontend/app/components/OllamaStatus.vue) | Runtime status card (not installed / not running / running) with hardware info |
-| [LocalModelCard.vue](../../frontend/app/components/LocalModelCard.vue) | Model recommendation card with compatibility badge, download/use actions |
+| [LocalModelCard.vue](../../frontend/app/components/LocalModelCard.vue) | Model recommendation card with compatibility badge, tool mode badge, download/use actions |
 | [PullProgress.vue](../../frontend/app/components/PullProgress.vue) | Download progress bar with percentage and byte counts |
 | [OnboardingLocalFlow.vue](../../frontend/app/components/OnboardingLocalFlow.vue) | Local model setup wizard for onboarding (hardware detect, Ollama check, recommend, download) |
+| [test_local_models_integration.py](../../backend/tests/test_local_models_integration.py) | 22 tests: tool_mode, timeouts, warm-up, test endpoint, catalog |
+| [useLocalModelsIntegration.test.ts](../../frontend/tests/composables/useLocalModelsIntegration.test.ts) | 6 tests: ollama chat, slow indicator, health polling |
 
 ## API
 
@@ -80,6 +99,8 @@ Seven curated presets cover the spectrum from weak laptops to workstations:
 
 - Ollama must be running separately — Jarvis doesn't start it
 - Local models on CPU can be very slow (2–10 tok/s); 600s timeout is intentional
-- Not all models support native function calling; `native_tools` flag in catalog
+- Not all models support native function calling; `tool_mode` field in catalog classifies support level
+- `done` event includes `tool_mode` for ollama provider so frontend can display tool support info
 - `psutil` is required for hardware probe; falls back to OS commands if missing
 - `api_base` must be passed to LiteLLM via `acompletion()` kwargs
+- Health polling runs every 30s only when provider is ollama; stopped on unmount or provider change

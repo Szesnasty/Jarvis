@@ -38,12 +38,16 @@
           :voice-state="voiceState"
           :voice-supported="isVoiceAvailable"
           :duel-setup-open="duel.showSetup.value"
+          :ollama-down="localModels.ollamaDown.value && activeProvider === 'ollama'"
+          :slow-response="slowResponse"
           @send="handleSend"
           @retry="chat.retry()"
           @toggle-voice="handleVoiceToggle"
           @open-duel="duel.openSetup()"
           @start-duel="handleDuelStart"
           @cancel-duel-setup="duel.closeSetup()"
+          @reconnect-ollama="handleReconnectOllama"
+          @switch-to-cloud="handleSwitchToCloud"
         />
       </main>
     </div>
@@ -57,10 +61,12 @@ import { createWebSpeechTTS } from '~/composables/tts/webSpeechTTS'
 import { useChat } from '~/composables/useChat'
 import { useSessions } from '~/composables/useSessions'
 import { useVoice } from '~/composables/useVoice'
+import { useLocalModels } from '~/composables/useLocalModels'
+import { useApiKeys } from '~/composables/useApiKeys'
 
 const { checkHealth, chatActive } = useAppState()
 const chat = useChat()
-const { messages, currentResponse, isLoading, toolActivity, error, canRetry, duel, init, sendMessage } = chat
+const { messages, currentResponse, isLoading, toolActivity, error, canRetry, duel, slowResponse, init, sendMessage } = chat
 
 const sessionsState = useSessions()
 const { sessions, activeSessionId } = sessionsState
@@ -182,6 +188,27 @@ watch(isLoading, (loading, wasLoading) => {
   }
 })
 
+const localModels = useLocalModels()
+const { activeProvider } = useApiKeys()
+
+// Start/stop Ollama health polling based on active provider
+watch(activeProvider, (provider) => {
+  if (provider === 'ollama') {
+    localModels.startHealthPolling()
+  } else {
+    localModels.stopHealthPolling()
+  }
+}, { immediate: true })
+
+function handleReconnectOllama(): void {
+  localModels.fetchRuntime()
+}
+
+function handleSwitchToCloud(): void {
+  // Navigate to settings so user can pick a cloud provider
+  navigateTo('/settings')
+}
+
 onMounted(async () => {
   checkHealth()
   init()
@@ -197,6 +224,10 @@ onMounted(async () => {
       { graphScope },
     )
   }
+})
+
+onUnmounted(() => {
+  localModels.stopHealthPolling()
 })
 </script>
 

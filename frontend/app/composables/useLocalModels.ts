@@ -20,6 +20,8 @@ export function useLocalModels() {
   const loading = useState<boolean>('local-loading', () => false)
   const error = useState<string | null>('local-error', () => null)
   const baseUrl = useState<string>('local-base-url', () => _readBaseUrl())
+  const ollamaDown = useState<boolean>('local-ollama-down', () => false)
+  let _healthInterval: ReturnType<typeof setInterval> | null = null
 
   async function fetchHardware(): Promise<void> {
     try {
@@ -159,6 +161,32 @@ export function useLocalModels() {
     return !!(runtime.value?.installed && runtime.value?.running)
   }
 
+  function startHealthPolling(intervalMs = 30_000): void {
+    stopHealthPolling()
+    _healthInterval = setInterval(async () => {
+      await fetchRuntime()
+      ollamaDown.value = !(runtime.value?.reachable)
+    }, intervalMs)
+  }
+
+  function stopHealthPolling(): void {
+    if (_healthInterval) {
+      clearInterval(_healthInterval)
+      _healthInterval = null
+    }
+  }
+
+  async function warmUpModel(ollamaModel: string): Promise<void> {
+    try {
+      await $fetch('/api/local/models/warm-up', {
+        method: 'POST',
+        body: { model: ollamaModel, base_url: baseUrl.value },
+      })
+    } catch {
+      // Fire-and-forget; ignore errors
+    }
+  }
+
   function setBaseUrl(url: string): void {
     baseUrl.value = url
     try {
@@ -187,6 +215,7 @@ export function useLocalModels() {
     loading,
     error,
     baseUrl,
+    ollamaDown,
     fetchHardware,
     fetchRuntime,
     fetchCatalog,
@@ -195,6 +224,9 @@ export function useLocalModels() {
     selectModel,
     deleteModel,
     isOllamaReady,
+    startHealthPolling,
+    stopHealthPolling,
+    warmUpModel,
     setBaseUrl,
     recommendedModels,
     installedModels,

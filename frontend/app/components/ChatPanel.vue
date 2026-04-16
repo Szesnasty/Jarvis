@@ -45,6 +45,8 @@ const props = defineProps<{
   voiceState?: OrbState
   voiceSupported?: boolean
   duelSetupOpen?: boolean
+  ollamaDown?: boolean
+  slowResponse?: string
 }>()
 
 const emit = defineEmits<{
@@ -54,6 +56,8 @@ const emit = defineEmits<{
   openDuel: []
   startDuel: [config: DuelConfig]
   cancelDuelSetup: []
+  reconnectOllama: []
+  switchToCloud: []
 }>()
 
 // Load specialists when duel setup opens so we have the list
@@ -155,6 +159,21 @@ watch(
         />
       </div>
     </Transition>
+
+    <!-- Ollama offline banner -->
+    <div v-if="ollamaDown" class="chat-panel__ollama-banner">
+      <span class="chat-panel__ollama-banner-icon">⚠️</span>
+      <span class="chat-panel__ollama-banner-text">Ollama is not responding. Local model chat is unavailable.</span>
+      <button class="chat-panel__ollama-banner-btn" @click="emit('reconnectOllama')">Reconnect</button>
+      <button class="chat-panel__ollama-banner-btn chat-panel__ollama-banner-btn--alt" @click="emit('switchToCloud')">Switch to Cloud AI</button>
+    </div>
+
+    <!-- Slow response indicator for local models -->
+    <div v-if="slowResponse" class="chat-panel__slow-indicator">
+      <span class="chat-panel__slow-icon">⏳</span>
+      <span>{{ slowResponse }}</span>
+    </div>
+
     <div ref="messagesContainer" class="chat-panel__messages">
       <div
         v-for="(msg, i) in messages"
@@ -319,6 +338,70 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+/* Ollama offline banner */
+.chat-panel__ollama-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  margin: 0.5rem 1.5rem 0;
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  font-size: 0.82rem;
+  color: #fbbf24;
+  flex-shrink: 0;
+}
+
+.chat-panel__ollama-banner-icon {
+  font-size: 0.9rem;
+}
+
+.chat-panel__ollama-banner-text {
+  flex: 1;
+}
+
+.chat-panel__ollama-banner-btn {
+  padding: 0.25rem 0.6rem;
+  border-radius: 5px;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  background: transparent;
+  color: #fbbf24;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.chat-panel__ollama-banner-btn:hover {
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.chat-panel__ollama-banner-btn--alt {
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.chat-panel__ollama-banner-btn--alt:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Slow response indicator */
+.chat-panel__slow-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 1rem;
+  margin: 0.3rem 1.5rem 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.chat-panel__slow-icon {
+  font-size: 0.85rem;
 }
 
 .chat-panel__message {
