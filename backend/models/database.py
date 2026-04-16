@@ -151,6 +151,10 @@ async def _fts_indexes_body(db) -> bool:
 async def init_database(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(str(db_path)) as db:
+        # Enable WAL mode for better concurrent read/write performance.
+        # Prevents "database is locked" errors from background session saves.
+        await db.execute("PRAGMA journal_mode=WAL")
+
         await db.executescript(SCHEMA_SQL)
 
         if not await _column_exists(db, "notes", "body"):

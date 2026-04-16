@@ -358,6 +358,51 @@ def _generate_title(messages: List[dict]) -> str:
     return "Untitled conversation"
 
 
+def _extract_people_from_messages(messages: List[dict]) -> List[str]:
+    """Extract person names mentioned in conversation messages.
+
+    Uses entity extraction on the combined conversation text.
+    Passes existing graph people for dedup (single-word "Adam" → "Adam Nowak").
+    Returns deduplicated list of person names with confidence >= 0.3.
+    """
+    all_text = "\n".join(
+        m["content"] for m in messages
+        if isinstance(m.get("content"), str)
+    )
+    if not all_text.strip():
+        return []
+
+    try:
+        from services.entity_extraction import extract_entities, clean_conversation_text
+        from services.graph_service import load_graph
+
+        # Load existing people from graph for better deduplication
+        existing_people = []
+        try:
+            graph = load_graph()
+            if graph:
+                existing_people = [
+                    n.label for n in graph.nodes.values()
+                    if n.type == "person"
+                ]
+        except Exception:
+            pass
+
+        cleaned = clean_conversation_text(all_text)
+        entities = extract_entities(cleaned, existing_people=existing_people)
+        people = []
+        seen = set()
+        for e in entities:
+            if e.type == "person" and e.confidence >= 0.3:
+                key = e.text.lower()
+                if key not in seen:
+                    seen.add(key)
+                    people.append(e.text)
+        return sorted(people)
+    except Exception:
+        return []
+
+
 def _format_conversation_body(
     messages: List[dict],
     notes_accessed: List[str],
@@ -439,6 +484,9 @@ async def save_session_to_memory(
     topics = _extract_topics(messages)
     notes_accessed = sorted(session.get("notes_accessed", set()))
 
+    # Extract person names mentioned in conversation
+    people_mentioned = _extract_people_from_messages(messages)
+
     # Add topic words as extra tags (max 3)
     for topic in topics[:3]:
         if topic not in tags:
@@ -460,6 +508,7 @@ async def save_session_to_memory(
         "created_at": created,
         "updated_at": now.isoformat(),
         "tags": tags,
+        "people": people_mentioned,
         "related": notes_accessed,
         "tools_used": sorted(session.get("tools_used", set())),
         "message_count": len(messages),
@@ -479,19 +528,13 @@ async def save_session_to_memory(
     # Index in SQLite
     try:
         await memory_service.index_note_file(note_path, workspace_path=ws)
-    except Exception:
-        pass  # Don't fail if indexing fails
+    except Exception as exc:
+        logger.error("Failed to index session note %s: %s", note_path, exc)
 
-    # Update knowledge graph incrementally (cheaper than full rebuild)
+    # Update knowledge graph incrementally — ingest_note reads the saved file,
+    # extracts entities (people, tags, links) and updates graph without full rebuild.
     try:
-        graph_service.add_conversation_to_graph(
-            note_path=note_path,
-            title=title,
-            tags=tags,
-            topics=topics,
-            notes_accessed=notes_accessed,
-            workspace_path=ws,
-        )
+        graph_service.ingest_note(note_path, workspace_path=ws)
     except Exception:
         logger.warning("Failed to add conversation to graph for session %s", session_id)
 

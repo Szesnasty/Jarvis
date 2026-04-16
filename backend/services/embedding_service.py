@@ -312,7 +312,7 @@ async def search_similar_chunks(
             note_groups[path] = {
                 "path": path,
                 "best_chunk_score": sim,
-                "best_chunk_text": text[:500],
+                "best_chunk_text": text[:1200],
                 "best_chunk_section": section,
                 "chunk_scores": [],
             }

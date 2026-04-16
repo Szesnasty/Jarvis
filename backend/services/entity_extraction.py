@@ -62,7 +62,18 @@ _SPACY_SKIP = frozenset({
     "Docker", "Kubernetes", "React", "Vue", "TypeScript",
     # Polish morphological false positives
     "skiej",
+    # Conversation formatting artifacts
+    "User", "Jarvis", "Conversation", "Topics", "Related Notes",
+    "Jarvis App",
 })
+
+# Patterns that look like person names but are actually markdown/tool artifacts
+_JUNK_NAME_RE = re.compile(
+    r'^(search_notes|read_note|write_note|append_note|create_plan|update_plan|'
+    r'query_graph|web_search|save_preference|create_specialist|'
+    r'have connections?|mind for|Related Notes|Conversation)$',
+    re.I,
+)
 
 # Common words/months that spaCy small model misclassifies as persName
 _POLISH_NON_PERSON = frozenset({
@@ -81,6 +92,23 @@ _POLISH_NON_PERSON = frozenset({
     "praca", "projekt", "zadanie", "trening", "dieta", "suplementy",
     "magnez", "witamina", "omega", "cynk", "kreatyna", "kolagen",
     "ashwagandha", "kurkuma", "probiotyk",
+    # Polish pronouns/words that spaCy misclassifies
+    "jego", "jej", "ich", "twoja", "twój", "moja", "mój",
+    "twoje", "twoich", "twoi", "twoim", "swoich", "swoje", "swój",
+    "moje", "moich", "moi", "moim",
+    "nie", "tak", "jeśli", "jednak", "osobisty", "zapisałem",
+    "porady", "porady adama", "however", "don'", "don't",
+    # Polish words that start with uppercase at sentence start
+    "jak", "ale", "gdzie", "kiedy", "dlaczego", "kto", "czy",
+    "więc", "potem", "tutaj", "teraz", "właśnie", "naprawdę",
+    "oczywiście", "pewnie", "chyba", "proszę", "dzięki", "hej",
+    "cześć", "witaj", "witam", "dobry", "dzień", "wieczór",
+    "jestem", "masz", "wiem", "mogę", "chcę", "musisz",
+    "możesz", "powiedz", "powiem", "zobaczmy", "zobaczę",
+    "pani", "pana", "adama", "tomka",
+    "pamiętam", "imię", "imie", "mam", "na", "imi",
+    "dzisiaj", "jutro", "wczoraj", "rano", "wieczorem",
+    "dobrze", "jasne", "okej", "super", "fajnie", "świetnie",
 })
 
 # Words that are definitely not parts of person names — used to reject
@@ -254,6 +282,28 @@ def _extract_with_spacy(text: str, existing_people: List[str]) -> List[Extracted
         # Reject multi-word entities containing tech/work terms
         if any(w.lower() in _NOT_NAME_WORDS for w in name.split()):
             continue
+        # Reject names containing apostrophes at edges (don', I'll, etc.)
+        if name.endswith("'") or name.startswith("'"):
+            continue
+        # Reject names that are all lowercase (common words, not proper names)
+        if name[0].islower():
+            continue
+        # Reject markdown/tool artifacts
+        if _JUNK_NAME_RE.match(name):
+            continue
+        # Reject names starting with # (markdown headings)
+        if name.startswith('#'):
+            continue
+        # Reject names wrapped in quotes
+        if name.startswith('"') or name.startswith("'"):
+            continue
+        # Reject multi-word entities where ALL words are stop/non-person words
+        words = name.split()
+        if len(words) > 1 and all(
+            w.lower() in _POLISH_NON_PERSON or w.lower() in _NOT_NAME_WORDS
+            for w in words
+        ):
+            continue
 
         # --- Lemmatization: normalize declined Polish names ---
         lemma_name = _lemmatize_name(ent)
@@ -309,6 +359,12 @@ def _extract_with_spacy(text: str, existing_people: List[str]) -> List[Extracted
             if any(w.lower() in _NOT_NAME_WORDS for w in name.split()):
                 continue
             if name.lower() in seen_texts:
+                continue
+            # Reject multi-word entities where ALL words are stop/non-person words
+            if len(name.split()) > 1 and all(
+                w.lower() in _POLISH_NON_PERSON or w.lower() in _NOT_NAME_WORDS
+                for w in name.split()
+            ):
                 continue
             # Also skip if fuzzy-matches an entity already found by PL model
             if _fuzzy_match_existing(name, seen_texts):
@@ -398,6 +454,31 @@ def _extract_with_regex(text: str, existing_people: List[str]) -> List[Extracted
         entities.append(ExtractedEntity(text=name, type="person", confidence=confidence))
 
     return entities
+
+
+# ---------------------------------------------------------------------------
+# Conversation text cleaning
+# ---------------------------------------------------------------------------
+
+_CONVERSATION_MARKERS_RE = re.compile(
+    r'^\*\*(User|Jarvis)\*\*:\s*', re.MULTILINE,
+)
+_MARKDOWN_HEADING_RE = re.compile(r'^#{1,6}\s+.*$', re.MULTILINE)
+_WIKI_LINK_RE = re.compile(r'\[\[([^|\]]+)(?:\|([^\]]+))?\]\]')
+
+
+def clean_conversation_text(body: str) -> str:
+    """Strip conversation formatting so entity extraction sees clean prose.
+
+    Removes:
+    - **User**: / **Jarvis**: prefixes
+    - Markdown headings (## Conversation, ## Topics, etc.)
+    - Wiki-link syntax [[path|label]] → label
+    """
+    text = _CONVERSATION_MARKERS_RE.sub('', body)
+    text = _MARKDOWN_HEADING_RE.sub('', text)
+    text = _WIKI_LINK_RE.sub(lambda m: m.group(2) or m.group(1), text)
+    return text.strip()
 
 
 # ---------------------------------------------------------------------------

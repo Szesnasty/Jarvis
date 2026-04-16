@@ -80,8 +80,10 @@ def _enrich_with_entities(graph: Graph, mem: Path) -> None:
     Uses entity canonicalization (step 20d) to deduplicate person names.
     Pre-seeds existing_people from people/*.md note titles for better
     canonical form matching on the first pass.
+    For conversation notes, cleans markdown artifacts and uses a lower
+    confidence threshold (0.3) since single-word names get ~0.35 from spaCy.
     """
-    from services.entity_extraction import extract_entities
+    from services.entity_extraction import extract_entities, clean_conversation_text
 
     # Pre-seed known people from people/ folder titles + existing graph nodes
     existing_people = [n.label for n in graph.nodes.values() if n.type == "person"]
@@ -119,11 +121,21 @@ def _enrich_with_entities(graph: Graph, mem: Path) -> None:
         except Exception:
             continue
 
+        # Detect conversation notes: lower threshold + clean body
+        rel_path = node.id[5:]  # strip "note:" prefix
+        is_conversation = (
+            fm.get("type") == "conversation"
+            or rel_path.startswith("conversations/")
+        )
+        if is_conversation:
+            body = clean_conversation_text(body)
+        min_confidence = 0.3 if is_conversation else 0.5
+
         fm_people = {str(p).lower() for p in fm.get("people", [])}
         entities = extract_entities(body, existing_people)
 
         for ent in entities:
-            if ent.type == "person" and ent.confidence >= 0.5:
+            if ent.type == "person" and ent.confidence >= min_confidence:
                 if ent.text.lower() not in fm_people:
                     if canon_available:
                         try:

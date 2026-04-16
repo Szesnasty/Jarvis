@@ -214,6 +214,12 @@ onMounted(async () => {
   init()
   await sessionsState.loadSessions()
 
+  // Load local model catalog on page load so the model selector is populated
+  // even without visiting settings first
+  localModels.fetchCatalog()
+  // Also fetch runtime status immediately so the status bar dot is correct
+  localModels.fetchRuntime()
+
   // Handle graph_scope query param from "Ask about this" in graph view
   const route = useRoute()
   const graphScope = route.query.graph_scope as string | undefined

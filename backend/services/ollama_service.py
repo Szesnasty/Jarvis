@@ -294,8 +294,8 @@ MODEL_CATALOG: List[ModelCatalogEntry] = [
     ModelCatalogEntry(
         id="gemma4-27b",
         preset="best-local",
-        ollama_model="gemma4:27b",
-        litellm_model="ollama_chat/gemma4:27b",
+        ollama_model="gemma4:26b",
+        litellm_model="ollama_chat/gemma4:26b",
         label="Gemma 4 27B",
         download_size_gb=18.0,
         context_window="256K",

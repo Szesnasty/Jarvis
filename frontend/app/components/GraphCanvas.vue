@@ -41,6 +41,7 @@ const props = defineProps<{
   nodes: GraphNode[]
   edges: GraphEdge[]
   highlightedNode?: string | null
+  searchMatchedIds?: Set<string>
 }>()
 
 const emit = defineEmits<{
@@ -147,6 +148,14 @@ async function buildGraph() {
       const glow = NODE_GLOW[node.type] ?? 'rgba(156, 163, 175, 0.3)'
       const isHighlighted = props.highlightedNode === node.id
       const isHovered = hoveredNode.value?.id === node.id
+      const isSearchActive = props.searchMatchedIds && props.searchMatchedIds.size > 0
+      const isSearchMatch = isSearchActive && props.searchMatchedIds!.has(node.id)
+      const isDimmed = isSearchActive && !isSearchMatch && !isHovered
+
+      // When search is active, dim non-matching nodes
+      if (isDimmed) {
+        ctx.globalAlpha = 0.15
+      }
 
       // Layer 1 — wide, faint outer halo
       const grad1 = ctx.createRadialGradient(node.x, node.y, r * 0.5, node.x, node.y, r + 14)
@@ -228,6 +237,11 @@ async function buildGraph() {
 
         ctx.fillText(label, node.x, node.y + r + 2)
       }
+
+      // Reset alpha after drawing dimmed node
+      if (isDimmed) {
+        ctx.globalAlpha = 1.0
+      }
     })
     .nodePointerAreaPaint((node: any, color: string, ctx: CanvasRenderingContext2D) => {
       const deg = degrees[node.id] || 0
@@ -239,6 +253,14 @@ async function buildGraph() {
     })
     // --- Edge styling by type ---
     .linkColor((link: any) => {
+      // Dim edges during search if neither endpoint is matched
+      if (props.searchMatchedIds && props.searchMatchedIds.size > 0) {
+        const srcId = typeof link.source === 'object' ? link.source.id : link.source
+        const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+        if (!props.searchMatchedIds.has(srcId) && !props.searchMatchedIds.has(tgtId)) {
+          return 'rgba(100, 160, 220, 0.03)'
+        }
+      }
       const type = link._type || 'tagged'
       if (type === 'similar_to') {
         const w = link._weight ?? 0.5
@@ -393,6 +415,11 @@ watch(
 
 watch(
   () => props.highlightedNode,
+  () => { graph?.nodeColor(graph.nodeColor()) },
+)
+
+watch(
+  () => props.searchMatchedIds,
   () => { graph?.nodeColor(graph.nodeColor()) },
 )
 

@@ -12,8 +12,8 @@ sources:
   - frontend/app/components/GraphFilterBar.vue
   - frontend/app/composables/useGraph.ts
 depends_on: [memory]
-last_reviewed: 2026-04-15
-last_updated: 2026-04-14
+last_reviewed: 2026-04-17
+last_updated: 2026-04-17
 ---
 
 # Knowledge Graph
@@ -38,7 +38,7 @@ For each file, the service:
 4. Creates edges between the note and whatever it references, typed by relationship (`tagged`, `linked`, `mentions`, `related`, `part_of`).
 
 **Pass 2 — Entity extraction.**
-`_enrich_with_entities()` reads each note's body text and runs regex-based entity extraction (`entity_extraction.py`) to discover person names not listed in frontmatter. Extracted person names with confidence ≥ 0.5 are added as `person:` nodes with `mentions` edges. Confidence is boosted for names that already exist in the graph.
+`_enrich_with_entities()` reads each note's body text and runs spaCy-based entity extraction (`entity_extraction.py`) to discover person names not listed in frontmatter. For regular notes, extracted person names with confidence ≥ 0.5 are added as `person:` nodes with `mentions` edges. For conversation notes (type `"conversation"` or path under `conversations/`), the body is first cleaned via `clean_conversation_text()` to strip chat artifacts (`**User**:`, `**Jarvis**:`, markdown headings, wiki-links), and the confidence threshold is lowered to 0.3 since single-word names (e.g. "Paulina") receive ~0.35 confidence from spaCy. Confidence is boosted for names that already exist in the graph.
 
 **Pass 3 — Bidirectional wiki-link resolution.**
 `_resolve_bidirectional_links()` ensures that for every `linked` edge A→B, a reverse edge B→A is also present (with reduced weight 0.6).
@@ -79,11 +79,17 @@ The completed graph is serialised to `{workspace}/graph/graph.json` and held in 
 
 ### Entity extraction
 
-`entity_extraction.py` provides regex-based extraction of person names, dates, and projects from note body text. Person names are detected in two ways:
-- **Standalone**: capitalized multi-word names (`Alice Johnson`), filtered against a skiplist of common false positives (days, months, acronyms).
-- **Contextual**: names preceded by signal words (`with`, `from`, `by`, `met`, `called`, etc.), getting higher confidence.
+`entity_extraction.py` provides spaCy NER-based extraction of person names, dates, and projects from note body text, using both Polish (`pl_core_news_sm`) and English (`en_core_web_sm`) models. Person names are detected through NER and filtered against extensive stop lists:
+- **`_SPACY_SKIP`** — conversation artifacts ("User", "Jarvis", "Conversation", etc.)
+- **`_POLISH_NON_PERSON`** — Polish months, pronouns, common words that appear capitalized at sentence starts ("jak", "ale", "gdzie", etc.)
+- **`_NOT_NAME_WORDS`** — tech/work terms that appear in compound entities ("review", "deploy", etc.)
+- **`_JUNK_NAME_RE`** — regex for tool-name artifacts
 
-Confidence is boosted if the name already exists in the graph's person nodes. Results are deduplicated by `(text.lower(), type)`, keeping the highest-confidence match.
+For conversation notes, `clean_conversation_text()` preprocesses the body to strip `**User**:`/`**Jarvis**:` prefixes, markdown headings, and wiki-links before feeding to spaCy.
+
+Multi-word entities where ALL words are in the stop lists are rejected. Names are lemmatized via spaCy to normalize Polish declined forms (e.g. "Michałem" → "Michał").
+
+Confidence is boosted if the name already exists in the graph's person nodes (0.85 for exact match). Results are deduplicated by `(text.lower(), type)`, keeping the highest-confidence match.
 
 ### Node detail
 

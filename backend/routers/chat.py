@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -37,13 +38,34 @@ async def _run_tool(event: StreamEvent, session_id: str = "", api_key: str = "")
 
 _MEMORY_MUTATING_TOOLS = frozenset({"write_note", "append_note", "create_plan", "update_plan"})
 
+# Debounce background session saves: track pending save tasks per session
+# so we cancel the previous scheduled save when a new reply arrives.
+_pending_saves: dict[str, asyncio.Task] = {}
+
 
 async def _save_session_bg(session_id: str) -> None:
-    """Background task: save session to memory note + update graph."""
+    """Background task: save session to memory note + update graph.
+
+    Debounced: waits 2 seconds so rapid-fire replies don't cause
+    concurrent SQLite writes. Only the last scheduled save actually runs.
+    """
     try:
+        await asyncio.sleep(2)
         await session_service.save_session_to_memory(session_id)
+    except asyncio.CancelledError:
+        pass  # Expected when a newer save supersedes this one
     except Exception:
         logger.warning("Background save_session_to_memory failed for %s", session_id)
+    finally:
+        _pending_saves.pop(session_id, None)
+
+
+def _schedule_session_save(session_id: str) -> None:
+    """Schedule a debounced background save, cancelling any pending one."""
+    old_task = _pending_saves.pop(session_id, None)
+    if old_task and not old_task.done():
+        old_task.cancel()
+    _pending_saves[session_id] = asyncio.ensure_future(_save_session_bg(session_id))
 
 
 async def _emit_memory_changed(ws: WebSocket, tool_name: str, tool_input: dict) -> None:
@@ -149,7 +171,7 @@ def _make_llm(provider: Optional[str], model: Optional[str], api_key: str, base_
             model=model or DEFAULT_MODELS.get("ollama", "ollama_chat/qwen3:8b"),
             api_key="ollama",  # LiteLLM needs a non-empty string
             api_base=base_url or DEFAULT_OLLAMA_BASE_URL,
-            timeout=600,
+            timeout=1800,
         )
         return LLMService(config)
     if provider and provider != "anthropic":
@@ -287,8 +309,7 @@ async def _handle_message(
     # Save conversation to memory after every assistant reply.
     # First save happens after the first exchange; subsequent saves update the
     # same note (dedup by session_id in frontmatter).
-    import asyncio
-    asyncio.ensure_future(_save_session_bg(session_id))
+    _schedule_session_save(session_id)
 
 
 def _parse_message(raw: str) -> tuple:
@@ -457,6 +478,11 @@ async def chat_ws(websocket: WebSocket) -> None:
             )
 
     except WebSocketDisconnect:
+        # Cancel any pending debounced save — we'll do a final save now
+        old_task = _pending_saves.pop(session_id, None)
+        if old_task and not old_task.done():
+            old_task.cancel()
+
         session_service.save_session(session_id)
         try:
             await session_service.save_session_to_memory(session_id)
