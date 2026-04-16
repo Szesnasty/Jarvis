@@ -12,6 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   pull: [modelId: string]
   select: [modelId: string]
+  cancel: [modelId: string]
 }>()
 
 const presetLabel = computed(() => {
@@ -94,6 +95,9 @@ const buttonState = computed(() => {
       </template>
       <template v-else-if="buttonState === 'pulling'">
         <PullProgress :model-name="model.ollama_model" :progress="progress" />
+        <button class="model-card__btn model-card__btn--cancel" @click="emit('cancel', model.model_id)">
+          Cancel
+        </button>
       </template>
       <template v-else-if="buttonState === 'active'">
         <button class="model-card__btn model-card__btn--active" disabled>
@@ -310,6 +314,17 @@ const buttonState = computed(() => {
 .model-card__btn--download:hover {
   background: rgba(2, 254, 255, 0.15);
   box-shadow: 0 0 10px var(--neon-cyan-08);
+}
+
+.model-card__btn--cancel {
+  border-color: rgba(255, 80, 80, 0.3);
+  color: #ff6b6b;
+  margin-top: 0.35rem;
+  width: 100%;
+}
+
+.model-card__btn--cancel:hover {
+  background: rgba(255, 80, 80, 0.08);
 }
 
 .model-card__btn--use {

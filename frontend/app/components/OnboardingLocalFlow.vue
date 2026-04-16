@@ -257,6 +257,7 @@ const readyModel = computed(() => localModels.activeModel.value)
             :progress="localModels.pulling.value === m.model_id ? localModels.pullProgress.value : null"
             @pull="handlePull"
             @select="handleSelect"
+            @cancel="flow.cancelDownload()"
           />
         </div>
 
@@ -275,6 +276,7 @@ const readyModel = computed(() => localModels.activeModel.value)
               compact
               @pull="handlePull"
               @select="handleSelect"
+              @cancel="flow.cancelDownload()"
             />
           </div>
         </details>
