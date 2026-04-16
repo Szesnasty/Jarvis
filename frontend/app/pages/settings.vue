@@ -59,6 +59,18 @@
         <strong>No API key needed.</strong>
       </p>
 
+      <!-- Try local AI banner (shown when no local models installed) -->
+      <div
+        v-if="localModels.installedModels.value.length === 0 && !localModels.loading.value"
+        class="local-models__banner"
+      >
+        <span class="local-models__banner-icon">🖥️</span>
+        <div class="local-models__banner-text">
+          <span class="local-models__banner-title">Run Jarvis locally — free &amp; private</span>
+          <span class="local-models__banner-desc">Download a model to use Jarvis without an API key.</span>
+        </div>
+      </div>
+
       <OllamaStatus
         :runtime="localModels.runtime.value"
         :hardware="localModels.hardware.value"
@@ -917,6 +929,34 @@ async function rebuildGraphAction() {
 }
 
 /* ---- Local Models Section ---- */
+.local-models__banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(2, 254, 255, 0.03);
+  border: 1px solid var(--neon-cyan-15);
+  margin-bottom: 0.85rem;
+}
+.local-models__banner-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+.local-models__banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.local-models__banner-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.local-models__banner-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
 .local-models__group {
   margin-top: 1rem;
 }

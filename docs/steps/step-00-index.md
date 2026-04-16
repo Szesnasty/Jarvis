@@ -129,7 +129,7 @@
 |------|-------|--------|-------|
 | [21a](step-21a-local-models-backend.spec.md) | Local models backend: Ollama service, hardware probe, model catalog, API | ✅ | → 1st |
 | [21b](step-21b-local-models-frontend.spec.md) | Local models frontend: Settings UI, model cards, pull progress, ModelSelector | ✅ | → 2nd |
-| [21c](step-21c-local-models-onboarding.spec.md) | Local models onboarding: Cloud vs Local choice, keyless workspace creation | ⬜ | → 3rd |
+| [21c](step-21c-local-models-onboarding.spec.md) | Local models onboarding: Cloud vs Local choice, keyless workspace creation | ✅ | → 3rd |
 | [21d](step-21d-local-models-integration.spec.md) | Local models integration: tool calling, timeouts, health monitoring, warm-up | ⬜ | → 4th |
 
 ---
