@@ -651,11 +651,14 @@ async def pull_model_stream(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL)
 
 async def delete_model(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL) -> bool:
     """Delete a model from Ollama. Returns True on success."""
+    import json as _json
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
-            resp = await client.delete(
+            resp = await client.request(
+                "DELETE",
                 f"{base_url}/api/delete",
-                json={"name": model},
+                content=_json.dumps({"name": model}),
+                headers={"Content-Type": "application/json"},
             )
             return resp.status_code == 200
     except (httpx.ConnectError, httpx.TimeoutException):
