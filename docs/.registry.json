@@ -230,12 +230,20 @@
       "sources": [
         "backend/services/ollama_service.py",
         "backend/routers/local_models.py",
+        "backend/routers/chat.py",
         "backend/tests/test_local_models.py",
+        "backend/tests/test_local_models_integration.py",
         "frontend/app/composables/useLocalModels.ts",
+        "frontend/app/composables/useChat.ts",
         "frontend/app/components/OllamaStatus.vue",
         "frontend/app/components/LocalModelCard.vue",
         "frontend/app/components/PullProgress.vue",
-        "frontend/app/components/OnboardingLocalFlow.vue"
+        "frontend/app/components/OnboardingLocalFlow.vue",
+        "frontend/app/components/ChatPanel.vue",
+        "frontend/app/components/StatusBar.vue",
+        "frontend/app/pages/main.vue",
+        "frontend/app/types/index.ts",
+        "frontend/tests/composables/useLocalModelsIntegration.test.ts"
       ],
       "depends_on": ["chat", "api-key-management", "workspace-onboarding"],
       "last_updated": "2026-04-16",

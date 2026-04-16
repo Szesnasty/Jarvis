@@ -38,8 +38,13 @@
 </template>
 
 <script setup lang="ts">
+import { useLocalModels } from '~/composables/useLocalModels'
+import { useApiKeys } from '~/composables/useApiKeys'
+
 const { backendStatus, chatActive } = useAppState()
 const menuOpen = ref(false)
+const { activeProvider } = useApiKeys()
+const localModels = useLocalModels()
 
 const route = useRoute()
 watch(() => route.path, () => {
@@ -47,14 +52,13 @@ watch(() => route.path, () => {
 })
 
 const statusText = computed(() => {
-  switch (backendStatus.value) {
-    case 'online':
-      return 'Alive'
-    case 'offline':
-      return 'Offline'
-    default:
-      return 'Checking...'
+  const base = backendStatus.value === 'online' ? 'Alive' : backendStatus.value === 'offline' ? 'Offline' : 'Checking...'
+  if (activeProvider.value === 'ollama' && localModels.activeModel.value) {
+    const modelName = localModels.activeModel.value.label
+    const ollamaOk = localModels.runtime.value?.reachable && !localModels.ollamaDown.value
+    return `${base} · ${modelName} (local) · ${ollamaOk ? '🟢' : '🔴'}`
   }
+  return base
 })
 </script>
 

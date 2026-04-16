@@ -13,6 +13,9 @@ export function useChat() {
   const canRetry = ref(false)
   let _lastContent = ''
   let _errorClearTimer: ReturnType<typeof setTimeout> | null = null
+  let _slowTimer10: ReturnType<typeof setTimeout> | null = null
+  let _slowTimer30: ReturnType<typeof setTimeout> | null = null
+  const slowResponse = ref('')
   let _removeMessageListener: (() => void) | null = null
   let _removeReconnectListener: (() => void) | null = null
 
@@ -23,6 +26,28 @@ export function useChat() {
     canRetry.value = retryable
     if (_errorClearTimer) clearTimeout(_errorClearTimer)
     _errorClearTimer = setTimeout(() => { error.value = ''; canRetry.value = false }, 8000)
+  }
+
+  function _startSlowTimer(): void {
+    _clearSlowTimer()
+    const { activeProvider } = useApiKeys()
+    if (activeProvider.value !== 'ollama') return
+    _slowTimer10 = setTimeout(() => {
+      if (isLoading.value && !currentResponse.value) {
+        slowResponse.value = 'Local model is loading... This may take a moment.'
+      }
+    }, 10_000)
+    _slowTimer30 = setTimeout(() => {
+      if (isLoading.value && !currentResponse.value) {
+        slowResponse.value = 'Still generating... Local models can be slow on CPU. Consider a smaller model if this is too slow.'
+      }
+    }, 30_000)
+  }
+
+  function _clearSlowTimer(): void {
+    if (_slowTimer10) { clearTimeout(_slowTimer10); _slowTimer10 = null }
+    if (_slowTimer30) { clearTimeout(_slowTimer30); _slowTimer30 = null }
+    slowResponse.value = ''
   }
 
   const duel = useDuel()
@@ -52,6 +77,7 @@ export function useChat() {
 
     if (event.type === 'text_delta') {
       currentResponse.value += event.content
+      _clearSlowTimer()
       return
     }
 
@@ -84,6 +110,7 @@ export function useChat() {
       }
       isLoading.value = false
       toolActivity.value = ''
+      _clearSlowTimer()
       return
     }
 
@@ -93,6 +120,7 @@ export function useChat() {
       _setError(content, retryable)
       isLoading.value = false
       toolActivity.value = ''
+      _clearSlowTimer()
       return
     }
 
@@ -157,6 +185,7 @@ export function useChat() {
     error.value = ''
     canRetry.value = false
     isLoading.value = true
+    _startSlowTimer()
 
     const payload: Record<string, string> = { type: 'message', content: _lastContent, session_id: sessionId.value }
     if (options?.graphScope) payload.graph_scope = options.graphScope
@@ -200,6 +229,7 @@ export function useChat() {
       clearTimeout(_errorClearTimer)
       _errorClearTimer = null
     }
+    _clearSlowTimer()
     if (_removeMessageListener) {
       _removeMessageListener()
       _removeMessageListener = null
@@ -224,6 +254,7 @@ export function useChat() {
     canRetry,
     sessionId,
     isConnected,
+    slowResponse,
     duel,
     init,
     sendMessage,
