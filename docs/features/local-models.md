@@ -1,3 +1,31 @@
+---
+title: Local Models
+status: active
+type: feature
+sources:
+	- backend/services/ollama_service.py
+	- backend/routers/local_models.py
+	- backend/routers/chat.py
+	- backend/tests/test_local_models.py
+	- backend/tests/test_local_models_integration.py
+	- frontend/app/composables/useLocalModels.ts
+	- frontend/app/composables/useLocalSetupFlow.ts
+	- frontend/app/composables/useChat.ts
+	- frontend/app/components/OllamaStatus.vue
+	- frontend/app/components/LocalModelCard.vue
+	- frontend/app/components/PullProgress.vue
+	- frontend/app/components/OnboardingLocalFlow.vue
+	- frontend/app/components/ChatPanel.vue
+	- frontend/app/components/StatusBar.vue
+	- frontend/app/pages/main.vue
+	- frontend/app/pages/settings.vue
+	- frontend/app/types/index.ts
+	- frontend/tests/composables/useLocalModelsIntegration.test.ts
+depends_on: [chat, api-key-management, workspace-onboarding]
+last_reviewed: 2026-04-16
+last_updated: 2026-04-16
+---
+
 # Local Models
 
 Run Jarvis with on-device AI via Ollama — no API key required.
@@ -15,6 +43,16 @@ The local models feature adds support for running Jarvis with locally-hosted LLM
 ### Runtime Probe
 
 `probe_runtime()` checks if Ollama is installed (via `shutil.which`) and running (via `GET /api/version` on the configured base URL). Returns installation status, version, and reachability.
+
+### URL Safety Guardrails
+
+`_normalize_and_validate_ollama_base_url()` sanitizes and validates user-provided Ollama URLs before any outbound HTTP request:
+- only `http` / `https` schemes are accepted
+- only loopback hosts are accepted (`localhost`, `127.0.0.1`, `::1`)
+- userinfo (`user:pass@`) is rejected
+- invalid or unsafe URLs fall back to the default `http://localhost:11434`
+
+This protects local-model routes against partial SSRF patterns reported by static analysis.
 
 ### Model Catalog
 
@@ -104,3 +142,4 @@ Each model gets a `tool_mode` classification:
 - `psutil` is required for hardware probe; falls back to OS commands if missing
 - `api_base` must be passed to LiteLLM via `acompletion()` kwargs
 - Health polling runs every 30s only when provider is ollama; stopped on unmount or provider change
+- `base_url` from query/body is normalized and restricted to local loopback endpoints for safety

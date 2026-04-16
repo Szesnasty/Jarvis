@@ -163,6 +163,36 @@ class TestRuntimeProbe:
         assert isinstance(status.running, bool)
 
 
+class TestOllamaBaseUrlValidation:
+    def test_keeps_localhost(self):
+        from services.ollama_service import _normalize_and_validate_ollama_base_url
+
+        assert _normalize_and_validate_ollama_base_url("http://localhost:11434") == "http://localhost:11434"
+
+    def test_keeps_loopback_ip(self):
+        from services.ollama_service import _normalize_and_validate_ollama_base_url
+
+        assert _normalize_and_validate_ollama_base_url("http://127.0.0.1:11434") == "http://127.0.0.1:11434"
+
+    def test_rejects_non_local_host(self):
+        from services.ollama_service import _normalize_and_validate_ollama_base_url
+        from services.ollama_service import DEFAULT_OLLAMA_BASE_URL
+
+        assert _normalize_and_validate_ollama_base_url("http://evil.example:11434") == DEFAULT_OLLAMA_BASE_URL
+
+    def test_rejects_bad_scheme(self):
+        from services.ollama_service import _normalize_and_validate_ollama_base_url
+        from services.ollama_service import DEFAULT_OLLAMA_BASE_URL
+
+        assert _normalize_and_validate_ollama_base_url("file:///etc/passwd") == DEFAULT_OLLAMA_BASE_URL
+
+    def test_rejects_userinfo(self):
+        from services.ollama_service import _normalize_and_validate_ollama_base_url
+        from services.ollama_service import DEFAULT_OLLAMA_BASE_URL
+
+        assert _normalize_and_validate_ollama_base_url("http://user:pass@localhost:11434") == DEFAULT_OLLAMA_BASE_URL
+
+
 # ── Model Catalog ────────────────────────────────────────────────────────────
 
 

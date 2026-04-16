@@ -14,12 +14,73 @@ import os
 import platform
 import shutil
 import subprocess
+import ipaddress
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_for_log(value: Any) -> str:
+    """Sanitize potentially untrusted values before writing to plain-text logs."""
+    return str(value).replace("\r", "").replace("\n", "")
+
+
+def _normalize_and_validate_ollama_base_url(base_url: str) -> str:
+    """Allow only local Ollama endpoints and return a normalized base URL.
+
+    Security: this blocks non-loopback hosts to reduce SSRF risk when base_url
+    comes from user input (query/body settings).
+    """
+    candidate = (base_url or DEFAULT_OLLAMA_BASE_URL).strip()
+    if not candidate:
+        return DEFAULT_OLLAMA_BASE_URL
+
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        logger.warning("Invalid Ollama base_url format: %s", _sanitize_for_log(candidate))
+        return DEFAULT_OLLAMA_BASE_URL
+
+    if parsed.scheme not in ("http", "https"):
+        logger.warning("Rejected Ollama base_url with invalid scheme: %s", _sanitize_for_log(candidate))
+        return DEFAULT_OLLAMA_BASE_URL
+
+    if parsed.username or parsed.password:
+        logger.warning("Rejected Ollama base_url with userinfo: %s", _sanitize_for_log(candidate))
+        return DEFAULT_OLLAMA_BASE_URL
+
+    host = (parsed.hostname or "").strip().lower()
+    if not host:
+        logger.warning("Rejected Ollama base_url without host: %s", _sanitize_for_log(candidate))
+        return DEFAULT_OLLAMA_BASE_URL
+
+    try:
+        is_loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        is_loopback = host == "localhost"
+
+    if not is_loopback:
+        logger.warning("Rejected non-local Ollama base_url host: %s", _sanitize_for_log(host))
+        return DEFAULT_OLLAMA_BASE_URL
+
+    try:
+        port = parsed.port
+    except ValueError:
+        logger.warning("Rejected Ollama base_url with invalid port: %s", _sanitize_for_log(candidate))
+        return DEFAULT_OLLAMA_BASE_URL
+
+    # Preserve IPv6 netloc syntax with square brackets when needed.
+    if ":" in host and not host.startswith("["):
+        host_for_netloc = f"[{host}]"
+    else:
+        host_for_netloc = host
+
+    netloc = host_for_netloc if port is None else f"{host_for_netloc}:{port}"
+    return urlunsplit((parsed.scheme, netloc, "", "", "")).rstrip("/")
 
 # ── Default Ollama URL ───────────────────────────────────────────────────────
 
@@ -396,6 +457,7 @@ def probe_hardware() -> HardwareProfile:
 
 async def probe_runtime(base_url: str = DEFAULT_OLLAMA_BASE_URL) -> RuntimeStatus:
     """Check if Ollama is installed and running."""
+    base_url = _normalize_and_validate_ollama_base_url(base_url)
     status = RuntimeStatus(base_url=base_url)
 
     # 1. Check if ollama binary exists
@@ -431,6 +493,7 @@ async def probe_runtime(base_url: str = DEFAULT_OLLAMA_BASE_URL) -> RuntimeStatu
 
 async def list_installed_models(base_url: str = DEFAULT_OLLAMA_BASE_URL) -> List[Dict[str, Any]]:
     """List models currently downloaded in Ollama via GET /api/tags."""
+    base_url = _normalize_and_validate_ollama_base_url(base_url)
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
             resp = await client.get(f"{base_url}/api/tags")
@@ -438,9 +501,9 @@ async def list_installed_models(base_url: str = DEFAULT_OLLAMA_BASE_URL) -> List
                 data = resp.json()
                 return data.get("models", [])
     except (httpx.ConnectError, httpx.TimeoutException):
-        logger.debug("Cannot reach Ollama at %s to list models", base_url)
+        logger.debug("Cannot reach Ollama at %s to list models", _sanitize_for_log(base_url))
     except Exception as exc:
-        logger.debug("Error listing Ollama models: %s", exc)
+        logger.debug("Error listing Ollama models: %s", _sanitize_for_log(exc))
     return []
 
 
@@ -620,6 +683,7 @@ async def pull_model_stream(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL)
 
     Yields strings like: 'data: {"status": "pulling manifest"}\n\n'
     """
+    base_url = _normalize_and_validate_ollama_base_url(base_url)
     async with httpx.AsyncClient(timeout=httpx.Timeout(None)) as client:
         async with client.stream(
             "POST",
@@ -652,6 +716,7 @@ async def pull_model_stream(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL)
 async def delete_model(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL) -> bool:
     """Delete a model from Ollama. Returns True on success."""
     import json as _json
+    base_url = _normalize_and_validate_ollama_base_url(base_url)
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
             resp = await client.request(
@@ -670,6 +735,7 @@ async def delete_model(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL) -> b
 
 async def warm_up_model(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL) -> bool:
     """Send a tiny prompt to keep model loaded in Ollama memory."""
+    base_url = _normalize_and_validate_ollama_base_url(base_url)
     try:
         async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
             resp = await client.post(
@@ -692,6 +758,7 @@ async def warm_up_model(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL) -> 
 async def test_model(model: str, base_url: str = DEFAULT_OLLAMA_BASE_URL) -> TestResponse:
     """Quick validation that a model works end-to-end."""
     import time
+    base_url = _normalize_and_validate_ollama_base_url(base_url)
 
     # Determine tool_mode from catalog (if known)
     catalog_entry = None
@@ -790,7 +857,7 @@ def set_active_local_model(
         "active": True,
         "model_id": model_id,
         "litellm_model": litellm_model,
-        "base_url": base_url,
+        "base_url": _normalize_and_validate_ollama_base_url(base_url),
     }
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
