@@ -58,10 +58,10 @@ class TestToolMode:
 
 
 class TestTimeoutConfig:
-    def test_ollama_timeout_600(self):
+    def test_ollama_timeout_1800(self):
         from services.llm_service import PROVIDER_TIMEOUTS
 
-        assert PROVIDER_TIMEOUTS["ollama"] == 600
+        assert PROVIDER_TIMEOUTS["ollama"] == 1800
 
     def test_cloud_timeout_120(self):
         from services.llm_service import PROVIDER_TIMEOUTS
@@ -73,7 +73,7 @@ class TestTimeoutConfig:
         from routers.chat import _make_llm
 
         llm = _make_llm("ollama", "ollama_chat/qwen3:8b", "")
-        assert llm.config.timeout == 600
+        assert llm.config.timeout == 1800
 
     def test_make_llm_ollama_no_api_key_needed(self):
         from routers.chat import _make_llm

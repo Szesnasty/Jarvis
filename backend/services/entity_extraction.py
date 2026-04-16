@@ -286,8 +286,13 @@ def _extract_with_spacy(text: str, existing_people: List[str]) -> List[Extracted
         if name.endswith("'") or name.startswith("'"):
             continue
         # Reject names that are all lowercase (common words, not proper names)
+        # Exception: if it matches a known person by fuzzy match, keep it
         if name[0].islower():
-            continue
+            if not (
+                name.lower() in existing_set
+                or _fuzzy_match_existing(name, existing_set)
+            ):
+                continue
         # Reject markdown/tool artifacts
         if _JUNK_NAME_RE.match(name):
             continue
