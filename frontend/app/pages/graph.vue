@@ -36,6 +36,7 @@
       <GraphNodePreview
         v-if="selectedNode"
         :node="selectedNode"
+        :similar-edges="selectedSimilarEdges"
         @close="selectNode(null)"
         @navigate-node="handleNavigateNode"
         @ask-about="handleAskAbout"
@@ -55,7 +56,7 @@ import GraphFilterBar from '~/components/GraphFilterBar.vue'
 
 const {
   stats, selectedNode, orphans, filters,
-  filteredNodes, filteredEdges, highlightedNodeId,
+  filteredNodes, filteredEdges, highlightedNodeId, selectedSimilarEdges,
   loadGraph, rebuildGraph, selectNode, setFilters,
 } = useGraph()
 

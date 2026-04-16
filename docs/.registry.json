@@ -42,6 +42,7 @@
         "backend/services/ingest.py",
         "backend/services/url_ingest.py",
         "backend/services/embedding_service.py",
+        "backend/services/chunking.py",
         "backend/utils/markdown.py",
         "frontend/app/pages/memory.vue",
         "frontend/app/components/NoteList.vue",
@@ -50,7 +51,7 @@
         "frontend/app/components/LinkIngestDialog.vue"
       ],
       "depends_on": ["database"],
-      "last_updated": "2026-04-14",
+      "last_updated": "2026-04-17",
       "status": "current"
     },
     "knowledge-graph": {
@@ -58,8 +59,13 @@
       "type": "feature",
       "sources": [
         "backend/routers/graph.py",
-        "backend/services/graph_service.py",
+        "backend/services/graph_service/__init__.py",
+        "backend/services/graph_service/models.py",
+        "backend/services/graph_service/similarity.py",
+        "backend/services/graph_service/builder.py",
+        "backend/services/graph_service/queries.py",
         "backend/services/entity_extraction.py",
+        "backend/services/entity_canonicalization.py",
         "frontend/app/pages/graph.vue",
         "frontend/app/components/GraphCanvas.vue",
         "frontend/app/components/GraphNodePreview.vue",
@@ -67,7 +73,7 @@
         "frontend/app/composables/useGraph.ts"
       ],
       "depends_on": ["memory"],
-      "last_updated": "2026-04-15",
+      "last_updated": "2026-04-17",
       "status": "current"
     },
     "voice": {
@@ -122,10 +128,11 @@
       "type": "feature",
       "sources": [
         "backend/services/retrieval.py",
-        "backend/services/context_builder.py"
+        "backend/services/context_builder.py",
+        "backend/services/chunking.py"
       ],
       "depends_on": ["memory", "knowledge-graph"],
-      "last_updated": "2026-04-15",
+      "last_updated": "2026-04-17",
       "status": "current"
     },
     "planning": {

@@ -54,6 +54,14 @@ export function useGraph() {
     return selectedNode.value?.id ?? null
   })
 
+  const selectedSimilarEdges = computed(() => {
+    if (!selectedNode.value) return []
+    const id = selectedNode.value.id
+    return filteredEdges.value.filter(
+      e => e.type === 'similar_to' && (e.source === id || e.target === id)
+    )
+  })
+
   async function loadGraph(): Promise<void> {
     isLoading.value = true
     try {
@@ -92,7 +100,7 @@ export function useGraph() {
 
   return {
     graph, stats, selectedNode, orphans, isLoading, filters,
-    filteredNodes, filteredEdges, highlightedNodeId,
+    filteredNodes, filteredEdges, highlightedNodeId, selectedSimilarEdges,
     loadGraph, rebuildGraph, queryNeighbors, selectNode, setFilters,
   }
 }
