@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.2.1...jarvis-v0.3.0) (2026-04-16)
+
+
+### ✨ Features
+
+* **step-20:** graph evidence UI, eval set & step-20 docs ([d14e170](https://github.com/Szesnasty/Jarvis/commit/d14e1703d711895aee24861a5885361869ca39bf))
+* **step-20:** semantic search, embedding chunking & graph refactor ([5ecd451](https://github.com/Szesnasty/Jarvis/commit/5ecd4517d6b862d756d68bfd90f97551bf2a2fbd))
+* **step-20:** spaCy NER with Polish lemmatization & fuzzy matching ([26ec964](https://github.com/Szesnasty/Jarvis/commit/26ec964a120a00958152799c70cdbbf5839f9df7))
+
+
+### 🤖 CI/CD
+
+* add spaCy model download for entity extraction tests ([211312d](https://github.com/Szesnasty/Jarvis/commit/211312daa4f7e4f89fbb32929c270cd7960b9584))
+
 ## [0.2.1](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.2.0...jarvis-v0.2.1) (2026-04-15)
 
 

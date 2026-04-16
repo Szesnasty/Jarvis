@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.2.1...frontend-v0.3.0) (2026-04-16)
+
+
+### ✨ Features
+
+* **step-20:** graph evidence UI, eval set & step-20 docs ([d14e170](https://github.com/Szesnasty/Jarvis/commit/d14e1703d711895aee24861a5885361869ca39bf))
+
 ## [0.2.1](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.2.0...frontend-v0.2.1) (2026-04-15)
 
 
