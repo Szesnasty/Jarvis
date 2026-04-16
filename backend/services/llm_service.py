@@ -25,12 +25,14 @@ PROVIDER_MODEL_MAP = {
     "anthropic": "",
     "openai": "",
     "google": "gemini/",
+    "ollama": "",  # ollama_chat/ prefix already in litellm_model
 }
 
 DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-4-20250514",
     "openai": "gpt-4o",
     "google": "gemini-2.5-flash",
+    "ollama": "ollama_chat/qwen3:8b",
 }
 
 # All supported models per provider (for validation)
@@ -55,6 +57,16 @@ SUPPORTED_MODELS = {
         "gemini-2.5-flash",
         "gemini-2.0-flash",
     ],
+    "ollama": [],  # dynamic — any ollama_chat/ model accepted
+}
+
+
+# Per-provider timeout defaults (seconds)
+PROVIDER_TIMEOUTS = {
+    "anthropic": 120,
+    "openai": 120,
+    "google": 120,
+    "ollama": 600,  # local models can be slow on CPU
 }
 
 
@@ -62,11 +74,13 @@ SUPPORTED_MODELS = {
 class LLMConfig:
     """Per-request LLM configuration."""
 
-    provider: str        # "anthropic" | "openai" | "google"
-    model: str           # e.g. "claude-sonnet-4-20250514", "gpt-4o", "gemini-2.5-flash"
+    provider: str        # "anthropic" | "openai" | "google" | "ollama"
+    model: str           # e.g. "claude-sonnet-4-20250514", "gpt-4o", "ollama_chat/qwen3:8b"
     api_key: str         # raw key from frontend, used once per request
     max_tokens: int = 4096
     temperature: float = 0.7
+    api_base: Optional[str] = None   # e.g. "http://localhost:11434" for Ollama
+    timeout: Optional[float] = None  # seconds; None = use PROVIDER_TIMEOUTS default
 
 
 # ── Tool accumulator for OpenAI-format streamed tool_calls ───────────────────
@@ -243,6 +257,12 @@ class LLMService:
 
     def _resolve_model(self) -> str:
         """Map provider + model to LiteLLM model string."""
+        # Ollama models already include the ollama_chat/ prefix
+        if self.config.provider == "ollama":
+            model = self.config.model
+            if not model.startswith("ollama"):
+                model = f"ollama_chat/{model}"
+            return model
         prefix = PROVIDER_MODEL_MAP.get(self.config.provider, "")
         return f"{prefix}{self.config.model}"
 
@@ -259,6 +279,8 @@ class LLMService:
                 {"role": "system", "content": system_prompt},
             ] + convert_messages_for_litellm(messages)
 
+            timeout = self.config.timeout or PROVIDER_TIMEOUTS.get(self.config.provider, 120)
+
             kwargs: dict[str, Any] = {
                 "model": self._litellm_model,
                 "messages": litellm_messages,
@@ -266,7 +288,11 @@ class LLMService:
                 "stream": True,
                 "api_key": self.config.api_key,
                 "stream_options": {"include_usage": True},
+                "timeout": timeout,
             }
+
+            if self.config.api_base:
+                kwargs["api_base"] = self.config.api_base
 
             if tools:
                 kwargs["tools"] = convert_tools_anthropic_to_openai(tools)

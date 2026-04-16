@@ -29,8 +29,8 @@
         "frontend/app/components/ChatPanel.vue",
         "frontend/app/components/ModelSelector.vue"
       ],
-      "depends_on": ["retrieval", "sessions", "specialists", "api-key-management"],
-      "last_updated": "2026-04-15",
+      "depends_on": ["retrieval", "sessions", "specialists", "api-key-management", "local-models"],
+      "last_updated": "2026-04-16",
       "status": "current"
     },
     "memory": {
@@ -221,6 +221,18 @@
         "frontend/app/types/index.ts"
       ],
       "depends_on": ["preferences-settings", "chat"],
+      "last_updated": "2026-04-16",
+      "status": "current"
+    },
+    "local-models": {
+      "doc": "docs/features/local-models.md",
+      "type": "feature",
+      "sources": [
+        "backend/services/ollama_service.py",
+        "backend/routers/local_models.py",
+        "backend/tests/test_local_models.py"
+      ],
+      "depends_on": ["chat", "api-key-management"],
       "last_updated": "2026-04-16",
       "status": "current"
     }

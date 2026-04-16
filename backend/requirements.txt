@@ -14,6 +14,7 @@ lxml_html_clean==0.4.4
 pdfplumber==0.11.8
 litellm==1.83.7
 fastembed==0.7.4  # local embeddings for semantic search
+psutil>=5.9.0  # hardware detection for local model recommendations
 spacy>=3.8,<4.0  # NER for entity extraction (Polish + English)
 
 # testing
