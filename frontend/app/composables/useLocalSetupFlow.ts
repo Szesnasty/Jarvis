@@ -1,3 +1,6 @@
+import { useLocalModels } from '~/composables/useLocalModels'
+import type { ModelRecommendation } from '~/types'
+
 /**
  * State machine for local AI setup flow.
  * Shared between onboarding wizard and Settings page.
@@ -133,7 +136,7 @@ export function useLocalSetupFlow() {
 
     await localModels.pullModel(modelId)
 
-    const model = localModels.catalog.value.find(m => m.model_id === modelId)
+    const model = localModels.catalog.value.find((m: ModelRecommendation) => m.model_id === modelId)
     if (model?.installed) {
       await localModels.selectModel(modelId)
       // Sync selection into useApiKeys so ModelSelector reflects it immediately
@@ -159,7 +162,7 @@ export function useLocalSetupFlow() {
   async function selectModel(modelId: string): Promise<void> {
     await localModels.selectModel(modelId)
     // Sync into useApiKeys so ModelSelector reflects it immediately
-    const model = localModels.catalog.value.find(m => m.model_id === modelId)
+    const model = localModels.catalog.value.find((m: ModelRecommendation) => m.model_id === modelId)
     if (model) apiKeys.selectModel('ollama', model.litellm_model)
     state.value = 'model_ready'
   }
