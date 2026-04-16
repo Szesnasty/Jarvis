@@ -27,7 +27,7 @@ ${CYAN} _  | |/ _\` | '__\\ \\ / / / __|${RESET}
 ${CYAN}| |_| | (_| | |   \\ V /| \\__ \\${RESET}
 ${CYAN} \\___/ \\__,_|_|    \\_/ |_|___/${RESET}
 
-${DIM}  Your personal memory & knowledge system${RESET}
+${DIM}  YAn AI workspace that remembers what matters${RESET}
 `;
 
 const steps = [

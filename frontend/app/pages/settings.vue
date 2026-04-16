@@ -59,31 +59,74 @@
         <strong>No API key needed.</strong>
       </p>
 
-      <!-- Try local AI banner (shown when no local models installed) -->
-      <div
-        v-if="localModels.installedModels.value.length === 0 && !localModels.loading.value"
-        class="local-models__banner"
-      >
-        <span class="local-models__banner-icon">🖥️</span>
-        <div class="local-models__banner-text">
-          <span class="local-models__banner-title">Run Jarvis locally — free &amp; private</span>
-          <span class="local-models__banner-desc">Download a model to use Jarvis without an API key.</span>
+      <!-- Runtime status card -->
+      <div class="local-models__runtime-card" :class="localModels.isOllamaReady() ? 'local-models__runtime-card--ok' : 'local-models__runtime-card--missing'">
+        <span class="local-models__runtime-icon">{{ localModels.isOllamaReady() ? '✅' : '⚠️' }}</span>
+        <div class="local-models__runtime-info">
+          <span class="local-models__runtime-title">
+            {{ localModels.isOllamaReady()
+              ? `Ollama running${localModels.runtime.value?.version ? ' · v' + localModels.runtime.value.version : ''}`
+              : 'Local runtime not detected' }}
+          </span>
+          <span v-if="!localModels.isOllamaReady()" class="local-models__runtime-hint">
+            Install Ollama to use local models.
+            <a :href="ollamaDownloadUrl" target="_blank" rel="noopener" class="settings-page__link">Download Ollama →</a>
+          </span>
+        </div>
+        <button v-if="!localModels.isOllamaReady()" class="settings-page__btn settings-page__btn--sm" @click="localModels.refreshAll()">
+          Check Again
+        </button>
+      </div>
+
+      <!-- Hardware summary card -->
+      <div v-if="setupFlow.hardwareSummary.value" class="local-models__hw-card">
+        <span class="local-models__hw-icon">🖥️</span>
+        <div class="local-models__hw-info">
+          <span class="local-models__hw-label">{{ setupFlow.hardwareSummary.value.label }}</span>
+          <span class="local-models__hw-rec">{{ setupFlow.hardwareSummary.value.recommendation }}</span>
         </div>
       </div>
 
-      <OllamaStatus
-        :runtime="localModels.runtime.value"
-        :hardware="localModels.hardware.value"
-        :loading="localModels.loading.value"
-        @refresh="localModels.refreshAll()"
-      />
+      <!-- Installed models -->
+      <div v-if="installedLocalModels.length > 0" class="local-models__group">
+        <h3 class="local-models__group-title">Installed models</h3>
+        <div class="local-models__installed-list">
+          <div
+            v-for="m in installedLocalModels"
+            :key="m.model_id"
+            class="local-models__installed-row"
+            :class="{ 'local-models__installed-row--active': m.active }"
+          >
+            <div class="local-models__installed-info">
+              <span class="local-models__installed-name">{{ m.label }}</span>
+              <span v-if="m.active" class="local-models__installed-badge">Active</span>
+              <span class="local-models__installed-meta">{{ m.download_size_gb }} GB · Context {{ m.context_window }}</span>
+            </div>
+            <div class="local-models__installed-actions">
+              <button
+                v-if="!m.active"
+                class="settings-page__btn settings-page__btn--sm"
+                @click="localModels.selectModel(m.model_id)"
+              >Set active</button>
+              <button
+                class="settings-page__btn settings-page__btn--sm"
+                @click="localModels.warmUpModel(m.ollama_model)"
+              >Warm up</button>
+              <button
+                class="settings-page__btn settings-page__btn--sm settings-page__btn--danger"
+                @click="handleDeleteModel(m)"
+              >Remove</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <!-- Recommended models — always show if catalog loaded -->
+      <!-- Recommended models — max 3 -->
       <div v-if="localModels.recommendedModels.value.length > 0" class="local-models__group">
         <h3 class="local-models__group-title">Recommended for your hardware</h3>
         <div class="local-models__grid">
           <LocalModelCard
-            v-for="m in localModels.recommendedModels.value"
+            v-for="m in localModels.recommendedModels.value.slice(0, 3)"
             :key="m.model_id"
             :model="m"
             :pulling="localModels.pulling.value === m.model_id"
@@ -95,41 +138,45 @@
         </div>
       </div>
 
-      <!-- All models (collapsible) — always show if catalog loaded -->
-      <details v-if="localModels.catalog.value.length > 0" class="local-models__all">
+      <!-- More models (collapsed) -->
+      <details v-if="nonRecommendedModels.length > 0" class="local-models__all">
         <summary class="local-models__all-toggle">
-          All models ({{ localModels.catalog.value.length }})
+          Show all local models ({{ nonRecommendedModels.length }})
         </summary>
         <div class="local-models__grid">
           <LocalModelCard
-            v-for="m in localModels.catalog.value"
+            v-for="m in nonRecommendedModels"
             :key="m.model_id"
             :model="m"
             :pulling="localModels.pulling.value === m.model_id"
             :progress="localModels.pulling.value === m.model_id ? localModels.pullProgress.value : null"
             :disabled="!localModels.isOllamaReady()"
+            compact
             @pull="localModels.pullModel($event)"
             @select="localModels.selectModel($event)"
           />
         </div>
       </details>
 
-      <!-- Base URL setting -->
-      <div class="local-models__url">
-        <label class="local-models__url-label">Ollama URL</label>
-        <div class="local-models__url-row">
-          <input
-            type="text"
-            class="settings-page__input"
-            :value="localModels.baseUrl.value"
-            @change="localModels.setBaseUrl(($event.target as HTMLInputElement).value)"
-            placeholder="http://localhost:11434"
-          />
-          <button class="settings-page__btn" @click="localModels.refreshAll()">
-            Test Connection
-          </button>
+      <!-- Advanced connection settings (hidden) -->
+      <details class="local-models__advanced">
+        <summary class="local-models__all-toggle">Advanced connection settings</summary>
+        <div class="local-models__url">
+          <label class="local-models__url-label">Ollama URL</label>
+          <div class="local-models__url-row">
+            <input
+              type="text"
+              class="settings-page__input"
+              :value="localModels.baseUrl.value"
+              @change="localModels.setBaseUrl(($event.target as HTMLInputElement).value)"
+              placeholder="http://localhost:11434"
+            />
+            <button class="settings-page__btn" @click="localModels.refreshAll()">
+              Test Connection
+            </button>
+          </div>
         </div>
-      </div>
+      </details>
 
       <p v-if="localModels.error.value" class="local-models__error">
         {{ localModels.error.value }}
@@ -298,6 +345,30 @@ import { ICON_LOCK } from '~/composables/providerIcons'
 const lockIcon = ICON_LOCK
 
 const localModels = useLocalModels()
+const setupFlow = useLocalSetupFlow()
+
+const ollamaDownloadUrl = computed(() => {
+  const urls: Record<string, string> = {
+    macos: 'https://ollama.com/download/mac',
+    windows: 'https://ollama.com/download/windows',
+    linux: 'https://ollama.com/download/linux',
+  }
+  return urls[setupFlow.detectedOS.value] ?? 'https://ollama.com/download'
+})
+
+const installedLocalModels = computed(() =>
+  localModels.catalog.value.filter(m => m.installed)
+)
+
+const nonRecommendedModels = computed(() => {
+  const recIds = new Set(localModels.recommendedModels.value.slice(0, 3).map(m => m.model_id))
+  return localModels.catalog.value.filter(m => !m.installed && !recIds.has(m.model_id))
+})
+
+async function handleDeleteModel(model: { ollama_model: string }) {
+  await localModels.deleteModel(model.ollama_model)
+  await localModels.refreshAll()
+}
 
 const settingsLoaded = ref(false)
 const serverKeyConfigured = ref(false)
@@ -929,33 +1000,134 @@ async function rebuildGraphAction() {
 }
 
 /* ---- Local Models Section ---- */
-.local-models__banner {
+.local-models__runtime-card {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.65rem;
   padding: 0.65rem 0.85rem;
   border-radius: 8px;
-  background: rgba(2, 254, 255, 0.03);
-  border: 1px solid var(--neon-cyan-15);
   margin-bottom: 0.85rem;
 }
-.local-models__banner-icon {
-  font-size: 1.2rem;
+.local-models__runtime-card--ok {
+  background: rgba(52, 211, 153, 0.04);
+  border: 1px solid rgba(52, 211, 153, 0.15);
+}
+.local-models__runtime-card--missing {
+  background: rgba(251, 191, 36, 0.04);
+  border: 1px solid rgba(251, 191, 36, 0.15);
+}
+.local-models__runtime-icon {
+  font-size: 1.1rem;
   flex-shrink: 0;
 }
-.local-models__banner-text {
+.local-models__runtime-info {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.15rem;
+  flex: 1;
 }
-.local-models__banner-title {
+.local-models__runtime-title {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
 }
-.local-models__banner-desc {
+.local-models__runtime-hint {
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+.local-models__hw-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 0.85rem;
+}
+.local-models__hw-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.local-models__hw-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.local-models__hw-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.local-models__hw-rec {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.local-models__installed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.local-models__installed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-base);
+}
+.local-models__installed-row--active {
+  border-color: var(--neon-cyan-30);
+  box-shadow: 0 0 8px var(--neon-cyan-08);
+}
+.local-models__installed-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.local-models__installed-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.local-models__installed-badge {
+  font-size: 0.62rem;
+  font-weight: 600;
+  padding: 0.08rem 0.35rem;
+  border-radius: 4px;
+  background: var(--neon-cyan-08);
+  color: var(--neon-cyan-60);
+  border: 1px solid var(--neon-cyan-15);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.local-models__installed-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.local-models__installed-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+.settings-page__btn--sm {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.72rem;
+}
+.settings-page__btn--danger {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: rgba(248, 113, 113, 0.8);
+  background: rgba(248, 113, 113, 0.04);
+}
+.settings-page__btn--danger:hover {
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(248, 113, 113, 0.1);
+  box-shadow: none;
+  text-shadow: none;
+  color: rgba(248, 113, 113, 1);
 }
 .local-models__group {
   margin-top: 1rem;
@@ -974,6 +1146,9 @@ async function rebuildGraphAction() {
 .local-models__all {
   margin-top: 1rem;
 }
+.local-models__advanced {
+  margin-top: 0.75rem;
+}
 .local-models__all-toggle {
   font-size: 0.82rem;
   color: var(--text-secondary);
@@ -988,9 +1163,7 @@ async function rebuildGraphAction() {
   margin-top: 0.65rem;
 }
 .local-models__url {
-  margin-top: 1rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border-subtle);
+  margin-top: 0.65rem;
 }
 .local-models__url-label {
   font-size: 0.78rem;

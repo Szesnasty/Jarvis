@@ -2,7 +2,7 @@
 
 ## 1. What Is Jarvis
 
-Jarvis is a **voice-first personal memory, planning, and knowledge system**.
+Jarvis is a personal memory, planning, and knowledge system**.
 
 It is **not**:
 - A coding tool

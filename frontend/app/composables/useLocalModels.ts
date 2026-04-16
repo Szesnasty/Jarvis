@@ -22,6 +22,7 @@ export function useLocalModels() {
   const baseUrl = useState<string>('local-base-url', () => _readBaseUrl())
   const ollamaDown = useState<boolean>('local-ollama-down', () => false)
   let _healthInterval: ReturnType<typeof setInterval> | null = null
+  let _pullAbortController: AbortController | null = null
 
   async function fetchHardware(): Promise<void> {
     try {
@@ -78,10 +79,13 @@ export function useLocalModels() {
     pullProgress.value = { status: 'starting' }
     error.value = null
 
+    _pullAbortController = new AbortController()
+
     try {
       const response = await fetch('/api/local/models/pull', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: _pullAbortController.signal,
         body: JSON.stringify({
           model: model.ollama_model,
           base_url: baseUrl.value,
@@ -123,6 +127,15 @@ export function useLocalModels() {
         pullProgress.value = null
       }
     }
+  }
+
+  function cancelPull(): void {
+    if (_pullAbortController) {
+      _pullAbortController.abort()
+      _pullAbortController = null
+    }
+    pulling.value = null
+    pullProgress.value = null
   }
 
   async function selectModel(modelId: string): Promise<void> {
@@ -220,6 +233,7 @@ export function useLocalModels() {
     fetchCatalog,
     refreshAll,
     pullModel,
+    cancelPull,
     selectModel,
     deleteModel,
     isOllamaReady,
