@@ -21,20 +21,37 @@ afterEach(() => {
 })
 
 describe('pages/onboarding.vue', () => {
-  it('renders 3 provider cards', async () => {
+  it('shows choose screen with Cloud and Local options', async () => {
     const wrapper = await mountSuspended(OnboardingPage)
+    const choices = wrapper.findAll('.onboarding__choice')
+    expect(choices.length).toBe(2)
+    expect(choices[0].text()).toContain('Cloud AI')
+    expect(choices[1].text()).toContain('Run Locally')
+  })
+
+  async function mountCloudPhase() {
+    const wrapper = await mountSuspended(OnboardingPage)
+    // Click "Choose Cloud" to enter cloud phase
+    const choices = wrapper.findAll('.onboarding__choice')
+    await choices[0].trigger('click')
+    await wrapper.vm.$nextTick()
+    return wrapper
+  }
+
+  it('renders 3 provider cards in cloud phase', async () => {
+    const wrapper = await mountCloudPhase()
     const cards = wrapper.findAllComponents({ name: 'ProviderCard' })
     expect(cards.length).toBe(3)
   })
 
-  it('renders Create Workspace button', async () => {
-    const wrapper = await mountSuspended(OnboardingPage)
+  it('renders Create Workspace button in cloud phase', async () => {
+    const wrapper = await mountCloudPhase()
     const button = wrapper.find('.onboarding__button')
     expect(button.text()).toContain('Create Jarvis Workspace')
   })
 
   it('button disabled when no keys configured', async () => {
-    const wrapper = await mountSuspended(OnboardingPage)
+    const wrapper = await mountCloudPhase()
     const button = wrapper.find('.onboarding__button')
     expect(button.attributes('disabled')).toBeDefined()
   })
@@ -44,21 +61,19 @@ describe('pages/onboarding.vue', () => {
     storageMap['jarvis_key_anthropic'] = 'sk-ant-test-123'
     storageMap['jarvis_key_meta_anthropic'] = JSON.stringify({ remember: false, addedAt: new Date().toISOString() })
 
-    const wrapper = await mountSuspended(OnboardingPage)
-    // Force reactivity update
-    await wrapper.vm.$nextTick()
+    const wrapper = await mountCloudPhase()
     const button = wrapper.find('.onboarding__button')
     expect(button.attributes('disabled')).toBeUndefined()
   })
 
-  it('shows security info panel', async () => {
-    const wrapper = await mountSuspended(OnboardingPage)
+  it('shows security info panel in cloud phase', async () => {
+    const wrapper = await mountCloudPhase()
     const info = wrapper.findComponent({ name: 'KeyProtectionInfo' })
     expect(info.exists()).toBe(true)
   })
 
-  it('shows provider help links', async () => {
-    const wrapper = await mountSuspended(OnboardingPage)
+  it('shows provider help links in cloud phase', async () => {
+    const wrapper = await mountCloudPhase()
     const links = wrapper.findAll('.onboarding__help-link')
     expect(links.length).toBe(3)
     expect(links[0].attributes('href')).toContain('anthropic')
@@ -66,8 +81,8 @@ describe('pages/onboarding.vue', () => {
     expect(links[2].attributes('href')).toContain('google')
   })
 
-  it('shows settings hint', async () => {
-    const wrapper = await mountSuspended(OnboardingPage)
+  it('shows settings hint in cloud phase', async () => {
+    const wrapper = await mountCloudPhase()
     expect(wrapper.find('.onboarding__settings-hint').text()).toContain('Settings')
   })
 
@@ -84,9 +99,17 @@ describe('pages/onboarding.vue', () => {
       },
     })
 
-    const wrapper = await mountSuspended(OnboardingPage)
+    const wrapper = await mountCloudPhase()
     await wrapper.find('.onboarding__button').trigger('click')
     await new Promise(r => setTimeout(r, 150))
     expect(called).toBe(true)
+  })
+
+  it('back button returns to choose screen from cloud phase', async () => {
+    const wrapper = await mountCloudPhase()
+    const backBtn = wrapper.find('.onboarding__back')
+    await backBtn.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('.onboarding__choice').length).toBe(2)
   })
 })

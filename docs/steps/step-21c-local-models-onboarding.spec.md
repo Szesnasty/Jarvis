@@ -5,7 +5,7 @@
 > cloud AI and local AI. Users who don't have an API key can still
 > start Jarvis with a local model.
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete
 **Depends on**: Step 21b (frontend components exist)
 **Effort**: ~1–2 days
 **Branch**: `feat/local-models-onboarding`

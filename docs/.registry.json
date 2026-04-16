@@ -234,10 +234,11 @@
         "frontend/app/composables/useLocalModels.ts",
         "frontend/app/components/OllamaStatus.vue",
         "frontend/app/components/LocalModelCard.vue",
-        "frontend/app/components/PullProgress.vue"
+        "frontend/app/components/PullProgress.vue",
+        "frontend/app/components/OnboardingLocalFlow.vue"
       ],
-      "depends_on": ["chat", "api-key-management"],
-      "last_updated": "2026-04-17",
+      "depends_on": ["chat", "api-key-management", "workspace-onboarding"],
+      "last_updated": "2026-04-16",
       "status": "current"
     }
   }
