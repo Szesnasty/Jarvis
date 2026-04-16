@@ -39,6 +39,11 @@ jobs:
       - name: Install dependencies
         run: uv pip install --system -r requirements.txt
 
+      - name: Download spaCy models
+        run: |
+          python -m spacy download pl_core_news_sm
+          python -m spacy download en_core_web_sm
+
       - name: Prepare test workspace
         run: mkdir -p /tmp/jarvis-ci/memory /tmp/jarvis-ci/app/sessions /tmp/jarvis-ci/graph /tmp/jarvis-ci/agents
 
