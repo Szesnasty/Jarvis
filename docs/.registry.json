@@ -51,7 +51,7 @@
         "frontend/app/components/LinkIngestDialog.vue"
       ],
       "depends_on": ["database"],
-      "last_updated": "2026-04-17",
+      "last_updated": "2026-04-16",
       "status": "current"
     },
     "knowledge-graph": {
