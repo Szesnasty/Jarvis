@@ -1,5 +1,6 @@
 import type { ChatMessage, WsEvent } from '~/types'
 import { useDuel } from '~/composables/useDuel'
+import { useLocalModels } from '~/composables/useLocalModels'
 import { useWebSocket } from '~/composables/useWebSocket'
 
 export function useChat() {
@@ -166,7 +167,11 @@ export function useChat() {
     // even if falling back to server-stored API key
     payload.provider = activeProvider.value
     payload.model = activeModel.value
-    if (activeKey.value) {
+    if (activeProvider.value === 'ollama') {
+      // Ollama needs no API key but needs base_url
+      const { baseUrl } = useLocalModels()
+      payload.base_url = baseUrl.value
+    } else if (activeKey.value) {
       payload.api_key = activeKey.value
     }
 

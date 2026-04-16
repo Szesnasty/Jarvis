@@ -230,10 +230,14 @@
       "sources": [
         "backend/services/ollama_service.py",
         "backend/routers/local_models.py",
-        "backend/tests/test_local_models.py"
+        "backend/tests/test_local_models.py",
+        "frontend/app/composables/useLocalModels.ts",
+        "frontend/app/components/OllamaStatus.vue",
+        "frontend/app/components/LocalModelCard.vue",
+        "frontend/app/components/PullProgress.vue"
       ],
       "depends_on": ["chat", "api-key-management"],
-      "last_updated": "2026-04-16",
+      "last_updated": "2026-04-17",
       "status": "current"
     }
   }
