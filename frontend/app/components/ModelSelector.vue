@@ -13,6 +13,9 @@ const currentModelInfo = computed<ModelInfo | undefined>(() => {
   if (activeProvider.value === 'ollama') {
     const local = installedModels.value.find(m => m.litellm_model === activeModel.value)
     if (local) return { id: local.litellm_model, label: local.label, cost: 0 as 0 }
+    // Fallback: strip ollama_chat/ prefix for display
+    const fallbackLabel = activeModel.value.replace(/^ollama(?:_chat)?\//, '')
+    return { id: activeModel.value, label: fallbackLabel, cost: 0 as 0 }
   }
   const catalog = MODEL_CATALOG[activeProvider.value]
   return catalog?.find(m => m.id === activeModel.value)
