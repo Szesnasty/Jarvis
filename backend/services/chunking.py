@@ -63,6 +63,26 @@ def _find_headings(body: str) -> List[_HeadingMatch]:
     return matches
 
 
+def _extract_paragraphs(section_text: str) -> List[str]:
+    """Return individual paragraph blocks (split by blank lines)."""
+    blocks: List[str] = []
+    current: List[str] = []
+    for line in section_text.split("\n"):
+        if line.strip() == "":
+            if current:
+                blocks.append(" ".join(s.strip() for s in current).strip())
+                current = []
+        else:
+            # skip lines that are pure list markers (bullets handled separately)
+            stripped = line.lstrip()
+            if stripped.startswith(("* ", "- ", "+ ")):
+                continue
+            current.append(line)
+    if current:
+        blocks.append(" ".join(s.strip() for s in current).strip())
+    return [b for b in blocks if b]
+
+
 def _extract_bullets(section_text: str) -> List[str]:
     """Return individual bullet items found in *section_text*.
 
@@ -212,11 +232,14 @@ def chunk_markdown(
     content: str,
     title: str = "",
     tags: Optional[List[str]] = None,
-    max_chunk_tokens: int = 220,
-    overlap_tokens: int = 110,            # ~50 % overlap
-    min_window_tokens: int = 60,          # sections shorter than this stay one chunk
-    coarse_window_tokens: int = 260,      # cross-section pass window size
-    coarse_overlap_tokens: int = 130,     # cross-section overlap
+    max_chunk_tokens: int = 110,          # smaller windows -> more chunks
+    overlap_tokens: int = 55,             # ~50 % overlap
+    min_window_tokens: int = 25,          # sections shorter than this stay one chunk
+    coarse_window_tokens: int = 160,      # cross-section pass window size
+    coarse_overlap_tokens: int = 80,      # cross-section overlap
+    extra_coarse_window_tokens: int = 280,  # second coarse pass (long-range context)
+    extra_coarse_overlap_tokens: int = 140,
+    paragraph_min_tokens: int = 20,       # paragraphs >= this become own chunks
     subject_kind: str = "note",
     multi_granularity: bool = True,
 ) -> List[Chunk]:
@@ -232,6 +255,7 @@ def chunk_markdown(
       3. Section chunks (with ~50 % overlap when section >= ``min_window_tokens``)
       4. Per-bullet chunks for sections containing 2+ list items
       5. Coarse cross-section sliding window across the whole body
+      6. Extra-coarse sliding window (longer windows) for long-range context
     """
     fm, body = parse_frontmatter(content)
 
@@ -322,8 +346,8 @@ def chunk_markdown(
         if multi_granularity:
             bullets = _extract_bullets(section_text)
             for bullet in bullets:
-                if _approx_tokens(bullet) < 3:
-                    continue  # skip trivial one-word bullets
+                if _approx_tokens(bullet) < 2:
+                    continue  # skip trivial bullets only
                 bullet_text = f"{context_prefix}- {bullet}"
                 chunks.append(Chunk(
                     index=0,
@@ -331,6 +355,24 @@ def chunk_markdown(
                     text=bullet_text,
                     token_count=_approx_tokens(bullet_text),
                 ))
+
+        # ---- 4b. Per-paragraph chunks (prose-heavy sections) -------------
+        if multi_granularity:
+            paragraphs = _extract_paragraphs(section_text)
+            # Only emit per-paragraph chunks when there are multiple
+            # substantive prose paragraphs (so we don't duplicate a
+            # single-paragraph section that's already a chunk).
+            if len(paragraphs) >= 2:
+                for para in paragraphs:
+                    if _approx_tokens(para) < paragraph_min_tokens:
+                        continue
+                    para_text = f"{context_prefix}{para}"
+                    chunks.append(Chunk(
+                        index=0,
+                        section_title=f"{section_title} > paragraph" if section_title else "> paragraph",
+                        text=para_text,
+                        token_count=_approx_tokens(para_text),
+                    ))
 
     # ---- 5. Coarse cross-section sliding window ---------------------------
     if multi_granularity and _approx_tokens(body) > coarse_window_tokens:
@@ -347,6 +389,25 @@ def chunk_markdown(
             coarse_window_tokens,
             coarse_overlap_tokens,
             "@coarse",
+        ))
+
+    # ---- 6. Extra-coarse pass (long-range context) -----------------------
+    # A second sliding window with a larger window size captures
+    # multi-paragraph relationships the fine coarse pass misses.
+    if multi_granularity and _approx_tokens(body) > extra_coarse_window_tokens:
+        coarse_prefix_parts2: List[str] = []
+        if title:
+            coarse_prefix_parts2.append(title)
+        if tag_str:
+            coarse_prefix_parts2.append(tag_str)
+        coarse_prefix2 = ". ".join(coarse_prefix_parts2) + ". " if coarse_prefix_parts2 else ""
+
+        chunks.extend(_sliding_window(
+            body,
+            coarse_prefix2,
+            extra_coarse_window_tokens,
+            extra_coarse_overlap_tokens,
+            "@coarse-long",
         ))
 
     # Defensive fallback - body present but somehow no chunks emitted

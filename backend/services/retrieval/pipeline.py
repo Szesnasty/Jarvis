@@ -668,6 +668,65 @@ async def retrieve_with_intent(
         reverse=True,
     )
 
+    # --- Signal 5: Cross-encoder reranker (precision pass) ---------------
+    # Take top-N hybrid candidates and re-score with a local cross-encoder.
+    # Disable with JARVIS_DISABLE_RERANKER=1.  Falls back silently if the
+    # reranker model is unavailable.
+    rerank_enabled = os.environ.get("JARVIS_DISABLE_RERANKER") != "1"
+    if rerank_enabled and len(scored) > 1:
+        try:
+            from services.reranker_service import rerank as _rerank
+            from services.reranker_service import is_available as _rr_available
+
+            if _rr_available():
+                # Cap the rerank pool to keep latency bounded (~50-150ms).
+                rerank_pool_size = int(os.environ.get("JARVIS_RERANKER_POOL", "20"))
+                pool = scored[:rerank_pool_size]
+                # Build the document text used by the cross-encoder.
+                # Prefer the best chunk text (most query-aligned); fall back
+                # to title + folder when no chunk text is available.
+                docs: List[str] = []
+                for d in pool:
+                    text = d.get("_best_chunk") or ""
+                    if not text:
+                        title = d.get("title", "")
+                        folder = d.get("folder", "")
+                        text = f"{title} ({folder})".strip()
+                    docs.append(text[:2000])  # cap to keep encoder fast
+
+                rerank_scores = _rerank(query, docs)
+                if rerank_scores is not None and len(rerank_scores) == len(pool):
+                    # Normalise rerank scores to [0,1] within the pool, then
+                    # blend 70% rerank + 30% original fused score.  This keeps
+                    # some signal from BM25/cosine/graph in case the reranker
+                    # is over-confident on a single token match.
+                    lo = min(rerank_scores)
+                    hi = max(rerank_scores)
+                    span = (hi - lo) or 1.0
+                    rerank_weight = float(os.environ.get("JARVIS_RERANKER_WEIGHT", "0.7"))
+                    rerank_weight = max(0.0, min(1.0, rerank_weight))
+
+                    for d, raw in zip(pool, rerank_scores):
+                        norm = (raw - lo) / span
+                        d["_rerank"] = round(float(raw), 4)
+                        d["_score"] = (
+                            rerank_weight * norm
+                            + (1.0 - rerank_weight) * d["_score"]
+                        )
+                        sig = d.get("_signals", {})
+                        sig["rerank"] = round(norm, 3)
+                        d["_signals"] = sig
+
+                    # Resort the pool with new blended scores; the tail
+                    # (beyond rerank_pool_size) keeps its original order.
+                    pool.sort(
+                        key=lambda x: (x["_score"], x.get("updated_at", "")),
+                        reverse=True,
+                    )
+                    scored = pool + scored[rerank_pool_size:]
+        except Exception as exc:
+            logger.warning("Reranker pass skipped: %s", exc)
+
     result = _cluster_dedup(scored, limit)
 
     # Clean internal fields but KEEP _best_chunk and _best_section for context_builder
@@ -677,6 +736,7 @@ async def retrieve_with_intent(
         r.pop("_cosine", None)
         r.pop("_graph", None)
         r.pop("_enrichment", None)
+        r.pop("_rerank", None)
         r.pop("_bm25_score", None)
         r.pop("_node_id", None)
 
