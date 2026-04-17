@@ -70,6 +70,23 @@
               placeholder="You are a health advisor who helps me interpret lab results, track supplements, and optimize sleep..."
             />
           </div>
+          <div class="wiz__field">
+            <label class="wiz__label">System prompt <span class="wiz__label-badge">advanced</span></label>
+            <p class="wiz__hint">
+              Full persona / behaviour contract. Injected at the top of the system prompt, ahead of the base Jarvis instructions, so it has maximum weight. Leave empty to rely only on the Role + Rules above.
+            </p>
+            <textarea
+              v-model="form.system_prompt"
+              class="wiz__textarea wiz__textarea--system"
+              placeholder="You are a world-class Product Manager and Scrum Master. Your job is to..."
+            />
+            <p class="wiz__hint wiz__hint--meta">
+              {{ form.system_prompt.length }} characters
+              <span v-if="form.system_prompt.length">
+                &middot; {{ form.system_prompt.split(/\n/).length }} lines
+              </span>
+            </p>
+          </div>
         </div>
 
         <!-- Step 3: Knowledge Sources -->
@@ -238,6 +255,10 @@
                 <span class="wiz__review-stat-val">{{ form.default_model ? getModelLabel(form.default_model.provider, form.default_model.model) : 'Global' }}</span>
                 <span class="wiz__review-stat-label">model</span>
               </div>
+              <div class="wiz__review-stat">
+                <span class="wiz__review-stat-val">{{ form.system_prompt.length ? form.system_prompt.length : '—' }}</span>
+                <span class="wiz__review-stat-label">sys&thinsp;prompt chars</span>
+              </div>
             </div>
             <p v-if="stagedFiles.length && !isEditMode" class="wiz__review-note">
               Files will be uploaded after the specialist is created.
@@ -306,6 +327,7 @@ const form = reactive({
   name: '',
   icon: '\u{1F916}',
   role: '',
+  system_prompt: '',
   sources: [] as string[],
   style: { tone: '', format: '', length: '' },
   rules: [] as string[],
@@ -324,6 +346,7 @@ onMounted(() => {
     form.name = d.name
     form.icon = d.icon || '\u{1F916}'
     form.role = d.role || ''
+    form.system_prompt = d.system_prompt || ''
     form.sources = [...(d.sources || [])]
     form.style = {
       tone: d.style?.tone || '',
@@ -711,6 +734,32 @@ defineExpose({ resetSubmitting })
   min-height: 72px;
   font-size: 0.78rem;
   margin-top: 0.5rem;
+}
+
+.wiz__textarea--system {
+  min-height: 320px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.wiz__label-badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--neon-cyan-30);
+  border: 1px solid var(--neon-cyan-15);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.wiz__hint--meta {
+  opacity: 0.7;
+  font-size: 0.72rem;
+  margin-top: 0.35rem;
 }
 
 /* --- Dropzone (Step 3) --- */
