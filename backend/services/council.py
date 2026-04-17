@@ -367,6 +367,26 @@ async def save_duel_to_memory(
                 "won_by",
                 weight=1.0,
             )
+
+            # Emit duel_recommendation edges to referenced issue keys
+            vote_margin = abs(total_a - total_b) / max(total_a + total_b, 1)
+            all_text = " ".join([
+                config.topic,
+                r1.get(spec_a["id"], ""), r1.get(spec_b["id"], ""),
+                r2.get(spec_a["id"], ""), r2.get(spec_b["id"], ""),
+                verdict.reasoning, verdict.recommendation,
+                " ".join(verdict.action_items),
+            ])
+            issue_keys = set(re.findall(r"\b([A-Z][A-Z0-9]+-\d+)\b", all_text))
+            for ik in issue_keys:
+                issue_node = f"issue:{ik}"
+                if issue_node in graph.nodes:
+                    graph.add_edge(
+                        note_id, issue_node, "duel_recommendation",
+                        weight=round(min(vote_margin + 0.5, 1.0), 2),
+                        origin="derived",
+                    )
+
             graph_service._save_and_cache(graph, ws)
     except Exception:
         logger.warning("Failed to update graph for duel")
