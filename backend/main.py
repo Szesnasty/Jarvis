@@ -35,22 +35,22 @@ except PackageNotFoundError:
 async def lifespan(app: FastAPI):
     settings = get_settings()
     db_path = settings.workspace_path / "app" / "jarvis.db"
-    if db_path.parent.exists():
-        await init_database(db_path)
-        # Reindex memory files so the DB stays in sync with files on disk
-        from services.memory_service import reindex_all
-        count = await reindex_all()
-        if count > 0:
-            logger.info("Startup reindex: %d notes indexed", count)
-        # Seed built-in specialists for existing workspaces
-        try:
-            from services.specialist_service import seed_builtin_specialists
-            seeded = seed_builtin_specialists()
-            if seeded:
-                logger.info("Seeded built-in specialists: %s", seeded)
-        except Exception as exc:
-            logger.debug("Specialist seeding skipped: %s", exc)
-        await start_workers()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    await init_database(db_path)
+    # Reindex memory files so the DB stays in sync with files on disk
+    from services.memory_service import reindex_all
+    count = await reindex_all()
+    if count > 0:
+        logger.info("Startup reindex: %d notes indexed", count)
+    # Seed built-in specialists for existing workspaces
+    try:
+        from services.specialist_service import seed_builtin_specialists
+        seeded = seed_builtin_specialists()
+        if seeded:
+            logger.info("Seeded built-in specialists: %s", seeded)
+    except Exception as exc:
+        logger.debug("Specialist seeding skipped: %s", exc)
+    await start_workers()
     yield
     await stop_workers()
 
