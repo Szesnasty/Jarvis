@@ -245,6 +245,13 @@
           Notes only
         </button>
       </div>
+      <label class="settings-page__toggle sharpen-section__battery" v-if="onBattery !== null">
+        <input type="checkbox" v-model="allowOnBattery" @change="updateBatterySetting" />
+        Allow processing on battery
+        <span class="sharpen-section__battery-hint" v-if="onBattery">
+          &nbsp;⚡ Currently on battery — {{ allowOnBattery ? 'worker will run' : 'worker paused' }}
+        </span>
+      </label>
       <!-- Progress bar -->
       <div class="sharpen-progress" v-if="sharpenTotal > 0">
         <div class="sharpen-progress__header">
@@ -683,6 +690,29 @@ async function runSharpen(includeJira: boolean) {
 const runSharpenAll = () => runSharpen(true)
 const runSharpenNotesOnly = () => runSharpen(false)
 
+// Battery toggle
+const allowOnBattery = ref(false)
+const onBattery = ref<boolean | null>(null) // null = not yet loaded
+
+async function loadEnrichmentSettings() {
+  try {
+    const resp = await $fetch<{ allow_on_battery: boolean; on_battery: boolean }>('/api/settings/enrichment')
+    allowOnBattery.value = resp.allow_on_battery
+    onBattery.value = resp.on_battery
+  } catch {
+    onBattery.value = null
+  }
+}
+
+async function updateBatterySetting() {
+  try {
+    await $fetch('/api/settings/enrichment', {
+      method: 'PATCH',
+      body: { allow_on_battery: allowOnBattery.value },
+    })
+  } catch { /* ignore */ }
+}
+
 // Restore progress state on mount (survives navigation / page refresh)
 onMounted(async () => {
   const saved = loadSharpenState()
@@ -693,6 +723,7 @@ onMounted(async () => {
     sharpenLastResult.value = saved.lastResult
   }
   await refreshSharpenQueue()
+  loadEnrichmentSettings()
   // If queue still has items and we had an active run, resume polling
   if (sharpenTotal.value > 0 && sharpenQueue.value &&
       (sharpenQueue.value.pending > 0 || sharpenQueue.value.processing > 0)) {
@@ -1540,5 +1571,13 @@ onBeforeUnmount(() => { stopSharpenPolling() })
   margin-top: 0.7rem;
   font-size: 0.82rem;
   color: var(--text-secondary);
+}
+.sharpen-section__battery {
+  margin-top: 0.6rem;
+  font-size: 0.84rem;
+}
+.sharpen-section__battery-hint {
+  font-size: 0.78rem;
+  color: rgba(250, 204, 21, 0.7);
 }
 </style>

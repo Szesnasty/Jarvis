@@ -97,3 +97,30 @@ async def get_usage_today():
 @router.get("/usage/history")
 async def get_usage_by_day():
     return token_tracking.get_usage_by_day()
+
+
+@router.get("/enrichment")
+async def get_enrichment_settings():
+    ws = get_settings().workspace_path
+    prefs = preference_service.load_preferences(workspace_path=ws)
+    from services.enrichment.runtime import is_on_battery_power
+    return {
+        "allow_on_battery": prefs.get("enrichment_allow_on_battery", "false") == "true",
+        "on_battery": is_on_battery_power(),
+    }
+
+
+@router.patch("/enrichment")
+async def update_enrichment_settings(body: dict):
+    ws = get_settings().workspace_path
+    allow = body.get("allow_on_battery")
+    if allow is not None:
+        preference_service.save_preference(
+            "enrichment_allow_on_battery",
+            "true" if allow else "false",
+            workspace_path=ws,
+        )
+    prefs = preference_service.load_preferences(workspace_path=ws)
+    return {
+        "allow_on_battery": prefs.get("enrichment_allow_on_battery", "false") == "true",
+    }
