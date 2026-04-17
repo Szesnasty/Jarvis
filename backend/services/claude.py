@@ -278,6 +278,25 @@ async def build_system_prompt(
     If graph_scope is provided, context is built from that node's
     neighborhood instead of full-text retrieval.
     """
+    prompt, _stats = await build_system_prompt_with_stats(
+        user_message, workspace_path=workspace_path, graph_scope=graph_scope,
+    )
+    return prompt
+
+
+async def build_system_prompt_with_stats(
+    user_message: str,
+    workspace_path=None,
+    graph_scope: Optional[str] = None,
+) -> tuple[str, dict]:
+    """Build the system prompt and return token-attribution stats.
+
+    Stats breaks the prompt into buckets so callers can log where tokens go:
+      - base_tokens: core SYSTEM_PROMPT + specialist directives
+      - context_tokens: retrieved notes / issues / decisions context block
+      - lang_tokens: language reminder footer
+      - total_tokens: sum (approx, 4 chars ≈ 1 token)
+    """
     from services import specialist_service
     from services.context_builder import build_graph_scoped_context
 
@@ -291,7 +310,7 @@ async def build_system_prompt(
             graph_scope, user_message, workspace_path=workspace_path,
         )
     else:
-        context, _tokens = await build_context(user_message, workspace_path=workspace_path)
+        context, _ctx_tokens = await build_context(user_message, workspace_path=workspace_path)
 
     # Detect user message language and append a final reminder AFTER any retrieved
     # context. Small models have recency bias — the last instruction before the
@@ -299,14 +318,23 @@ async def build_system_prompt(
     lang_reminder = _language_reminder(user_message)
 
     if not context:
-        return base + "\n\n" + lang_reminder
-    return (
-        base
-        + "\n\nHere are potentially relevant notes from the user's memory:\n"
-        + context
-        + "\n\n"
-        + lang_reminder
-    )
+        prompt = base + "\n\n" + lang_reminder
+    else:
+        prompt = (
+            base
+            + "\n\nHere are potentially relevant notes from the user's memory:\n"
+            + context
+            + "\n\n"
+            + lang_reminder
+        )
+
+    stats = {
+        "base_tokens": len(base) // 4,
+        "context_tokens": (len(context) // 4) if context else 0,
+        "lang_tokens": len(lang_reminder) // 4,
+        "total_tokens": len(prompt) // 4,
+    }
+    return prompt, stats
 
 
 def _language_reminder(user_message: str) -> str:

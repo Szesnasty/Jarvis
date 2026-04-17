@@ -88,9 +88,9 @@ async def test_prompt_injection_basic():
     with (
         patch("routers.chat.get_api_key", return_value=FAKE_API_KEY),
         patch("routers.chat.ClaudeService") as mock_cls,
-        patch("routers.chat.build_system_prompt", new_callable=AsyncMock) as mock_build,
+        patch("routers.chat.build_system_prompt_with_stats", new_callable=AsyncMock) as mock_build,
     ):
-        mock_build.return_value = SYSTEM_PROMPT
+        mock_build.return_value = (SYSTEM_PROMPT, {"base_tokens": 0, "context_tokens": 0, "lang_tokens": 0, "total_tokens": 0})
         mock_cls.return_value.stream_response = _capture_stream
 
         from starlette.testclient import TestClient
