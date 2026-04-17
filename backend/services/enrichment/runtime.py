@@ -16,6 +16,7 @@ from services.ollama_service import (
     get_active_local_model,
     probe_hardware,
 )
+from services import preference_service
 
 from .models import DEFAULT_BUSINESS_AREAS
 
@@ -147,3 +148,15 @@ def is_on_battery_power() -> bool:
             return False
 
     return False
+
+
+def should_pause_for_battery(workspace_path: Optional[Path] = None) -> bool:
+    """Return True if enrichment should pause due to battery power.
+
+    Respects the user preference 'enrichment_allow_on_battery'.
+    """
+    if not is_on_battery_power():
+        return False
+    ws = workspace(workspace_path)
+    prefs = preference_service.load_preferences(workspace_path=ws)
+    return prefs.get("enrichment_allow_on_battery", "false").lower() != "true"

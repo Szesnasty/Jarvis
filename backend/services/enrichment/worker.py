@@ -40,6 +40,7 @@ from .runtime import (
     load_business_areas,
     select_base_url,
     select_model_id,
+    should_pause_for_battery,
 )
 from .subjects import allowed_note_path, build_prompt, extract_json_text, fallback_keywords, load_subject_context, truncate
 
@@ -319,7 +320,7 @@ async def worker_loop(worker_idx: int, workspace_path: Optional[Path] = None) ->
     async with aiosqlite.connect(str(target)) as db:
         while _worker_running:
             try:
-                if is_on_battery_power():
+                if should_pause_for_battery(workspace_path):
                     await asyncio.sleep(5.0)
                     continue
 
