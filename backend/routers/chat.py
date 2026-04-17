@@ -7,7 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from services import session_service
 from services import specialist_service
-from services.claude import ClaudeService, StreamEvent, build_system_prompt
+from services.claude import ClaudeService, StreamEvent, build_system_prompt, build_system_prompt_with_stats
 from services.llm_service import LLMConfig, LLMService, DEFAULT_MODELS
 from services.tools import TOOLS, ToolNotFoundError, execute_tool
 from services.token_tracking import check_budget, log_usage
@@ -75,11 +75,90 @@ async def _emit_memory_changed(ws: WebSocket, tool_name: str, tool_input: dict) 
         await _send_event(ws, "memory_changed", path=path, action=tool_name)
 
 
+# Soft cap for a single tool_result sent to the model. Larger payloads are
+# truncated with head+tail preserved so the model can still reason about
+# structure without paying for the full blob in every subsequent tool round.
+_TOOL_RESULT_SOFT_CAP = 8000  # chars (~2000 tokens)
+# When tool rounds cascade (model calls another tool after seeing a result),
+# old tool_results in prior rounds are compacted more aggressively — the model
+# already "read" them, so we only keep a short reminder of the payload.
+_STALE_TOOL_RESULT_CAP = 600  # chars (~150 tokens)
+
+
+def _truncate_tool_result(text: str, cap: int) -> str:
+    """Truncate a tool_result keeping head + tail so structure is visible.
+
+    The marker tells the model the content is abbreviated, which preserves
+    reasoning quality for inspection-style questions ("did this field exist?").
+    """
+    if len(text) <= cap:
+        return text
+    head_len = int(cap * 0.7)
+    tail_len = cap - head_len - 80  # reserve space for marker
+    if tail_len < 40:
+        return text[:cap] + "\n... [truncated]"
+    return (
+        text[:head_len]
+        + f"\n\n... [truncated {len(text) - head_len - tail_len} chars for token budget] ...\n\n"
+        + text[-tail_len:]
+    )
+
+
+def _compact_stale_tool_results(messages: list[dict]) -> list[dict]:
+    """Compact older tool_results when we're about to send another tool round.
+
+    The *last* tool_result stays full (the model just received it). Earlier
+    tool_results get collapsed to ``_STALE_TOOL_RESULT_CAP`` chars — the model
+    has already used them, so a reminder is enough to keep citations intact.
+    """
+    # Find indices of tool_result blocks in user messages
+    tool_result_indices = []
+    for i, msg in enumerate(messages):
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                tool_result_indices.append(i)
+                break
+
+    if len(tool_result_indices) <= 1:
+        return messages  # nothing stale to compact
+
+    # Keep last one intact; compact everything earlier
+    stale_indices = set(tool_result_indices[:-1])
+    compacted: list[dict] = []
+    for i, msg in enumerate(messages):
+        if i not in stale_indices:
+            compacted.append(msg)
+            continue
+        new_content = []
+        for block in msg.get("content", []):
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                original = block.get("content", "")
+                if isinstance(original, str) and len(original) > _STALE_TOOL_RESULT_CAP:
+                    new_content.append({
+                        **block,
+                        "content": _truncate_tool_result(original, _STALE_TOOL_RESULT_CAP),
+                    })
+                else:
+                    new_content.append(block)
+            else:
+                new_content.append(block)
+        compacted.append({**msg, "content": new_content})
+    return compacted
+
+
 def _build_tool_messages(
     messages: list[dict],
     event: StreamEvent,
     result: str,
 ) -> list[dict]:
+    # Cap oversized tool results so a single huge read_note / search doesn't
+    # dominate the context budget of every subsequent tool round.
+    capped_result = _truncate_tool_result(result, _TOOL_RESULT_SOFT_CAP)
     return messages + [
         {
             "role": "assistant",
@@ -98,7 +177,7 @@ def _build_tool_messages(
                 {
                     "type": "tool_result",
                     "tool_use_id": event.tool_use_id,
-                    "content": result,
+                    "content": capped_result,
                 }
             ],
         },
@@ -154,6 +233,11 @@ async def _stream_follow_up(
             await _emit_memory_changed(ws, tool_event.name, tool_event.tool_input or {})
             next_messages = _build_tool_messages(next_messages, tool_event, result)
 
+        # Compact older tool_results before another round so the model doesn't
+        # re-pay for payloads it has already read. The most recent result stays
+        # intact; earlier ones are collapsed to a short reminder.
+        next_messages = _compact_stale_tool_results(next_messages)
+
         text += await _stream_follow_up(
             ws, claude, next_messages, system_prompt, tools,
             session_id, api_key, usage_acc, depth + 1,
@@ -203,7 +287,7 @@ async def _handle_message(
 
     session_service.add_message(session_id, "user", content)
     messages = session_service.get_messages(session_id)
-    system_prompt = await build_system_prompt(content, graph_scope=graph_scope)
+    system_prompt, prompt_stats = await build_system_prompt_with_stats(content, graph_scope=graph_scope)
     active_specs = specialist_service.get_active_specialists()
     tools = specialist_service.filter_tools(TOOLS, specialists=active_specs)
     # Check token budget before calling Claude
@@ -284,6 +368,7 @@ async def _handle_message(
                 usage_acc[0], usage_acc[1],
                 model=model or "claude-sonnet-4-20250514",
                 provider=provider or "anthropic",
+                context_tokens=prompt_stats.get("context_tokens", 0),
             )
         except Exception:
             logger.warning("Failed to log token usage")
