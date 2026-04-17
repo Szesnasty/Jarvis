@@ -116,10 +116,13 @@ async def test_post_deactivate_200(client, patch_settings):
 async def test_get_active_specialist(client, patch_settings):
     resp = await client.get("/api/specialists/active")
     assert resp.status_code == 200
-    assert resp.json()["active"] is None
+    assert resp.json() == []
 
     await client.post("/api/specialists", json=SAMPLE_DATA)
     await client.post("/api/specialists/activate/health-guide")
     resp = await client.get("/api/specialists/active")
     assert resp.status_code == 200
-    assert resp.json()["id"] == "health-guide"
+    data = resp.json()
+    assert isinstance(data, list)
+    assert len(data) == 1
+    assert data[0]["id"] == "health-guide"

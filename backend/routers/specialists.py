@@ -15,10 +15,7 @@ async def list_specialists():
 
 @router.get("/active")
 async def get_active():
-    active = specialist_service.get_active_specialist()
-    if active is None:
-        return {"active": None}
-    return active
+    return specialist_service.get_active_specialists()
 
 
 @router.get("/suggest")
