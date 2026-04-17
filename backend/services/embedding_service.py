@@ -169,6 +169,7 @@ async def search_similar(
 async def reindex_all(workspace_path: Optional[Path] = None) -> int:
     """Re-embed all notes (note-level + chunk-level) from markdown files. Returns count embedded."""
     from config import get_settings
+    from utils.markdown import parse_frontmatter
 
     ws = workspace_path or get_settings().workspace_path
     mem = ws / "memory"
@@ -184,9 +185,11 @@ async def reindex_all(workspace_path: Optional[Path] = None) -> int:
         embedded = await embed_note(rel_path, content, db_path)
         if embedded:
             count += 1
-        # Also embed chunks for this note
+        # Also embed chunks for this note - detect subject_type from frontmatter
         try:
-            await embed_note_chunks(rel_path, content, db_path)
+            fm, _ = parse_frontmatter(content)
+            subject_type = str(fm.get("type") or "note")
+            await embed_note_chunks(rel_path, content, db_path, subject_type=subject_type)
         except Exception:
             pass
     return count
@@ -337,6 +340,7 @@ async def search_similar_chunks(
 async def reindex_all_chunks(workspace_path: Optional[Path] = None) -> int:
     """Re-chunk and re-embed all notes. Returns count of chunks embedded."""
     from config import get_settings
+    from utils.markdown import parse_frontmatter
 
     ws = workspace_path or get_settings().workspace_path
     mem = ws / "memory"
@@ -350,7 +354,9 @@ async def reindex_all_chunks(workspace_path: Optional[Path] = None) -> int:
         content = md_file.read_text(encoding="utf-8", errors="replace")
         rel_path = str(md_file.relative_to(mem))
         try:
-            n = await embed_note_chunks(rel_path, content, db_path)
+            fm, _ = parse_frontmatter(content)
+            subject_type = str(fm.get("type") or "note")
+            n = await embed_note_chunks(rel_path, content, db_path, subject_type=subject_type)
             count += n
         except Exception as e:
             logger.warning("Failed to embed chunks for %s: %s", rel_path, e)
