@@ -245,11 +245,42 @@
           Notes only
         </button>
       </div>
-      <p v-if="sharpenLastResult" class="sharpen-section__result">
-        Enqueued <strong>{{ sharpenLastResult.queued_notes }}</strong> notes
-        and <strong>{{ sharpenLastResult.queued_jira }}</strong> Jira issues
-        (skipped {{ sharpenLastResult.skipped }}).
-      </p>
+      <!-- Progress bar -->
+      <div class="sharpen-progress" v-if="sharpenTotal > 0">
+        <div class="sharpen-progress__header">
+          <span class="sharpen-progress__label">
+            <span v-if="sharpenActive && sharpenProgress < 100" class="sharpen-progress__dot" />
+            <template v-if="sharpenProgress >= 100">
+              Done &mdash; <strong>{{ sharpenTotal }}</strong> items sharpened
+            </template>
+            <template v-else>
+              Processing&hellip; <strong>{{ sharpenDone }}</strong>&thinsp;/&thinsp;{{ sharpenTotal }} items
+            </template>
+          </span>
+          <span class="sharpen-progress__pct">{{ sharpenProgress }}&thinsp;%</span>
+        </div>
+        <div class="sharpen-progress__track">
+          <div
+            class="sharpen-progress__fill"
+            :class="{ 'sharpen-progress__fill--done': sharpenProgress >= 100 }"
+            :style="{ width: Math.max(sharpenProgress, sharpenTotal > 0 ? 1 : 0) + '%' }"
+          />
+          <div class="sharpen-progress__shimmer" v-if="sharpenActive && sharpenProgress < 100" />
+        </div>
+        <div class="sharpen-progress__footer">
+          <template v-if="sharpenProgress < 100 && sharpenQueue">
+            <span class="sharpen-progress__sub">{{ sharpenQueue.pending }} pending</span>
+            <span class="sharpen-progress__sub">{{ sharpenQueue.processing }} processing</span>
+          </template>
+          <span
+            class="sharpen-progress__sub sharpen-progress__sub--warn"
+            v-if="sharpenQueue && sharpenQueue.failed_last_hour > 0"
+          >{{ sharpenQueue.failed_last_hour }} failed (1h)</span>
+          <span class="sharpen-progress__sub sharpen-section__skipped" v-if="sharpenLastResult && sharpenLastResult.skipped > 0">
+            {{ sharpenLastResult.skipped }} skipped
+          </span>
+        </div>
+      </div>
     </section>
 
     <!-- Token Usage & Budget -->
@@ -544,7 +575,21 @@ type SharpenResult = { queued_notes: number; queued_jira: number; queued: number
 const sharpenQueue = ref<SharpenQueue | null>(null)
 const sharpenRunning = ref(false)
 const sharpenLastResult = ref<SharpenResult | null>(null)
+const sharpenTotal = ref(0)       // items enqueued by our last sharpen call
+const sharpenStartActive = ref(0) // pending+processing right after enqueue
+const sharpenActive = ref(false)  // true while worker is consuming our batch
 let sharpenPollTimer: ReturnType<typeof setInterval> | null = null
+
+const sharpenDone = computed((): number => {
+  if (!sharpenTotal.value) return 0
+  const current = (sharpenQueue.value?.pending ?? 0) + (sharpenQueue.value?.processing ?? 0)
+  return Math.min(sharpenTotal.value, Math.max(0, sharpenStartActive.value - current))
+})
+
+const sharpenProgress = computed((): number => {
+  if (!sharpenTotal.value) return 0
+  return Math.min(100, Math.round((sharpenDone.value / sharpenTotal.value) * 100))
+})
 
 async function refreshSharpenQueue() {
   try {
@@ -557,6 +602,7 @@ function startSharpenPolling() {
   sharpenPollTimer = setInterval(async () => {
     await refreshSharpenQueue()
     if (sharpenQueue.value && sharpenQueue.value.pending === 0 && sharpenQueue.value.processing === 0) {
+      sharpenActive.value = false
       stopSharpenPolling()
     }
   }, 3000)
@@ -572,15 +618,25 @@ function stopSharpenPolling() {
 async function runSharpen(includeJira: boolean) {
   if (sharpenRunning.value) return
   sharpenRunning.value = true
+  // reset progress for new run
+  sharpenTotal.value = 0
+  sharpenStartActive.value = 0
+  sharpenActive.value = false
+  stopSharpenPolling()
   try {
     const result = await $fetch<SharpenResult>('/api/enrichment/sharpen-all', {
       method: 'POST',
       body: { reason: 'manual_sharpen_all', include_notes: true, include_jira: includeJira },
     })
     sharpenLastResult.value = result
+    sharpenTotal.value = result.queued
     statusMsg.value = `Enqueued ${result.queued} items for local AI sharpening`
     await refreshSharpenQueue()
-    startSharpenPolling()
+    sharpenStartActive.value = (sharpenQueue.value?.pending ?? 0) + (sharpenQueue.value?.processing ?? 0)
+    if (result.queued > 0) {
+      sharpenActive.value = true
+      startSharpenPolling()
+    }
   } catch {
     statusMsg.value = 'Sharpen request failed'
   } finally {
@@ -1288,7 +1344,99 @@ onBeforeUnmount(() => { stopSharpenPolling() })
   padding: 0.45rem 0.7rem;
 }
 
-/* Sharpen with Local AI */
+/* Sharpen with Local AI — progress bar */
+.sharpen-progress {
+  margin-top: 1.1rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  padding: 0.85rem 1rem 0.75rem;
+}
+.sharpen-progress__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.83rem;
+  gap: 0.5rem;
+}
+.sharpen-progress__label {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.sharpen-progress__label strong {
+  color: var(--text-primary);
+}
+.sharpen-progress__dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(96, 165, 250, 0.9);
+  animation: sharpen-pulse 1.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes sharpen-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+.sharpen-progress__pct {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sharpen-progress__track {
+  position: relative;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.sharpen-progress__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0.65), rgba(147, 197, 253, 0.9));
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 4px;
+}
+.sharpen-progress__fill--done {
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.7), rgba(110, 231, 183, 0.95));
+}
+.sharpen-progress__shimmer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -80px;
+  width: 80px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  animation: sharpen-shimmer 2.2s ease-in-out infinite;
+}
+@keyframes sharpen-shimmer {
+  from { left: -80px; }
+  to { left: 100%; }
+}
+.sharpen-progress__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.45rem;
+}
+.sharpen-progress__sub {
+  font-size: 0.74rem;
+  color: rgba(255, 255, 255, 0.28);
+}
+.sharpen-progress__sub--warn {
+  color: rgba(248, 113, 113, 0.7);
+}
+.sharpen-section__skipped {
+  color: rgba(255, 255, 255, 0.22);
+}
+
 .settings-page__btn--primary {
   border-color: rgba(96, 165, 250, 0.45);
   color: rgba(147, 197, 253, 0.95);
