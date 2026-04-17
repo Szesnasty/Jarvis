@@ -62,7 +62,28 @@
         "backend/services/jira_ingest.py",
         "backend/models/database.py"
       ],
-      "depends_on": ["memory", "database"],
+      "depends_on": ["memory", "database", "enrichment-pipeline"],
+      "last_updated": "2026-04-17",
+      "status": "current"
+    },
+    "enrichment-pipeline": {
+      "doc": "docs/features/enrichment-pipeline.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/enrichment.py",
+        "backend/services/enrichment_service.py",
+        "backend/services/enrichment/__init__.py",
+        "backend/services/enrichment/models.py",
+        "backend/services/enrichment/runtime.py",
+        "backend/services/enrichment/subjects.py",
+        "backend/services/enrichment/repository.py",
+        "backend/services/enrichment/worker.py",
+        "backend/services/jira_ingest.py",
+        "backend/models/database.py",
+        "backend/main.py",
+        "backend/tests/test_enrichment_pipeline.py"
+      ],
+      "depends_on": ["jira-ingest", "local-models", "database"],
       "last_updated": "2026-04-17",
       "status": "current"
     },
@@ -77,6 +98,20 @@
         "backend/services/jira_ingest.py"
       ],
       "depends_on": ["jira-ingest", "knowledge-graph"],
+      "last_updated": "2026-04-17",
+      "status": "current"
+    },
+    "soft-edges": {
+      "doc": "docs/features/soft-edges.md",
+      "type": "feature",
+      "sources": [
+        "backend/services/graph_service/soft_edges.py",
+        "backend/services/graph_service/builder.py",
+        "backend/services/graph_service/__init__.py",
+        "backend/routers/graph.py",
+        "backend/tests/test_soft_edges.py"
+      ],
+      "depends_on": ["knowledge-graph", "enrichment-pipeline", "jira-graph"],
       "last_updated": "2026-04-17",
       "status": "current"
     },
@@ -217,7 +252,7 @@
         "backend/main.py"
       ],
       "depends_on": [],
-      "last_updated": "2026-04-14",
+      "last_updated": "2026-04-17",
       "status": "current"
     },
     "duel": {

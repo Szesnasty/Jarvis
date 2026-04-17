@@ -116,3 +116,52 @@ async def get_merge_candidates(entity_type: str = "person"):
 
     db_path = memory_service._db_path()
     return await find_merge_candidates(entity_type, db_path)
+
+
+@router.post("/rebuild-soft")
+async def rebuild_soft_edges_endpoint():
+    """Rebuild all derived (soft) edges. Returns stats."""
+    import asyncio
+    from services.graph_service.soft_edges import rebuild_soft_edges
+    from config import get_settings
+
+    graph = graph_service.load_graph()
+    if graph is None:
+        graph_service.invalidate_cache()
+        graph = await asyncio.to_thread(graph_service.rebuild_graph)
+
+    ws = get_settings().workspace_path
+    count = await asyncio.to_thread(rebuild_soft_edges, ws, graph)
+
+    # Save the updated graph
+    from services.graph_service.builder import _save_and_cache
+    _save_and_cache(graph)
+
+    return {"status": "ok", "edges_added": count}
+
+
+@router.get("/edges")
+async def get_edges(origin: str = None, type: str = None):
+    """List edges with optional origin/type filters."""
+    graph = graph_service.load_graph()
+    if graph is None:
+        return []
+
+    edges = graph.edges
+    if origin:
+        edges = [e for e in edges if e.origin == origin]
+    if type:
+        edges = [e for e in edges if e.type == type]
+
+    result = []
+    for e in edges:
+        d = {"source": e.source, "target": e.target, "type": e.type, "weight": e.weight}
+        if e.origin != "generic":
+            d["origin"] = e.origin
+        if e.evidence:
+            d["evidence"] = [
+                {"source_chunk": sc, "target_chunk": tc, "similarity": round(sim, 3)}
+                for sc, tc, sim in e.evidence
+            ]
+        result.append(d)
+    return result

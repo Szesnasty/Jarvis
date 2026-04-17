@@ -50,3 +50,8 @@ from services.graph_service.jira_projection import (  # noqa: F401
     project_jira,
     ProjectionStats,
 )
+
+# --- Soft Edges (step 22d) ---
+from services.graph_service.soft_edges import (  # noqa: F401
+    rebuild_soft_edges,
+)

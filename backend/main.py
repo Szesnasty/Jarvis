@@ -19,6 +19,8 @@ from routers.sessions import router as sessions_router
 from routers.settings import router as settings_router
 from routers.specialists import router as specialists_router
 from routers.workspace import router as workspace_router
+from routers.enrichment import router as enrichment_router
+from services.enrichment_service import start_workers, stop_workers
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,9 @@ async def lifespan(app: FastAPI):
         count = await reindex_all()
         if count > 0:
             logger.info("Startup reindex: %d notes indexed", count)
+        await start_workers()
     yield
+    await stop_workers()
 
 
 def create_app() -> FastAPI:
@@ -69,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_router)
     app.include_router(local_models_router)
     app.include_router(jira_router)
+    app.include_router(enrichment_router)
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):

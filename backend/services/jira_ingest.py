@@ -28,6 +28,7 @@ from defusedxml import ElementTree as DET
 
 from config import get_settings
 from models.database import init_database
+from services.enrichment_service import enqueue_jira_issue
 from utils.markdown import add_frontmatter
 
 logger = logging.getLogger(__name__)
@@ -937,6 +938,15 @@ async def run_import(
                     stats.inserted += 1
                 else:
                     stats.updated += 1
+
+                # Step 22c: async enrichment queue (cache key includes content_hash).
+                await enqueue_jira_issue(
+                    issue.issue_key,
+                    new_hash,
+                    reason="jira_import",
+                    workspace_path=workspace,
+                    db=db,
+                )
 
                 # Commit in small batches for crash safety on huge imports.
                 if (stats.inserted + stats.updated) % 50 == 0:

@@ -7,7 +7,8 @@ sources:
   - backend/models/schemas.py
   - backend/main.py
 depends_on: []
-last_reviewed: 2026-04-14
+last_reviewed: 2026-04-17
+last_updated: 2026-04-17
 ---
 
 # Database Layer
@@ -28,6 +29,8 @@ The main table is `notes`, which stores indexed metadata for each Markdown file:
 
 On top of `notes`, the schema creates an FTS5 virtual table (`notes_fts`) that indexes the `title`, `body`, and `tags` columns. SQLite triggers (`notes_ai`, `notes_au`, `notes_ad`) keep the FTS index in sync automatically after every insert, update, or delete on `notes`. This means full-text search is always up to date without any manual sync step.
 
+The same initialization path also provisions operational tables for Jira ingest and local enrichment (`issues`, related Jira join tables, `enrichments`, and `enrichment_queue`). These tables are indexes and caches over Markdown sources, not canonical user data stores.
+
 ### Initialization
 
 The database is initialized on server startup via a FastAPI `lifespan` handler in `main.py`, before any request is served. The `init_database(db_path)` function handles both first-time creation and upgrades for existing databases. It creates the `notes` table (idempotently, using `CREATE TABLE IF NOT EXISTS`), then checks for the `body` column separately and adds it via `ALTER TABLE` if it is absent — this is a forward-compatibility migration for databases created before the `body` column was introduced.
@@ -42,7 +45,7 @@ After ensuring the schema is correct, `init_database` checks whether the existin
 
 - `backend/models/database.py` — Defines the SQLite schema, FTS virtual table, sync triggers, and the `init_database` async function that creates or migrates the database on first use.
 - `backend/models/schemas.py` — Pydantic models for all API request and response bodies across every router.
-- `backend/main.py` — FastAPI application factory; registers all routers but does not initialize the database directly — that happens lazily via the memory service.
+- `backend/main.py` — FastAPI application factory and lifespan hook; initializes the database on startup and starts background workers that depend on DB state.
 - `backend/services/memory_service.py` — The primary caller of `init_database`; triggers database creation the first time notes are read or indexed.
 
 ## API / Interface
