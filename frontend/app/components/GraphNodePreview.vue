@@ -12,6 +12,18 @@
     <div v-if="loading" class="node-preview__loading">Loading…</div>
 
     <template v-if="detail && !loading">
+      <!-- Jira metadata badges -->
+      <div v-if="jiraMetadata.length" class="node-preview__meta">
+        <span
+          v-for="item in jiraMetadata"
+          :key="item.key"
+          class="node-preview__meta-badge"
+          :data-field="item.key"
+        >
+          <span class="node-preview__meta-key">{{ item.key }}</span>
+          <span class="node-preview__meta-value">{{ item.value }}</span>
+        </span>
+      </div>
       <!-- Preview text for notes -->
       <div v-if="renderedPreview" class="node-preview__excerpt-wrapper">
         <div
@@ -93,9 +105,9 @@
           Ask about this
         </button>
         <button
-          v-if="node.type === 'note'"
+          v-if="canOpenInMemory"
           class="node-preview__action-btn node-preview__action-btn--secondary"
-          @click="$emit('open-in-memory', node.id.replace('note:', ''))"
+          @click="$emit('open-in-memory', openInMemoryPath)"
         >
           Open in Memory
         </button>
@@ -128,12 +140,40 @@ const detail = ref<GraphNodeDetail | null>(null)
 const loading = ref(false)
 const expanded = ref(false)
 
-const typeColor: Record<string, string> = {
-  note: 'rgba(2, 254, 255, 0.25)',
-  tag: 'rgba(52, 211, 153, 0.25)',
-  person: 'rgba(192, 132, 252, 0.25)',
-  area: 'rgba(251, 146, 60, 0.25)',
-}
+const typeColor = computed<string>(() => {
+  const palette: Record<string, string> = {
+    note:           'rgba(2, 254, 255, 0.25)',
+    tag:            'rgba(52, 211, 153, 0.25)',
+    person:         'rgba(192, 132, 252, 0.25)',
+    area:           'rgba(251, 146, 60, 0.25)',
+    jira_issue:     'rgba(96, 165, 250, 0.3)',
+    jira_epic:      'rgba(244, 114, 182, 0.3)',
+    jira_project:   'rgba(250, 204, 21, 0.3)',
+    jira_person:    'rgba(192, 132, 252, 0.25)',
+    jira_sprint:    'rgba(34, 211, 238, 0.3)',
+    jira_label:     'rgba(163, 230, 53, 0.25)',
+    jira_component: 'rgba(249, 115, 22, 0.3)',
+  }
+  return palette[props.node.type] ?? 'rgba(148, 163, 184, 0.25)'
+})
+
+// Surfaced Jira metadata (shown as compact badge row)
+const JIRA_META_FIELDS = [
+  'issue_type',
+  'status',
+  'priority',
+  'assignee',
+  'epic',
+  'sprint',
+] as const
+const jiraMetadata = computed(() => {
+  if (!detail.value?.metadata) return [] as Array<{ key: string; value: string }>
+  const md = detail.value.metadata as Record<string, unknown>
+  return JIRA_META_FIELDS
+    .map(k => ({ key: k, value: md[k] }))
+    .filter(e => e.value !== undefined && e.value !== null && e.value !== '')
+    .map(e => ({ key: e.key, value: String(e.value) }))
+})
 
 const renderedPreview = computed(() => {
   if (!detail.value?.preview) return ''
@@ -142,6 +182,14 @@ const renderedPreview = computed(() => {
 })
 
 const isLongPreview = computed(() => (detail.value?.preview?.length ?? 0) > 300)
+
+const openInMemoryPath = computed<string>(() => {
+  if (detail.value?.note_path) return detail.value.note_path
+  if (props.node.type === 'note') return props.node.id.replace('note:', '')
+  return ''
+})
+
+const canOpenInMemory = computed<boolean>(() => !!openInMemoryPath.value)
 
 async function loadDetail(nodeId: string) {
   loading.value = true
@@ -228,6 +276,45 @@ function otherNodeLabel(edge: GraphEdge): string {
   color: var(--text-muted);
   font-style: italic;
 }
+
+.node-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.node-preview__meta-badge {
+  display: inline-flex;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  padding: 0.18rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: var(--text-secondary);
+  line-height: 1.2;
+}
+
+.node-preview__meta-key {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.6rem;
+  align-self: center;
+}
+
+.node-preview__meta-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Per-field accents */
+.node-preview__meta-badge[data-field="status"]    { border-color: rgba(34, 211, 238, 0.4); }
+.node-preview__meta-badge[data-field="priority"]  { border-color: rgba(239, 68, 68, 0.4); }
+.node-preview__meta-badge[data-field="issue_type"]{ border-color: rgba(96, 165, 250, 0.4); }
+.node-preview__meta-badge[data-field="epic"]      { border-color: rgba(244, 114, 182, 0.45); }
+.node-preview__meta-badge[data-field="sprint"]    { border-color: rgba(22, 211, 238, 0.4); }
+.node-preview__meta-badge[data-field="assignee"]  { border-color: rgba(192, 132, 252, 0.4); }
 
 .node-preview__excerpt-wrapper {
   display: flex;

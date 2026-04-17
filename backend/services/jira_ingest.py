@@ -138,7 +138,12 @@ class Issue:
 
     @property
     def note_path(self) -> str:
-        return f"memory/jira/{self.project_key}/{self.issue_key}.md"
+        # Relative to the `memory/` root — matches the convention used by
+        # every other note type (inbox/foo.md, knowledge/bar.md, …). This is
+        # the string stored in `notes.path`, `issues.note_path`,
+        # `note_embeddings.path` and `chunk_embeddings.path`, and is the
+        # identifier used by the REST API at /api/memory/notes/{path}.
+        return f"jira/{self.project_key}/{self.issue_key}.md"
 
     def canonical_payload(self) -> str:
         """Stable string used for content_hash.
@@ -997,7 +1002,7 @@ async def run_import(
                     (issue.issue_key,),
                 )
                 row = await cursor.fetchone()
-                md_path = workspace / issue.note_path
+                md_path = workspace / "memory" / issue.note_path
                 if row and row[0] == new_hash:
                     # Ensure the Markdown file still exists (user may have deleted it).
                     if md_path.exists():
@@ -1123,7 +1128,12 @@ async def backfill_notes_and_embeddings(
             note_path = row["note_path"]
             if not note_path:
                 continue
-            md_file = workspace / note_path
+            # Backfill must tolerate both legacy rows (stored with a
+            # "memory/" prefix) and current rows (stored without it).
+            if note_path.startswith("memory/"):
+                md_file = workspace / note_path
+            else:
+                md_file = workspace / "memory" / note_path
             if not md_file.exists():
                 continue
             try:
