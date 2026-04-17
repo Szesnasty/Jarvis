@@ -396,6 +396,15 @@ async def _handle_duel(
 
 @router.websocket("/ws")
 async def chat_ws(websocket: WebSocket) -> None:
+    # Origin allowlist check — CORSMiddleware does not cover WebSocket
+    # handshakes, so enforce it manually to prevent cross-site WS hijacking.
+    from config import get_settings as _get_settings
+    origin = websocket.headers.get("origin")
+    allowed_origins = _get_settings().cors_origins
+    if origin is not None and origin not in allowed_origins:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
 
     # Allow resuming an existing session via query param (e.g. after reconnect)
