@@ -675,9 +675,9 @@ let sharpenPollTimer: ReturnType<typeof setInterval> | null = null
 
 const sharpenDone = computed((): number => {
   if (!sharpenTotal.value) return 0
-  const completedNow = toFiniteNumber(sharpenQueue.value?.completed_total, 0)
-  const completedStart = toFiniteNumber(sharpenCompletedAtStart.value, 0)
-  return Math.min(sharpenTotal.value, Math.max(0, completedNow - completedStart))
+  const pending = toFiniteNumber(sharpenQueue.value?.pending, 0)
+  const processing = toFiniteNumber(sharpenQueue.value?.processing, 0)
+  return Math.min(sharpenTotal.value, Math.max(0, sharpenTotal.value - pending - processing))
 })
 
 const sharpenProgress = computed((): number => {
