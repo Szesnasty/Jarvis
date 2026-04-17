@@ -4,7 +4,7 @@
 > Jira users are distinct node types, and project the Jira-reported
 > relations from `issue_links` into typed graph edges with high weight.
 
-**Status**: ⬜ Not started
+**Status**: ✅ Complete
 **Depends on**: 22a, step-08 (graph model), step-14a (entity extraction)
 **Effort**: ~2 days
 

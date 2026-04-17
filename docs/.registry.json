@@ -66,6 +66,20 @@
       "last_updated": "2026-04-17",
       "status": "current"
     },
+    "jira-graph": {
+      "doc": "docs/features/jira-graph.md",
+      "type": "feature",
+      "sources": [
+        "backend/services/graph_service/jira_projection.py",
+        "backend/services/graph_service/models.py",
+        "backend/services/graph_service/builder.py",
+        "backend/services/graph_service/__init__.py",
+        "backend/services/jira_ingest.py"
+      ],
+      "depends_on": ["jira-ingest", "knowledge-graph"],
+      "last_updated": "2026-04-17",
+      "status": "current"
+    },
     "knowledge-graph": {
       "doc": "docs/features/knowledge-graph.md",
       "type": "feature",

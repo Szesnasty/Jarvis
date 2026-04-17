@@ -140,9 +140,9 @@
 
 | Step | Title | Status | Order |
 |------|-------|--------|-------|
-| [22-overview](step-22-jira-knowledge-overview.md) | Jira knowledge layer: overview + architecture + gap analysis | ⬜ | — |
-| [22a](step-22a-jira-ingest.spec.md) | Jira XML/CSV streaming ingest + `issues` table + Markdown emission | ⬜ | → 1st |
-| [22b](step-22b-jira-entities-graph.spec.md) | Jira node types + explicit (hard) graph edges | ⬜ | → 2nd |
+| [22-overview](step-22-jira-knowledge-overview.md) | Jira knowledge layer: overview + architecture + gap analysis | ✅ | — |
+| [22a](step-22a-jira-ingest.spec.md) | Jira XML/CSV streaming ingest + `issues` table + Markdown emission | ✅ |→ 1st |
+| [22b](step-22b-jira-entities-graph.spec.md) | Jira node types + explicit (hard) graph edges | ✅ | → 2nd |
 | [22c](step-22c-local-enrichment.spec.md) | Local-model enrichment pipeline (classification / risk / ambiguity / summary) | ⬜ | → 3rd |
 | [22d](step-22d-soft-edges.spec.md) | Soft edges (same_topic / likely_dependency / business_area) with confidence | ⬜ | → 3rd ∥ |
 | [22e](step-22e-cross-source-linking.spec.md) | Cross-source linking: issue ↔ note / decision / doc, intra-file chunk edges | ⬜ | → 4th |

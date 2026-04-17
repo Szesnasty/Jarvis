@@ -946,6 +946,20 @@ async def run_import(
             stats.bytes_processed = file_path.stat().st_size
             stats.project_keys = sorted(project_keys_seen)
 
+        # Project imported issues into the knowledge graph (step 22b)
+        if stats.inserted > 0 or stats.updated > 0:
+            try:
+                from services.graph_service.builder import load_graph, _save_and_cache
+                from services.graph_service.jira_projection import project_jira
+                from services.graph_service.models import Graph
+
+                graph = load_graph(workspace) or Graph()
+                project_jira(workspace, graph)
+                _save_and_cache(graph, workspace)
+                logger.info("Jira graph projection completed for %d issues", stats.issue_count)
+            except Exception as exc:
+                logger.warning("Jira graph projection failed (non-fatal): %s", exc)
+
     except Exception as exc:
         error_message = f"{type(exc).__name__}: {exc}"
         logger.exception("Jira import failed")
