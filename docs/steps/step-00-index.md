@@ -132,6 +132,23 @@
 | [21c](step-21c-local-models-onboarding.spec.md) | Local models onboarding: Cloud vs Local choice, keyless workspace creation | ✅ | → 3rd |
 | [21d](step-21d-local-models-integration.spec.md) | Local models integration: tool calling, timeouts, health monitoring, warm-up | ✅ | → 4th |
 
+## Phase 16 — Jira as First-Class Knowledge + Cross-Source Context
+
+> **Execution order**: 22a → 22b → 22c ∥ 22d → 22e → 22f → 22g
+> Ingest first, then projection, then local-model enrichment and soft edges
+> in parallel, then cross-source linking, retrieval, specialist.
+
+| Step | Title | Status | Order |
+|------|-------|--------|-------|
+| [22-overview](step-22-jira-knowledge-overview.md) | Jira knowledge layer: overview + architecture + gap analysis | ⬜ | — |
+| [22a](step-22a-jira-ingest.spec.md) | Jira XML/CSV streaming ingest + `issues` table + Markdown emission | ⬜ | → 1st |
+| [22b](step-22b-jira-entities-graph.spec.md) | Jira node types + explicit (hard) graph edges | ⬜ | → 2nd |
+| [22c](step-22c-local-enrichment.spec.md) | Local-model enrichment pipeline (classification / risk / ambiguity / summary) | ⬜ | → 3rd |
+| [22d](step-22d-soft-edges.spec.md) | Soft edges (same_topic / likely_dependency / business_area) with confidence | ⬜ | → 3rd ∥ |
+| [22e](step-22e-cross-source-linking.spec.md) | Cross-source linking: issue ↔ note / decision / doc, intra-file chunk edges | ⬜ | → 4th |
+| [22f](step-22f-jira-retrieval.spec.md) | Jira-aware hybrid retrieval with facets, boosts and structured context | ⬜ | → 5th |
+| [22g](step-22g-jira-strategist.spec.md) | `Jira Strategist` specialist + sprint/blocker tools + Duel presets | ⬜ | → 6th |
+
 ---
 
 ## Execution Rule
