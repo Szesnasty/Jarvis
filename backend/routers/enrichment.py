@@ -13,6 +13,7 @@ from services.enrichment_service import (
     get_latest_enrichment,
     queue_status,
     rerun,
+    sharpen_all,
 )
 
 router = APIRouter(prefix="/api/enrichment", tags=["enrichment"])
@@ -40,6 +41,23 @@ async def rerun_enrichment(body: RerunRequest) -> dict:
         subject_ids=body.subject_ids,
     )
     return {"queued": queued}
+
+
+class SharpenAllRequest(BaseModel):
+    reason: str = Field(default="manual_sharpen_all", min_length=1, max_length=200)
+    include_notes: bool = True
+    include_jira: bool = True
+
+
+@router.post("/sharpen-all", status_code=202)
+async def sharpen_all_endpoint(body: SharpenAllRequest | None = None) -> dict:
+    """Enqueue every note and Jira issue for local-AI enrichment in one click."""
+    payload = body or SharpenAllRequest()
+    return await sharpen_all(
+        reason=payload.reason,
+        include_notes=payload.include_notes,
+        include_jira=payload.include_jira,
+    )
 
 
 @router.get("/{subject_type}/{subject_id:path}")

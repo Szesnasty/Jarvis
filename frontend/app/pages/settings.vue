@@ -209,6 +209,49 @@
       </div>
     </section>
 
+    <!-- Sharpen all (local AI enrichment) -->
+    <section class="settings-page__section sharpen-section">
+      <h2 class="settings-page__section-title">Sharpen with Local AI</h2>
+      <p class="sharpen-section__lead">
+        One-click pass through your local LLM to enrich every note and Jira issue
+        with summaries, tags and entities — improves retrieval quality and graph density.
+        Runs entirely on your machine via Ollama. No API calls to Anthropic.
+      </p>
+      <div class="sharpen-section__meta">
+        <span class="sharpen-section__chip">
+          Model: <strong>{{ sharpenQueue?.model_id || 'auto' }}</strong>
+        </span>
+        <span class="sharpen-section__chip" v-if="sharpenQueue">
+          Queue: <strong>{{ sharpenQueue.pending }}</strong> pending /
+          <strong>{{ sharpenQueue.processing }}</strong> processing
+        </span>
+        <span class="sharpen-section__chip sharpen-section__chip--warn" v-if="sharpenQueue && sharpenQueue.failed_last_hour > 0">
+          Failed (1h): {{ sharpenQueue.failed_last_hour }}
+        </span>
+      </div>
+      <div class="settings-page__actions">
+        <button
+          class="settings-page__btn settings-page__btn--primary"
+          :disabled="sharpenRunning"
+          @click="runSharpenAll"
+        >
+          {{ sharpenRunning ? 'Enqueuing…' : 'Sharpen all notes & issues' }}
+        </button>
+        <button
+          class="settings-page__btn"
+          :disabled="sharpenRunning"
+          @click="runSharpenNotesOnly"
+        >
+          Notes only
+        </button>
+      </div>
+      <p v-if="sharpenLastResult" class="sharpen-section__result">
+        Enqueued <strong>{{ sharpenLastResult.queued_notes }}</strong> notes
+        and <strong>{{ sharpenLastResult.queued_jira }}</strong> Jira issues
+        (skipped {{ sharpenLastResult.skipped }}).
+      </p>
+    </section>
+
     <!-- Token Usage & Budget -->
     <section class="settings-page__section budget-section">
       <h2 class="settings-page__section-title">Token Usage & Budget</h2>
@@ -340,7 +383,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import type { ProviderConfig } from '~/types'
 import { ICON_LOCK } from '~/composables/providerIcons'
 
@@ -493,6 +536,63 @@ async function rebuildGraphAction() {
     statusMsg.value = 'Rebuild failed'
   }
 }
+
+// ── Sharpen with Local AI ──
+type SharpenQueue = { pending: number; processing: number; failed_last_hour: number; model_id: string }
+type SharpenResult = { queued_notes: number; queued_jira: number; queued: number; skipped: number; model_id: string }
+
+const sharpenQueue = ref<SharpenQueue | null>(null)
+const sharpenRunning = ref(false)
+const sharpenLastResult = ref<SharpenResult | null>(null)
+let sharpenPollTimer: ReturnType<typeof setInterval> | null = null
+
+async function refreshSharpenQueue() {
+  try {
+    sharpenQueue.value = await $fetch<SharpenQueue>('/api/enrichment/queue')
+  } catch { /* non-critical */ }
+}
+
+function startSharpenPolling() {
+  if (sharpenPollTimer) return
+  sharpenPollTimer = setInterval(async () => {
+    await refreshSharpenQueue()
+    if (sharpenQueue.value && sharpenQueue.value.pending === 0 && sharpenQueue.value.processing === 0) {
+      stopSharpenPolling()
+    }
+  }, 3000)
+}
+
+function stopSharpenPolling() {
+  if (sharpenPollTimer) {
+    clearInterval(sharpenPollTimer)
+    sharpenPollTimer = null
+  }
+}
+
+async function runSharpen(includeJira: boolean) {
+  if (sharpenRunning.value) return
+  sharpenRunning.value = true
+  try {
+    const result = await $fetch<SharpenResult>('/api/enrichment/sharpen-all', {
+      method: 'POST',
+      body: { reason: 'manual_sharpen_all', include_notes: true, include_jira: includeJira },
+    })
+    sharpenLastResult.value = result
+    statusMsg.value = `Enqueued ${result.queued} items for local AI sharpening`
+    await refreshSharpenQueue()
+    startSharpenPolling()
+  } catch {
+    statusMsg.value = 'Sharpen request failed'
+  } finally {
+    sharpenRunning.value = false
+  }
+}
+
+const runSharpenAll = () => runSharpen(true)
+const runSharpenNotesOnly = () => runSharpen(false)
+
+onMounted(() => { refreshSharpenQueue() })
+onBeforeUnmount(() => { stopSharpenPolling() })
 </script>
 
 <style scoped>
@@ -1186,5 +1286,55 @@ async function rebuildGraphAction() {
   border: 1px solid rgba(248, 113, 113, 0.2);
   border-radius: 6px;
   padding: 0.45rem 0.7rem;
+}
+
+/* Sharpen with Local AI */
+.settings-page__btn--primary {
+  border-color: rgba(96, 165, 250, 0.45);
+  color: rgba(147, 197, 253, 0.95);
+  background: rgba(59, 130, 246, 0.08);
+}
+.settings-page__btn--primary:hover:not(:disabled) {
+  border-color: rgba(96, 165, 250, 0.7);
+  background: rgba(59, 130, 246, 0.16);
+  color: #fff;
+}
+.settings-page__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.sharpen-section__lead {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 0.4rem 0 0.85rem;
+}
+.sharpen-section__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.sharpen-section__chip {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+}
+.sharpen-section__chip strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.sharpen-section__chip--warn {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: rgba(248, 113, 113, 0.9);
+  background: rgba(248, 113, 113, 0.06);
+}
+.sharpen-section__result {
+  margin-top: 0.7rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
 }
 </style>

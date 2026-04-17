@@ -51,7 +51,16 @@ def fallback_keywords(*parts: str) -> list[str]:
 
 def allowed_note_path(subject_id: str) -> bool:
     s = subject_id.replace("\\", "/")
-    return s.startswith("memory/projects/") or s.startswith("memory/decisions/")
+    if not s.startswith("memory/") or not s.endswith(".md"):
+        return False
+    # Skip system/config folders that aren't user knowledge
+    blocked = (
+        "memory/preferences/",
+        "memory/examples/",
+        "memory/attachments/",
+        "memory/jira/_config",
+    )
+    return not any(s.startswith(b) for b in blocked)
 
 
 async def load_subject_context(

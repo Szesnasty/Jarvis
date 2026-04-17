@@ -7,6 +7,7 @@ from .repository import (
     get_latest_enrichment,
     queue_status,
     rerun,
+    sharpen_all,
 )
 from .worker import start_workers, stop_workers
 
@@ -18,6 +19,7 @@ __all__ = [
     "queue_status",
     "get_latest_enrichment",
     "rerun",
+    "sharpen_all",
     "start_workers",
     "stop_workers",
 ]
