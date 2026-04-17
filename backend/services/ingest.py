@@ -9,7 +9,7 @@ from config import get_settings
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf"}
+SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".csv", ".xml"}
 
 
 class IngestError(Exception):
@@ -101,6 +101,17 @@ async def fast_ingest(
         fm = _make_frontmatter(title, str(file_path))
         target = _unique_path(folder / md_name)
         target.write_text(fm + text, encoding="utf-8")
+
+    elif ext in (".csv", ".xml"):
+        from services.structured_ingest import ingest_structured_file
+        result = await ingest_structured_file(
+            file_path,
+            target_folder=target_folder,
+            workspace_path=workspace_path,
+            original_name=display_name,
+        )
+        # Structured ingest handles its own indexing and graph rebuild
+        return result
 
     else:
         raise IngestError(f"Unsupported: {ext}")

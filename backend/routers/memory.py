@@ -127,7 +127,8 @@ async def semantic_search_endpoint(
     }
 
 
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB (supports large Jira CSV/XML exports)
+_UPLOAD_CHUNK = 1024 * 1024  # 1 MB chunks when streaming uploads to disk
 _FOLDER_RE = re.compile(r"^[a-zA-Z0-9-]+$")
 
 
@@ -142,14 +143,26 @@ async def ingest_file(
     if not _FOLDER_RE.match(folder):
         raise HTTPException(status_code=400, detail="Invalid folder name")
 
+    # Stream the upload to a temp file in chunks so we never hold the
+    # full payload in memory (large Jira exports can be hundreds of MB).
+    written = 0
     with tempfile.NamedTemporaryFile(
         delete=False,
         suffix=Path(file.filename or "upload").suffix,
     ) as tmp:
-        content = await file.read()
-        if len(content) > MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
-        tmp.write(content)
+        while True:
+            chunk = await file.read(_UPLOAD_CHUNK)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > MAX_UPLOAD_BYTES:
+                tmp.close()
+                Path(tmp.name).unlink(missing_ok=True)
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)",
+                )
+            tmp.write(chunk)
         tmp_path = Path(tmp.name)
 
     try:
