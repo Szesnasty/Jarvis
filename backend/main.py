@@ -11,6 +11,7 @@ from models.database import init_database
 from models.schemas import HealthResponse
 from routers.chat import router as chat_router
 from routers.graph import router as graph_router
+from routers.jira import router as jira_router
 from routers.local_models import router as local_models_router
 from routers.memory import router as memory_router
 from routers.preferences import router as preferences_router
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(specialists_router)
     app.include_router(settings_router)
     app.include_router(local_models_router)
+    app.include_router(jira_router)
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):

@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="0.92">
+  <channel>
+    <title>Jarvis Test Fixture</title>
+    <item>
+      <title>[ONB-142] Session expires during onboarding wizard</title>
+      <link>https://jira.example.com/browse/ONB-142</link>
+      <project key="ONB">Onboarding</project>
+      <key>ONB-142</key>
+      <summary>Session expires during onboarding wizard</summary>
+      <type>Bug</type>
+      <priority>High</priority>
+      <status>In Progress</status>
+      <assignee>michal.kowalski</assignee>
+      <reporter>anna.nowak</reporter>
+      <created>Sun, 8 Mar 2026 10:11:00 +0000</created>
+      <updated>Tue, 14 Apr 2026 16:03:00 +0000</updated>
+      <due>Tue, 21 Apr 2026 00:00:00 +0000</due>
+      <description>Session dies after 5 minutes. {code:js}setTimeout(logout, 300000){code}
+
+Need longer session for onboarding flow.</description>
+      <labels>
+        <label>onboarding</label>
+        <label>auth</label>
+        <label>session</label>
+      </labels>
+      <component>web-auth</component>
+      <component>onboarding-flow</component>
+      <customfields>
+        <customfield id="customfield_10100" key="com.atlassian.jira.plugin.system.customfieldtypes:sprint">
+          <customfieldvalues>
+            <customfieldvalue>com.atlassian.greenhopper.service.sprint.Sprint@abc123[id=14,rapidViewId=2,state=ACTIVE,name=Onboarding Sprint 14,goal=,startDate=2026-04-01,endDate=2026-04-15]</customfieldvalue>
+          </customfieldvalues>
+        </customfield>
+        <customfield id="customfield_10014" key="com.pyxis.greenhopper.jira:gh-epic-link">
+          <customfieldvalues>
+            <customfieldvalue>ONB-100</customfieldvalue>
+          </customfieldvalues>
+        </customfield>
+      </customfields>
+      <issuelinks>
+        <issuelinktype id="10003">
+          <name>Blocks</name>
+          <outwardlinks description="blocks">
+            <issuelink>
+              <issuekey>ONB-150</issuekey>
+            </issuelink>
+          </outwardlinks>
+          <inwardlinks description="is blocked by">
+            <issuelink>
+              <issuekey>AUTH-88</issuekey>
+            </issuelink>
+          </inwardlinks>
+        </issuelinktype>
+        <issuelinktype id="10004">
+          <name>Relates</name>
+          <outwardlinks description="relates to">
+            <issuelink>
+              <issuekey>ONB-141</issuekey>
+            </issuelink>
+          </outwardlinks>
+        </issuelinktype>
+      </issuelinks>
+      <comments>
+        <comment author="anna.nowak" created="Wed, 11 Mar 2026 09:00:00 +0000">Can reproduce on staging.</comment>
+        <comment author="michal.kowalski" created="Tue, 14 Apr 2026 16:03:00 +0000">Working on a fix, will extend timeout to 30 minutes.</comment>
+      </comments>
+    </item>
+    <item>
+      <title>[ONB-150] Add progress bar to onboarding wizard</title>
+      <link>https://jira.example.com/browse/ONB-150</link>
+      <project key="ONB">Onboarding</project>
+      <key>ONB-150</key>
+      <summary>Add progress bar to onboarding wizard</summary>
+      <type>Story</type>
+      <priority>Medium</priority>
+      <status>To Do</status>
+      <assignee>anna.nowak</assignee>
+      <reporter>pm.lead</reporter>
+      <created>Mon, 9 Mar 2026 12:00:00 +0000</created>
+      <updated>Thu, 10 Apr 2026 11:00:00 +0000</updated>
+      <description>Users lose context during onboarding.
+
+h2. Acceptance criteria
+
+* Show progress for each step
+* Allow going back</description>
+      <labels>
+        <label>onboarding</label>
+      </labels>
+      <component>onboarding-flow</component>
+      <customfields>
+        <customfield id="customfield_10014" key="com.pyxis.greenhopper.jira:gh-epic-link">
+          <customfieldvalues>
+            <customfieldvalue>ONB-100</customfieldvalue>
+          </customfieldvalues>
+        </customfield>
+      </customfields>
+      <issuelinks>
+        <issuelinktype id="10003">
+          <name>Blocks</name>
+          <inwardlinks description="is blocked by">
+            <issuelink>
+              <issuekey>ONB-142</issuekey>
+            </issuelink>
+          </inwardlinks>
+        </issuelinktype>
+      </issuelinks>
+      <comments />
+    </item>
+    <item>
+      <title>[ONB-100] Onboarding v2</title>
+      <link>https://jira.example.com/browse/ONB-100</link>
+      <project key="ONB">Onboarding</project>
+      <key>ONB-100</key>
+      <summary>Onboarding v2</summary>
+      <type>Epic</type>
+      <priority>High</priority>
+      <status>In Progress</status>
+      <assignee>pm.lead</assignee>
+      <reporter>pm.lead</reporter>
+      <created>Mon, 1 Feb 2026 09:00:00 +0000</created>
+      <updated>Wed, 15 Apr 2026 09:00:00 +0000</updated>
+      <description>Rewrite the onboarding flow for v2.</description>
+      <labels />
+      <customfields />
+      <issuelinks />
+      <comments />
+    </item>
+    <item>
+      <title>[AUTH-88] Session service hardening</title>
+      <link>https://jira.example.com/browse/AUTH-88</link>
+      <project key="AUTH">Authentication</project>
+      <key>AUTH-88</key>
+      <summary>Session service hardening</summary>
+      <type>Task</type>
+      <priority>High</priority>
+      <status>In Progress</status>
+      <assignee>michal.kowalski</assignee>
+      <reporter>michal.kowalski</reporter>
+      <created>Mon, 10 Feb 2026 08:00:00 +0000</created>
+      <updated>Wed, 15 Apr 2026 15:00:00 +0000</updated>
+      <description>Rework session expiry handling.</description>
+      <labels>
+        <label>auth</label>
+        <label>session</label>
+      </labels>
+      <component>web-auth</component>
+      <customfields />
+      <issuelinks>
+        <issuelinktype id="10003">
+          <name>Blocks</name>
+          <outwardlinks description="blocks">
+            <issuelink>
+              <issuekey>ONB-142</issuekey>
+            </issuelink>
+          </outwardlinks>
+        </issuelinktype>
+      </issuelinks>
+      <comments />
+    </item>
+    <item>
+      <title>[ONB-141] Misleading error messages in onboarding</title>
+      <link>https://jira.example.com/browse/ONB-141</link>
+      <project key="ONB">Onboarding</project>
+      <key>ONB-141</key>
+      <summary>Misleading error messages in onboarding</summary>
+      <type>Bug</type>
+      <priority>Low</priority>
+      <status>Done</status>
+      <assignee>anna.nowak</assignee>
+      <reporter>anna.nowak</reporter>
+      <created>Thu, 5 Mar 2026 11:00:00 +0000</created>
+      <updated>Fri, 3 Apr 2026 12:00:00 +0000</updated>
+      <description>Error message uses technical jargon.</description>
+      <labels>
+        <label>onboarding</label>
+        <label>ux</label>
+      </labels>
+      <customfields />
+      <issuelinks />
+      <comments />
+    </item>
+  </channel>
+</rss>

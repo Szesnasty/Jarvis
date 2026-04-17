@@ -1,0 +1,5 @@
+Issue key,Summary,Issue Type,Status,Priority,Assignee,Reporter,Created,Updated,Project key,Labels,Labels,Sprint,Sprint,Component/s,Description,Custom field (Epic Link),Outward issue link (Blocks),Inward issue link (Blocks),Inward issue link (Blocks),Comment
+ONB-142,Session expires during onboarding wizard,Bug,In Progress,High,michal.kowalski,anna.nowak,08/Mar/26 10:11 AM,14/Apr/26 04:03 PM,ONB,onboarding,auth,Onboarding Sprint 14,,web-auth,Session dies after 5 minutes,ONB-100,ONB-150,AUTH-88,,11/Mar/26 09:00 AM;anna.nowak;Can reproduce on staging.
+ONB-150,Add progress bar to onboarding wizard,Story,To Do,Medium,anna.nowak,pm.lead,09/Mar/26 12:00 PM,10/Apr/26 11:00 AM,ONB,onboarding,,Onboarding Sprint 14,,onboarding-flow,Show progress during onboarding,ONB-100,,ONB-142,,
+AUTH-88,Session service hardening,Task,In Progress,High,michal.kowalski,michal.kowalski,10/Feb/26 08:00 AM,15/Apr/26 03:00 PM,AUTH,auth,session,Auth Sprint 3,,web-auth,Rework session expiry,,ONB-142,,,
+ONB-100,Onboarding v2,Epic,In Progress,High,pm.lead,pm.lead,01/Feb/26 09:00 AM,15/Apr/26 09:00 AM,ONB,,,,,,,Rewrite the onboarding flow,,,,,

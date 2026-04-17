@@ -127,6 +127,100 @@ CREATE INDEX IF NOT EXISTS idx_alias_canonical ON entity_aliases(canonical_id);
 """
 
 
+# Step 22a: Jira issues + links + sprints + labels + components + comments + imports
+JIRA_SQL = """
+CREATE TABLE IF NOT EXISTS issues (
+    issue_key       TEXT PRIMARY KEY,
+    project_key     TEXT NOT NULL,
+    title           TEXT NOT NULL,
+    description     TEXT NOT NULL DEFAULT '',
+    issue_type      TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    status_category TEXT,
+    priority        TEXT,
+    assignee        TEXT,
+    reporter        TEXT,
+    epic_key        TEXT,
+    parent_key      TEXT,
+    due_date        TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL,
+    source_url      TEXT,
+    note_path       TEXT NOT NULL,
+    content_hash    TEXT NOT NULL,
+    imported_at     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_issues_project   ON issues(project_key);
+CREATE INDEX IF NOT EXISTS idx_issues_status    ON issues(status_category);
+CREATE INDEX IF NOT EXISTS idx_issues_assignee  ON issues(assignee);
+CREATE INDEX IF NOT EXISTS idx_issues_updated   ON issues(updated_at);
+CREATE INDEX IF NOT EXISTS idx_issues_epic      ON issues(epic_key);
+
+CREATE TABLE IF NOT EXISTS issue_labels (
+    issue_key TEXT NOT NULL,
+    label     TEXT NOT NULL,
+    PRIMARY KEY (issue_key, label),
+    FOREIGN KEY (issue_key) REFERENCES issues(issue_key) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS issue_components (
+    issue_key TEXT NOT NULL,
+    component TEXT NOT NULL,
+    PRIMARY KEY (issue_key, component),
+    FOREIGN KEY (issue_key) REFERENCES issues(issue_key) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS issue_sprints (
+    issue_key    TEXT NOT NULL,
+    sprint_name  TEXT NOT NULL,
+    sprint_state TEXT,
+    PRIMARY KEY (issue_key, sprint_name),
+    FOREIGN KEY (issue_key) REFERENCES issues(issue_key) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS issue_links (
+    source_key TEXT NOT NULL,
+    target_key TEXT NOT NULL,
+    link_type  TEXT NOT NULL,
+    direction  TEXT NOT NULL,
+    PRIMARY KEY (source_key, target_key, link_type, direction)
+);
+
+CREATE INDEX IF NOT EXISTS idx_links_target ON issue_links(target_key);
+
+CREATE TABLE IF NOT EXISTS issue_comments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    issue_key   TEXT NOT NULL,
+    author      TEXT,
+    created_at  TEXT,
+    body        TEXT,
+    FOREIGN KEY (issue_key) REFERENCES issues(issue_key) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_issue ON issue_comments(issue_key);
+
+CREATE TABLE IF NOT EXISTS jira_imports (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename        TEXT NOT NULL,
+    format          TEXT NOT NULL,
+    project_keys    TEXT NOT NULL DEFAULT '[]',
+    issue_count     INTEGER NOT NULL DEFAULT 0,
+    inserted        INTEGER NOT NULL DEFAULT 0,
+    updated         INTEGER NOT NULL DEFAULT 0,
+    skipped         INTEGER NOT NULL DEFAULT 0,
+    bytes_processed INTEGER NOT NULL DEFAULT 0,
+    duration_ms     INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'running',
+    error           TEXT,
+    started_at      TEXT NOT NULL,
+    finished_at     TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_imports_started ON jira_imports(started_at);
+"""
+
+
 _VALID_TABLES = {"notes"}
 
 
@@ -181,4 +275,5 @@ async def init_database(db_path: Path) -> None:
         await db.executescript(CHUNKS_SQL)
         await db.executescript(NODE_EMBEDDINGS_SQL)
         await db.executescript(ENTITY_ALIASES_SQL)
+        await db.executescript(JIRA_SQL)
         await db.commit()

@@ -12,6 +12,7 @@ duckduckgo-search==7.5.1
 markdownify==1.2.2
 lxml_html_clean==0.4.4
 pdfplumber==0.11.9
+defusedxml==0.7.1  # safe XML parsing for Jira imports (step 22a)
 litellm==1.83.7
 fastembed==0.8.0  # local embeddings for semantic search
 psutil==7.2.2  # hardware detection for local model recommendations
