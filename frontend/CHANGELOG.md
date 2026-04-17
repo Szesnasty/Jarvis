@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.4.1...frontend-v0.5.0) (2026-04-17)
+
+
+### ✨ Features
+
+* **enrichment:** add Cancel button to stop sharpen queue ([cf7e00d](https://github.com/Szesnasty/Jarvis/commit/cf7e00d6c1c714787785d155d611edbb3d4767dd))
+* **enrichment:** one-click 'sharpen all' via local AI from Settings ([0a5f25d](https://github.com/Szesnasty/Jarvis/commit/0a5f25dfa53f2a1d03c1130ec81f327b5afede15))
+* **ingest:** support large jira csv/xml imports ([08eb0c9](https://github.com/Szesnasty/Jarvis/commit/08eb0c9ac86de7c85a66bd3c8d9d024ab81c455e))
+* Jira import UX, graph colors, and node preview improvements ([e55708e](https://github.com/Szesnasty/Jarvis/commit/e55708eeb8e96192005f4c07d854b80712b448bd))
+* **settings:** battery toggle for enrichment worker ([8006cbf](https://github.com/Szesnasty/Jarvis/commit/8006cbf4ea4bb88c2782124a5153551387925280))
+* **settings:** progress bar for local AI sharpening ([9cb9650](https://github.com/Szesnasty/Jarvis/commit/9cb9650a13e1fd438826a30dcbc17bbad5d55920))
+* **settings:** selectable enrichment model and robust sharpen progress ([330fd12](https://github.com/Szesnasty/Jarvis/commit/330fd1269e745adc2ff5bb4de46f0d9aee962ef6))
+
+
+### 🐛 Bug Fixes
+
+* **settings:** persist sharpen progress across navigation ([9dcb37d](https://github.com/Szesnasty/Jarvis/commit/9dcb37d127af02bccae6e566850d961a4b8e0965))
+* **settings:** prevent NaN in sharpen progress state restore ([234f0e2](https://github.com/Szesnasty/Jarvis/commit/234f0e2985b8da8401f5fdf066e778bb08f37410))
+* **tests:** update frontend accept attribute assertions for csv/xml ([122aa3f](https://github.com/Szesnasty/Jarvis/commit/122aa3f3d6f3c631306c417913b2abbfe23d5f04))
+
 ## [0.4.1](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.4.0...frontend-v0.4.1) (2026-04-16)
 
 
