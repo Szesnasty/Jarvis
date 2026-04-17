@@ -61,6 +61,7 @@ def load_graph(workspace_path: Optional[Path] = None) -> Optional[Graph]:
             source=e["source"], target=e["target"],
             type=e["type"], weight=e.get("weight", 1.0),
             evidence=evidence,
+            origin=e.get("origin", "generic"),
         )
         if edge not in graph.edges:
             graph.edges.append(edge)
@@ -194,6 +195,11 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
         content = md_file.read_text(encoding="utf-8")
         fm, body = parse_frontmatter(content)
 
+        # Skip Jira issue Markdown files — they get proper jira_issue nodes
+        # from the Jira projection pass (step 22b).
+        if fm.get("type") == "jira_issue":
+            continue
+
         note_id = f"note:{rel}"
         folder = str(md_file.relative_to(mem).parent) if "/" in rel else ""
         graph.add_node(note_id, "note", fm.get("title", md_file.stem), folder=folder)
@@ -249,7 +255,20 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
     # Pass 7: Prune overloaded tags
     prune_overloaded_tags(graph)
 
-    # Pass 8: Embed node labels for semantic anchoring (step 20b)
+    # Pass 8: Jira graph projection (step 22b)
+    ws = workspace_path or get_settings().workspace_path
+    try:
+        from services.graph_service.jira_projection import project_jira
+        jira_stats = project_jira(ws, graph)
+        if jira_stats.issues > 0:
+            logger.info(
+                "Jira projection: %d issues, %d edges added",
+                jira_stats.issues, jira_stats.edges_added,
+            )
+    except Exception as exc:
+        logger.debug("Jira projection skipped: %s", exc)
+
+    # Pass 9: Embed node labels for semantic anchoring (step 20b)
     if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") != "1":
         try:
             from services.embedding_service import embed_graph_nodes, is_available

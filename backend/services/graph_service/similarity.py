@@ -298,7 +298,7 @@ def prune_overloaded_tags(graph: Graph, max_degree: int = 30) -> None:
     pruned: List[Edge] = []
     for edge in graph.edges:
         if edge.type == "tagged" and (edge.source in overloaded or edge.target in overloaded):
-            pruned.append(Edge(source=edge.source, target=edge.target, type=edge.type, weight=0.05))
+            pruned.append(Edge(source=edge.source, target=edge.target, type=edge.type, weight=0.05, origin=edge.origin))
         else:
             pruned.append(edge)
 

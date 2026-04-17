@@ -44,3 +44,9 @@ from services.graph_service.queries import (  # noqa: F401
     ingest_note,
     query_entity,
 )
+
+# --- Jira Projection (step 22b) ---
+from services.graph_service.jira_projection import (  # noqa: F401
+    project_jira,
+    ProjectionStats,
+)

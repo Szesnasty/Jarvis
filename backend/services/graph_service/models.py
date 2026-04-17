@@ -24,6 +24,7 @@ class Edge:
     type: str
     weight: float = 1.0
     evidence: tuple = ()  # ((source_chunk_idx, target_chunk_idx, similarity), ...)
+    origin: str = "generic"  # provenance: "generic", "jira", "derived", etc.
 
 
 @dataclass
@@ -35,10 +36,16 @@ class Graph:
         if node_id not in self.nodes:
             self.nodes[node_id] = Node(id=node_id, type=node_type, label=label, folder=folder)
 
-    def add_edge(self, source: str, target: str, edge_type: str, weight: float = 1.0) -> None:
-        edge = Edge(source=source, target=target, type=edge_type, weight=weight)
+    def add_edge(self, source: str, target: str, edge_type: str, weight: float = 1.0, origin: str = "generic") -> None:
+        edge = Edge(source=source, target=target, type=edge_type, weight=weight, origin=origin)
         if edge not in self.edges:
             self.edges.append(edge)
+
+    def remove_edges_by_origin(self, origin: str) -> int:
+        """Remove all edges with the given origin. Returns count removed."""
+        before = len(self.edges)
+        self.edges = [e for e in self.edges if e.origin != origin]
+        return before - len(self.edges)
 
     def get_neighbors(self, node_id: str, depth: int = 1) -> List[Dict]:
         if depth < 1 or node_id not in self.nodes:
@@ -75,6 +82,8 @@ class Graph:
                 "source": e.source, "target": e.target,
                 "type": e.type, "weight": e.weight,
             }
+            if e.origin != "generic":
+                edge_dict["origin"] = e.origin
             if e.evidence:
                 edge_dict["evidence"] = [
                     {"source_chunk": sc, "target_chunk": tc, "similarity": round(sim, 3)}
@@ -171,6 +180,6 @@ def apply_edge_weights(graph: Graph) -> None:
             weight = round(base * idf.get(tag_id, 0.5), 3)
         else:
             weight = base
-        updated.append(Edge(source=edge.source, target=edge.target, type=edge.type, weight=weight))
+        updated.append(Edge(source=edge.source, target=edge.target, type=edge.type, weight=weight, origin=edge.origin))
 
     graph.edges = updated
