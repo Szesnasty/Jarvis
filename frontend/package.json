@@ -13,12 +13,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "crossws": "^0.4.5",
-    "dompurify": "^3.3.3",
-    "force-graph": "^1.51.2",
-    "marked": "^18.0.0",
+    "crossws": "0.4.5",
+    "dompurify": "3.4.0",
+    "force-graph": "1.51.2",
+    "marked": "18.0.0",
     "nuxt": "4.4.2",
-    "three": "^0.183.2",
+    "three": "0.183.2",
     "vue": "3.5.32",
     "vue-router": "5.0.4"
   },

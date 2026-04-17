@@ -61,9 +61,49 @@ def _is_private_host(hostname: str) -> bool:
     """Check if a hostname resolves to a private/internal IP address."""
     try:
         ip = ipaddress.ip_address(socket.gethostbyname(hostname))
-        return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+        return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
     except Exception:
         return True  # fail safe — block if we can't resolve
+
+
+def _safe_fetch(url: str, headers: dict, timeout: int = 15, max_redirects: int = 5):
+    """Fetch URL with manual redirect handling + SSRF check on every hop.
+
+    Security: requests' default auto-redirect would bypass the initial
+    _is_private_host() check — a public URL could redirect to
+    http://169.254.169.254/ (cloud metadata), http://127.0.0.1:11434/
+    (local Ollama), etc. We validate each hop explicitly.
+    """
+    import requests
+
+    current = url
+    for _ in range(max_redirects + 1):
+        parsed_host = urlparse(current).hostname
+        if not parsed_host:
+            raise IngestError(f"Invalid URL: {current}")
+        if _is_private_host(parsed_host):
+            raise IngestError(f"URL resolves to a private/internal address: {current}")
+
+        response = requests.get(
+            current,
+            headers=headers,
+            timeout=timeout,
+            verify=True,
+            allow_redirects=False,
+        )
+        if response.is_redirect or response.is_permanent_redirect:
+            location = response.headers.get("location")
+            if not location:
+                response.raise_for_status()
+                return response
+            # Resolve relative redirects against the current URL
+            from urllib.parse import urljoin
+            current = urljoin(current, location)
+            continue
+        response.raise_for_status()
+        return response
+
+    raise IngestError(f"Too many redirects fetching {url}")
 
 
 def _now_iso() -> str:
@@ -218,13 +258,12 @@ async def _ingest_webpage(
 ) -> Dict:
     import trafilatura
     from markdownify import markdownify as md
-    import requests
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
 
-    # SSRF protection: block private/internal network requests
+    # SSRF protection: block private/internal network requests (re-checked on each redirect)
     parsed_host = urlparse(url).hostname
     if not parsed_host:
         raise IngestError(f"Invalid URL: {url}")
@@ -233,9 +272,10 @@ async def _ingest_webpage(
 
     downloaded = None
     try:
-        response = requests.get(url, headers=headers, timeout=15, verify=True)
-        response.raise_for_status()
+        response = _safe_fetch(url, headers=headers, timeout=15)
         downloaded = response.text
+    except IngestError:
+        raise
     except Exception as exc:
         raise IngestError(f"Could not fetch URL: {url} ({exc})")
 
