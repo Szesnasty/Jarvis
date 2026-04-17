@@ -42,7 +42,7 @@ from .runtime import (
     select_model_id,
     should_pause_for_battery,
 )
-from .subjects import allowed_note_path, build_prompt, extract_json_text, fallback_keywords, load_subject_context, truncate
+from .subjects import allowed_note_path, build_prompt, extract_json_text, fallback_keywords, load_subject_context
 
 logger = logging.getLogger(__name__)
 
@@ -115,17 +115,17 @@ def normalize_payload(
     business_area, changed = coerce_enum(raw_payload.get("business_area"), ba_allowed)
     enum_remaps += int(changed)
 
-    summary = truncate(str(raw_payload.get("summary") or "").strip(), 280)
-    actionable = truncate(str(raw_payload.get("actionable_next_step") or "").strip(), 200)
+    summary = str(raw_payload.get("summary") or "").strip()
+    actionable = str(raw_payload.get("actionable_next_step") or "").strip()
     if not summary:
-        summary = truncate(f"No summary generated for {subject_id}", 280)
+        summary = f"No summary generated for {subject_id}"
     if not actionable:
         actionable = "Clarify scope and define the next concrete action."
 
     concerns_raw = raw_payload.get("hidden_concerns")
     concerns: list[str] = []
     if isinstance(concerns_raw, list):
-        concerns = [str(x).strip() for x in concerns_raw if str(x).strip()][:5]
+        concerns = [str(x).strip() for x in concerns_raw if str(x).strip()]
 
     keywords_raw = raw_payload.get("keywords")
     keywords: list[str] = []
@@ -133,8 +133,6 @@ def normalize_payload(
         keywords = [str(x).strip().lower() for x in keywords_raw if str(x).strip()]
     if len(keywords) < 3:
         keywords = fallback_keywords(summary, actionable)
-    else:
-        keywords = keywords[:8]
 
     issue_keys: list[str] = []
     if subject_type == SUBJECT_JIRA:
@@ -145,8 +143,6 @@ def normalize_payload(
                 k = str(key).strip().upper()
                 if k in whitelist_set and k not in issue_keys:
                     issue_keys.append(k)
-                if len(issue_keys) >= 10:
-                    break
 
     related_notes: list[str] = []
     if subject_type == SUBJECT_NOTE:
@@ -156,8 +152,6 @@ def normalize_payload(
                 s = str(p).strip().replace("\\", "/")
                 if s and allowed_note_path(s) and s not in related_notes:
                     related_notes.append(s)
-                if len(related_notes) >= 10:
-                    break
 
     normalized = {
         "summary": summary,

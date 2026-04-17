@@ -7,7 +7,7 @@ import aiosqlite
 import pytest
 
 from models.database import init_database
-from services.enrichment.models import SUBJECT_JIRA
+from services.enrichment.models import SUBJECT_JIRA, PROMPT_VERSION
 from services.enrichment.repository import (
     cache_hit_exists,
     enqueue_jira_issue,
@@ -97,9 +97,9 @@ async def test_cache_hit_no_model_call(ws: Path):
             INSERT INTO enrichments(
                 subject_type, subject_id, content_hash, model_id, prompt_version,
                 status, payload, created_at
-            ) VALUES(?, ?, ?, ?, 1, 'ok', ?, '2026-04-17T00:00:00Z')
+            ) VALUES(?, ?, ?, ?, ?, 'ok', ?, '2026-04-17T00:00:00Z')
             """,
-            (SUBJECT_JIRA, "ONB-2", "h2", model_id, '{"summary":"ok","actionable_next_step":"x","work_type":"feature","business_area":"unknown","execution_type":"implementation","risk_level":"low","ambiguity_level":"clear","hidden_concerns":[],"likely_related_issue_keys":[],"likely_related_note_paths":[],"keywords":["one","two","three"]}'),
+            (SUBJECT_JIRA, "ONB-2", "h2", model_id, PROMPT_VERSION, '{"summary":"ok","actionable_next_step":"x","work_type":"feature","business_area":"unknown","execution_type":"implementation","risk_level":"low","ambiguity_level":"clear","hidden_concerns":[],"likely_related_issue_keys":[],"likely_related_note_paths":[],"keywords":["one","two","three"]}'),
         )
         await db.commit()
 
