@@ -72,6 +72,7 @@
       "type": "feature",
       "sources": [
         "backend/routers/enrichment.py",
+        "backend/routers/settings.py",
         "backend/services/enrichment_service.py",
         "backend/services/enrichment/__init__.py",
         "backend/services/enrichment/models.py",
@@ -82,10 +83,11 @@
         "backend/services/jira_ingest.py",
         "backend/models/database.py",
         "backend/main.py",
+        "frontend/app/pages/settings.vue",
         "backend/tests/test_enrichment_pipeline.py"
       ],
       "depends_on": ["jira-ingest", "local-models", "database"],
-      "last_updated": "2026-04-17",
+      "last_updated": "2025-07-20",
       "status": "current"
     },
     "jira-graph": {

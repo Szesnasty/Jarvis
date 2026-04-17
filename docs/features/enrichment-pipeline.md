@@ -4,6 +4,7 @@ status: active
 type: feature
 sources:
   - backend/routers/enrichment.py
+  - backend/routers/settings.py
   - backend/services/enrichment_service.py
   - backend/services/enrichment/__init__.py
   - backend/services/enrichment/models.py
@@ -14,10 +15,11 @@ sources:
   - backend/services/jira_ingest.py
   - backend/models/database.py
   - backend/main.py
+  - frontend/app/pages/settings.vue
   - backend/tests/test_enrichment_pipeline.py
 depends_on: [jira-ingest, local-models, database]
-last_reviewed: 2026-04-17
-last_updated: 2026-04-17
+last_reviewed: 2025-07-20
+last_updated: 2025-07-20
 ---
 
 # Enrichment Pipeline
@@ -48,12 +50,16 @@ Each result is stored in `enrichments` with status `ok` or `failed`. Failures ne
 - `backend/models/database.py` - `enrichments`, `enrichment_queue`, and `latest_enrichment` schema.
 - `backend/services/jira_ingest.py` - Enqueues jobs after insert/update.
 - `backend/main.py` - Starts/stops enrichment workers in app lifespan.
+- `backend/routers/settings.py` - `GET/PATCH /api/settings/enrichment` for battery toggle and model selection.
+- `frontend/app/pages/settings.vue` - Sharpen section UI: model dropdown, progress bar, battery toggle, quality dots.
 
 ## API / Interface
 
-- `GET /api/enrichment/queue` -> `{ pending, processing, failed_last_hour, model_id }`
+- `GET /api/enrichment/queue` -> `{ pending, processing, failed_last_hour, completed_total, model_id }`
 - `POST /api/enrichment/rerun` -> requeue selected or failed subjects
 - `GET /api/enrichment/{subject_type}/{subject_id}` -> latest successful enrichment payload
+- `GET /api/settings/enrichment` -> `{ allow_on_battery, on_battery, model_id }`
+- `PATCH /api/settings/enrichment` -> update `allow_on_battery` (bool) and/or `model_id` (string); model_id persisted to `~/Jarvis/app/config.json` → `enrichment.model_id`
 
 ## Gotchas
 
