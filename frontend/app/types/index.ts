@@ -189,6 +189,7 @@ export interface SpecialistDetail {
   id: string
   name: string
   role: string
+  system_prompt?: string
   sources: string[]
   style: { tone?: string; format?: string; length?: string }
   rules: string[]
