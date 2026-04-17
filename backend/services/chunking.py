@@ -1,14 +1,34 @@
 """Markdown chunking service for chunk-level embeddings.
 
-Splits markdown notes into meaningful chunks by heading boundaries,
-with sliding window fallback for long sections. Each chunk carries
-context (title, section heading) so embeddings know provenance.
+Multi-granularity strategy: each note produces several *kinds* of chunks
+that intentionally overlap so retrieval has many high-signal targets.
+
+For a single Jira issue we typically emit:
+  1. **Anchor chunk** – frontmatter summary (key, title, status, priority,
+     assignee, epic, sprint).  Strong target for "OPS-26"-style queries.
+  2. **Section chunks** – one chunk per markdown section (Description,
+     Acceptance criteria, Technical notes, Comments, …).  When a section
+     is long, it is split with a sliding window of ~50 % overlap.
+  3. **Bullet chunks** – sections that contain a list (acceptance
+     criteria, reproduction steps, comments) also emit one chunk per
+     bullet so each criterion is independently retrievable.
+  4. **Coarse cross-section windows** – a single sliding window is rolled
+     over the *entire* body so chunks span heading boundaries.  This
+     gives multi-section context that pure section chunks miss.
+
+Chunks share text on purpose – the resulting overlap massively increases
+recall at retrieval time for relatively little extra storage.
 """
 
 from dataclasses import dataclass
 from typing import List, Optional
 
 from utils.markdown import parse_frontmatter
+
+
+# --------------------------------------------------------------------------- #
+# Heading / structural parsing                                                 #
+# --------------------------------------------------------------------------- #
 
 
 @dataclass
@@ -43,10 +63,64 @@ def _find_headings(body: str) -> List[_HeadingMatch]:
     return matches
 
 
+def _extract_bullets(section_text: str) -> List[str]:
+    """Return individual bullet items found in *section_text*.
+
+    Recognises ``* foo``, ``- foo`` and ``1. foo`` style lists.  Multi-line
+    bullets (continuation indented or wrapped) are joined into one item.
+    Returns an empty list if fewer than two bullets are present (so we
+    don't waste an embedding on a single-line list).
+    """
+    items: List[str] = []
+    current: List[str] = []
+
+    def flush() -> None:
+        if current:
+            text = " ".join(s.strip() for s in current).strip()
+            if text:
+                items.append(text)
+            current.clear()
+
+    for raw_line in section_text.split("\n"):
+        line = raw_line.rstrip()
+        stripped = line.lstrip()
+
+        is_bullet = False
+        payload = ""
+        if stripped.startswith(("* ", "- ", "+ ")):
+            is_bullet = True
+            payload = stripped[2:].strip()
+        elif len(stripped) > 2 and stripped[0].isdigit():
+            # numbered list: "1. foo" / "12) foo"
+            i = 0
+            while i < len(stripped) and stripped[i].isdigit():
+                i += 1
+            if i + 1 < len(stripped) and stripped[i] in ".)" and stripped[i + 1] == " ":
+                is_bullet = True
+                payload = stripped[i + 2:].strip()
+
+        if is_bullet:
+            flush()
+            current.append(payload)
+        elif current and stripped and (raw_line.startswith(" ") or raw_line.startswith("\t")):
+            # continuation of previous bullet
+            current.append(stripped)
+        else:
+            flush()
+
+    flush()
+    return items if len(items) >= 2 else []
+
+
+# --------------------------------------------------------------------------- #
+# Token utilities                                                              #
+# --------------------------------------------------------------------------- #
+
+
 @dataclass
 class Chunk:
     index: int
-    section_title: str  # "" for intro, "## Goals" for a section
+    section_title: str  # "" for intro / synthetic, "## Goals" for a section
     text: str
     token_count: int  # approximate: len(text.split())
 
@@ -60,53 +134,104 @@ def _sliding_window(
     context_prefix: str,
     max_tokens: int,
     overlap_tokens: int,
-    start_index: int,
     section_title: str,
 ) -> List[Chunk]:
-    """Split a long text block into overlapping windows."""
+    """Split *text* into overlapping windows.  Index is filled later."""
     words = text.split()
     chunks: List[Chunk] = []
+    if not words:
+        return chunks
+
     pos = 0
-    idx = start_index
+    step = max(1, max_tokens - overlap_tokens)
 
     while pos < len(words):
         end = min(pos + max_tokens, len(words))
-        window_text = " ".join(words[pos:end])
-        full_text = f"{context_prefix}{window_text}" if context_prefix else window_text
+        window = " ".join(words[pos:end])
+        full = f"{context_prefix}{window}" if context_prefix else window
         chunks.append(Chunk(
-            index=idx,
+            index=0,
             section_title=section_title,
-            text=full_text,
-            token_count=_approx_tokens(full_text),
+            text=full,
+            token_count=_approx_tokens(full),
         ))
-        idx += 1
         if end >= len(words):
             break
-        pos = end - overlap_tokens
+        pos += step
 
     return chunks
+
+
+# --------------------------------------------------------------------------- #
+# Anchor chunk (frontmatter summary)                                           #
+# --------------------------------------------------------------------------- #
+
+
+# Frontmatter keys, in display order, that should appear in the anchor chunk
+# for *any* note.  Jira-specific fields are added on top when the subject is
+# a jira_issue.
+_ANCHOR_FIELDS_GENERIC = ("title", "tags", "type")
+_ANCHOR_FIELDS_JIRA = (
+    "issue_key",
+    "title",
+    "issue_type",
+    "status",
+    "priority",
+    "assignee",
+    "reporter",
+    "epic",
+    "parent",
+    "sprint",
+    "components",
+    "labels",
+)
+
+
+def _anchor_text(fm: dict, subject_kind: str) -> str:
+    """Synthesise a one-line summary of the note for the anchor chunk."""
+    fields = _ANCHOR_FIELDS_JIRA if subject_kind == "jira_issue" else _ANCHOR_FIELDS_GENERIC
+    parts: List[str] = []
+    for key in fields:
+        val = fm.get(key)
+        if val in (None, "", [], {}):
+            continue
+        if isinstance(val, list):
+            val = ", ".join(str(v) for v in val if v)
+            if not val:
+                continue
+        parts.append(f"{key}: {val}")
+    return ". ".join(parts)
+
+
+# --------------------------------------------------------------------------- #
+# Public API                                                                   #
+# --------------------------------------------------------------------------- #
 
 
 def chunk_markdown(
     content: str,
     title: str = "",
     tags: Optional[List[str]] = None,
-    max_chunk_tokens: int = 300,
-    overlap_tokens: int = 50,
+    max_chunk_tokens: int = 220,
+    overlap_tokens: int = 110,            # ~50 % overlap
+    min_window_tokens: int = 60,          # sections shorter than this stay one chunk
+    coarse_window_tokens: int = 260,      # cross-section pass window size
+    coarse_overlap_tokens: int = 130,     # cross-section overlap
     subject_kind: str = "note",
+    multi_granularity: bool = True,
 ) -> List[Chunk]:
-    """Split markdown content into semantically meaningful chunks.
+    """Split markdown content into many overlapping, high-signal chunks.
 
-    Args:
-        subject_kind: hint for section weighting. On ``jira_issue``, the
-            title is repeated in every chunk prefix to boost relevance.
+    The result intentionally contains overlap between chunks – multiple
+    granularities of the same content are emitted so retrieval has lots
+    of relevant targets.
 
-    Strategy:
-    1. Parse frontmatter to extract title + tags
-    2. Split body by markdown headings
-    3. Each section <= max_chunk_tokens -> one chunk
-    4. Longer sections -> sliding window with overlap
-    5. Prepend title/section context to each chunk
+    Pipeline:
+      1. Frontmatter parse + anchor synthesis
+      2. Section split by markdown headings
+      3. Section chunks (with ~50 % overlap when section >= ``min_window_tokens``)
+      4. Per-bullet chunks for sections containing 2+ list items
+      5. Coarse cross-section sliding window across the whole body
     """
     fm, body = parse_frontmatter(content)
 
@@ -117,78 +242,120 @@ def chunk_markdown(
         tags = [str(t) for t in raw_tags] if raw_tags else []
 
     body = body.strip()
-    if not body:
-        # Empty body — single chunk with just title + tags
-        tag_str = ", ".join(tags) if tags else ""
-        text = f"{title}. {tag_str}." if tag_str else f"{title}."
-        return [Chunk(index=0, section_title="", text=text.strip(), token_count=_approx_tokens(text))]
+    chunks: List[Chunk] = []
+    tag_str = ", ".join(tags) if tags else ""
 
-    # Split body into sections by headings
+    # ---- 1. Anchor chunk ---------------------------------------------------
+    anchor = _anchor_text(fm, subject_kind) if multi_granularity else ""
+    if anchor:
+        chunks.append(Chunk(
+            index=0,
+            section_title="@anchor",
+            text=anchor,
+            token_count=_approx_tokens(anchor),
+        ))
+
+    if not body:
+        if not chunks:
+            text = f"{title}. {tag_str}." if tag_str else f"{title}."
+            chunks.append(Chunk(index=0, section_title="", text=text.strip(),
+                                token_count=_approx_tokens(text)))
+        for i, c in enumerate(chunks):
+            c.index = i
+        return chunks
+
+    # ---- 2. Section split --------------------------------------------------
     sections: List[tuple] = []  # (section_title, section_text)
     heading_matches = _find_headings(body)
 
     if not heading_matches:
-        # No headings — treat entire body as one section
         sections.append(("", body))
     else:
-        # Text before first heading (intro)
         intro = body[:heading_matches[0].start].strip()
         if intro:
             sections.append(("", intro))
-
         for i, match in enumerate(heading_matches):
-            heading_text = match.line  # e.g. "## Goals"
+            heading_text = match.line
             start = match.end
             end = heading_matches[i + 1].start if i + 1 < len(heading_matches) else len(body)
             section_body = body[start:end].strip()
             if section_body:
                 sections.append((heading_text, section_body))
 
-    if not sections:
-        tag_str = ", ".join(tags) if tags else ""
-        text = f"{title}. {tag_str}." if tag_str else f"{title}."
-        return [Chunk(index=0, section_title="", text=text.strip(), token_count=_approx_tokens(text))]
-
-    # Build chunks from sections
-    chunks: List[Chunk] = []
-    tag_str = ", ".join(tags) if tags else ""
-
+    # ---- 3. Section chunks (with overlap) ---------------------------------
     for section_title, section_text in sections:
-        # Context prefix for embedding: title + section heading
-        # For jira_issue subjects, always include title for relevance
-        parts = []
+        # Build context prefix – title + section + (tags for jira)
+        prefix_parts: List[str] = []
         if title:
-            parts.append(title)
+            prefix_parts.append(title)
         if section_title:
-            parts.append(section_title)
-        if tag_str and (len(chunks) == 0 or subject_kind == "jira_issue"):
-            # Include tags in first chunk; for jira issues include in all
-            parts.append(tag_str)
+            prefix_parts.append(section_title)
+        if tag_str and (subject_kind == "jira_issue" or len(chunks) <= 1):
+            prefix_parts.append(tag_str)
+        context_prefix = ". ".join(prefix_parts) + ". " if prefix_parts else ""
 
-        context_prefix = ". ".join(parts) + ". " if parts else ""
         section_tokens = _approx_tokens(section_text)
 
-        if section_tokens <= max_chunk_tokens:
+        # Short section -> keep as one chunk
+        if section_tokens < min_window_tokens:
             full_text = f"{context_prefix}{section_text}"
             chunks.append(Chunk(
-                index=len(chunks),
+                index=0,
                 section_title=section_title,
                 text=full_text,
                 token_count=_approx_tokens(full_text),
             ))
         else:
-            # Sliding window for long sections
-            window_chunks = _sliding_window(
+            # Medium / long section -> overlapping windows.  This is the
+            # *key* change vs. the old behaviour: even sections that fit
+            # in ``max_chunk_tokens`` get sliced when they cross
+            # ``min_window_tokens``, which produces overlap deliberately.
+            chunks.extend(_sliding_window(
                 section_text,
                 context_prefix,
                 max_chunk_tokens,
                 overlap_tokens,
-                start_index=len(chunks),
-                section_title=section_title,
-            )
-            chunks.extend(window_chunks)
+                section_title,
+            ))
 
-    # Fix indices (ensure sequential)
+        # ---- 4. Per-bullet chunks ----------------------------------------
+        if multi_granularity:
+            bullets = _extract_bullets(section_text)
+            for bullet in bullets:
+                if _approx_tokens(bullet) < 3:
+                    continue  # skip trivial one-word bullets
+                bullet_text = f"{context_prefix}- {bullet}"
+                chunks.append(Chunk(
+                    index=0,
+                    section_title=f"{section_title} > bullet" if section_title else "> bullet",
+                    text=bullet_text,
+                    token_count=_approx_tokens(bullet_text),
+                ))
+
+    # ---- 5. Coarse cross-section sliding window ---------------------------
+    if multi_granularity and _approx_tokens(body) > coarse_window_tokens:
+        coarse_prefix_parts: List[str] = []
+        if title:
+            coarse_prefix_parts.append(title)
+        if tag_str:
+            coarse_prefix_parts.append(tag_str)
+        coarse_prefix = ". ".join(coarse_prefix_parts) + ". " if coarse_prefix_parts else ""
+
+        chunks.extend(_sliding_window(
+            body,
+            coarse_prefix,
+            coarse_window_tokens,
+            coarse_overlap_tokens,
+            "@coarse",
+        ))
+
+    # Defensive fallback - body present but somehow no chunks emitted
+    if not chunks:
+        text = f"{title}. {tag_str}." if tag_str else f"{title}."
+        chunks.append(Chunk(index=0, section_title="", text=text.strip(),
+                            token_count=_approx_tokens(text)))
+
+    # Renumber sequentially
     for i, chunk in enumerate(chunks):
         chunk.index = i
 
