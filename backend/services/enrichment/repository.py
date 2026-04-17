@@ -240,6 +240,20 @@ async def queue_status(workspace_path: Optional[Path] = None) -> dict[str, Any]:
     }
 
 
+async def cancel_queue(*, workspace_path: Optional[Path] = None) -> int:
+    """Delete all pending items from the enrichment queue. Returns count removed."""
+    target = db_path(workspace_path)
+    await init_database(target)
+
+    async with aiosqlite.connect(str(target)) as db:
+        cursor = await db.execute(
+            "DELETE FROM enrichment_queue WHERE status='pending'"
+        )
+        removed = cursor.rowcount
+        await db.commit()
+    return removed
+
+
 async def get_latest_enrichment(
     subject_type: str,
     subject_id: str,

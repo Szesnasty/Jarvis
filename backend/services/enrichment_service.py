@@ -11,6 +11,7 @@ Step 22c implementation lives in the split package:
 from services.enrichment import (
     SUBJECT_JIRA,
     SUBJECT_NOTE,
+    cancel_queue,
     enqueue_item,
     enqueue_jira_issue,
     get_latest_enrichment,
@@ -24,6 +25,7 @@ from services.enrichment import (
 __all__ = [
     "SUBJECT_JIRA",
     "SUBJECT_NOTE",
+    "cancel_queue",
     "enqueue_item",
     "enqueue_jira_issue",
     "queue_status",
