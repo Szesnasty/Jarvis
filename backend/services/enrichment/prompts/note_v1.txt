@@ -17,13 +17,14 @@ Read the note and return an enrichment object with this exact shape:
 }
 
 Rules:
-- summary max 280 chars, plain prose.
-- actionable_next_step max 200 chars.
-- hidden_concerns: max 5 short bullets.
-- likely_related_note_paths: max 10 paths from same workspace notes.
-- keywords: 3 to 8 concise keywords.
+- summary: plain prose, as detailed as needed to capture the note.
+- actionable_next_step: concrete and specific; do not artificially shorten.
+- hidden_concerns: short bullets, include every non-obvious concern.
+- likely_related_note_paths: only paths from the same workspace notes.
+- keywords: at least 3 concise keywords.
 - business_area must be one of: {{BUSINESS_AREAS}}
 - if uncertain, use "unknown" (for enum fields only).
+- prefer completeness over brevity. Do not truncate.
 
 Note path:
 {{NOTE_PATH}}
