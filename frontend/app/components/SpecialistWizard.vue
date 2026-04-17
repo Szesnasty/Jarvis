@@ -103,7 +103,7 @@
               <input
                 ref="stageFileInput"
                 type="file"
-                accept=".md,.txt,.pdf,.csv,.json"
+                accept=".md,.txt,.pdf,.csv,.xml,.json"
                 multiple
                 style="display: none"
                 @change="handleStageSelect"

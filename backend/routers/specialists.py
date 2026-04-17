@@ -4,7 +4,8 @@ from services import specialist_service
 
 router = APIRouter(prefix="/api/specialists", tags=["specialists"])
 
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+MAX_UPLOAD_BYTES = 500 * 1024 * 1024  # 500 MB
+_UPLOAD_CHUNK = 1024 * 1024  # 1 MB
 
 
 @router.get("")
@@ -101,9 +102,22 @@ async def upload_file(spec_id: str, file: UploadFile = File(...)):
     if not file.filename:
         raise HTTPException(status_code=422, detail="Filename is required")
     try:
-        content = await file.read()
-        if len(content) > MAX_UPLOAD_BYTES:
-            raise HTTPException(status_code=413, detail="File exceeds 50 MB limit")
+        # Stream the upload in chunks so oversized payloads are rejected
+        # without first buffering the entire file in memory.
+        buffers: list[bytes] = []
+        total = 0
+        while True:
+            chunk = await file.read(_UPLOAD_CHUNK)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit",
+                )
+            buffers.append(chunk)
+        content = b"".join(buffers)
         return specialist_service.save_specialist_file(spec_id, file.filename, content)
     except specialist_service.SpecialistNotFoundError:
         raise HTTPException(status_code=404, detail="Specialist not found")

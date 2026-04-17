@@ -61,12 +61,20 @@ Every note carries a YAML frontmatter block with `title`, `created_at`, `updated
 
 ### Ingest pipeline — files
 
-`fast_ingest` accepts `.md`, `.txt`, and `.pdf` files. The core logic:
+`fast_ingest` accepts `.md`, `.txt`, `.pdf`, `.csv`, and `.xml` files. The core logic:
 
 1. Text extraction: `.md` files are used as-is (frontmatter added if missing); `.txt` files are wrapped in generated frontmatter and saved as `.md`; `.pdf` files are parsed by `pdfplumber` and also wrapped before saving.
 2. The resulting `.md` file is written to `memory/{target_folder}/` using a slug-based filename.
 3. If a filename already exists at the target path a numeric suffix (`-1`, `-2`, ...) is appended rather than overwriting.
 4. The new note is indexed in SQLite, then a graph rebuild is attempted. A failed graph rebuild logs a warning but does not roll back the ingest.
+
+For `.csv` and `.xml` files, `fast_ingest` delegates to `structured_ingest.ingest_structured_file` which handles both Jira exports and generic structured data:
+
+- **Jira detection**: CSV files are identified as Jira exports when headers contain at least 3 of: Issue key, Summary, Status, Issue Type, Assignee, Priority. XML files are detected by the RSS `<rss>` root element or `<item>` elements with `<key>` children.
+- **Jira processing**: Issues are grouped by epic (falling back to project, then "ungrouped"). The pipeline creates an overview note with status/type breakdowns and people lists, plus one note per group containing all issues formatted as markdown sections. People names are wiki-linked (`[[Name]]`) so the graph builder picks them up.
+- **Generic CSV**: Converted to a single markdown note containing a markdown table (first 500 rows) with column/row counts in frontmatter.
+- **Generic XML**: Converted to a single markdown note with structure analysis and first 200 elements rendered with their attributes and text content.
+- **Large file handling**: Groups with more than 100 issues are split into multiple notes (part 1, part 2, etc.). The graph is rebuilt once after all notes are created, not per-note.
 
 The file is received by the router as a multipart upload, written to a temporary file, passed to `fast_ingest`, and the temporary file is always deleted in a `finally` block regardless of outcome.
 
@@ -101,7 +109,8 @@ The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/se
 
 - `backend/routers/memory.py` — HTTP endpoints for note CRUD, file ingest, URL ingest, reindex, AI enrichment, embedding reindex, and semantic search
 - `backend/services/memory_service.py` — Core note operations: create, read, list, append, delete, reindex; manages Markdown files and SQLite index together; triggers on-write embedding
-- `backend/services/ingest.py` — File ingest pipeline for `.md`, `.txt`, `.pdf`; AI enrichment via `smart_enrich`
+- `backend/services/ingest.py` — File ingest pipeline for `.md`, `.txt`, `.pdf`, `.csv`, `.xml`; AI enrichment via `smart_enrich`
+- `backend/services/structured_ingest.py` — CSV/XML ingest with Jira export detection; groups issues by epic/project, creates overview + detail notes with wiki-linked people for graph integration
 - `backend/services/url_ingest.py` — URL ingest for YouTube videos (transcript + oEmbed metadata) and general web articles (trafilatura + markdownify)
 - `backend/services/embedding_service.py` — Local fastembed wrapper: lazy model loading, `embed_note` (with content-hash skip), `search_similar`, `reindex_all`, `delete_embedding`, `is_available`, vector blob packing, and cosine similarity helper
 - `backend/utils/markdown.py` — YAML frontmatter parsing (`parse_frontmatter`) and serialization (`add_frontmatter`) used throughout the backend
