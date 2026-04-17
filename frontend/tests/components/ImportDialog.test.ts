@@ -18,12 +18,12 @@ describe('components/ImportDialog.vue', () => {
     expect(wrapper.find('.import-dialog').exists()).toBe(false)
   })
 
-  it('file input accepts .md, .txt, .pdf', async () => {
+  it('file input accepts .md, .txt, .pdf, .csv, .xml', async () => {
     const wrapper = await mountSuspended(ImportDialog, {
       props: { visible: true },
     })
     const input = wrapper.find('.import-dialog__file-input')
-    expect(input.attributes('accept')).toBe('.md,.txt,.pdf')
+    expect(input.attributes('accept')).toBe('.md,.txt,.pdf,.csv,.xml')
   })
 
   it('dropzone is visible', async () => {

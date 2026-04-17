@@ -133,7 +133,7 @@ describe('SpecialistKnowledgePanel', () => {
       props: { specialistId: 'test-spec' },
     })
     const input = wrapper.find('.know-panel__file-input')
-    expect(input.attributes('accept')).toBe('.md,.txt,.pdf,.csv,.json')
+    expect(input.attributes('accept')).toBe('.md,.txt,.pdf,.csv,.xml,.json')
     expect(input.attributes('multiple')).toBeDefined()
   })
 
