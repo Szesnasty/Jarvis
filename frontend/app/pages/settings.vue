@@ -610,10 +610,34 @@ interface SharpenState {
   lastResult: SharpenResult | null
 }
 
+function toFiniteNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return fallback
+}
+
 function loadSharpenState(): SharpenState {
   try {
     const raw = localStorage.getItem(SHARPEN_KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<SharpenState> & { startActive?: number }
+      // Backward compatibility: old state used startActive; fall back to 0 baseline.
+      const completedAtStart =
+        toFiniteNumber(parsed.completedAtStart, Number.NaN)
+      const migratedCompletedAtStart = Number.isFinite(completedAtStart)
+        ? completedAtStart
+        : toFiniteNumber(parsed.startActive, 0)
+
+      return {
+        total: Math.max(0, toFiniteNumber(parsed.total, 0)),
+        completedAtStart: Math.max(0, migratedCompletedAtStart),
+        active: Boolean(parsed.active),
+        lastResult: parsed.lastResult ?? null,
+      }
+    }
   } catch { /* ignore */ }
   return { total: 0, completedAtStart: 0, active: false, lastResult: null }
 }
@@ -643,13 +667,15 @@ let sharpenPollTimer: ReturnType<typeof setInterval> | null = null
 
 const sharpenDone = computed((): number => {
   if (!sharpenTotal.value) return 0
-  const completedNow = sharpenQueue.value?.completed_total ?? 0
-  return Math.min(sharpenTotal.value, Math.max(0, completedNow - sharpenCompletedAtStart.value))
+  const completedNow = toFiniteNumber(sharpenQueue.value?.completed_total, 0)
+  const completedStart = toFiniteNumber(sharpenCompletedAtStart.value, 0)
+  return Math.min(sharpenTotal.value, Math.max(0, completedNow - completedStart))
 })
 
 const sharpenProgress = computed((): number => {
-  if (!sharpenTotal.value) return 0
-  return Math.min(100, Math.round((sharpenDone.value / sharpenTotal.value) * 100))
+  const total = toFiniteNumber(sharpenTotal.value, 0)
+  if (total <= 0) return 0
+  return Math.min(100, Math.round((sharpenDone.value / total) * 100))
 })
 
 async function refreshSharpenQueue() {

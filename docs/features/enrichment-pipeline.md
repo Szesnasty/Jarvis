@@ -18,8 +18,8 @@ sources:
   - frontend/app/pages/settings.vue
   - backend/tests/test_enrichment_pipeline.py
 depends_on: [jira-ingest, local-models, database]
-last_reviewed: 2025-07-20
-last_updated: 2025-07-20
+last_reviewed: 2026-04-17
+last_updated: 2026-04-17
 ---
 
 # Enrichment Pipeline
