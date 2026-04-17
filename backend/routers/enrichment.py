@@ -63,8 +63,21 @@ async def sharpen_all_endpoint(body: SharpenAllRequest | None = None) -> dict:
 
 @router.delete("/queue", status_code=200)
 async def cancel_enrichment_queue() -> dict:
-    """Cancel all pending enrichment items."""
+    """Cancel all pending enrichment items and unload the model from memory."""
     removed = await cancel_queue()
+    # Unload the enrichment model from Ollama to stop GPU heat immediately
+    try:
+        from services.enrichment.runtime import select_model_id
+        model_id = select_model_id()
+        ollama_model = model_id.replace("ollama_chat/", "")
+        import httpx
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                "http://localhost:11434/api/generate",
+                json={"model": ollama_model, "keep_alive": 0},
+            )
+    except Exception:
+        pass  # best-effort; queue is already cleared
     status = await queue_status()
     return {"removed": removed, **status}
 
