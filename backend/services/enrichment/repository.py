@@ -18,6 +18,12 @@ from .subjects import allowed_note_path, resolve_content_hash
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_for_log(value: object) -> str:
+    """Return a single-line representation safe for plain-text logs."""
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 QUEUE_MAX_ITEMS = 10000
 
 
@@ -126,8 +132,8 @@ async def enqueue_item(
                 logger.warning(
                     "Enrichment queue capacity reached (%d); dropping enqueue for %s/%s",
                     QUEUE_MAX_ITEMS,
-                    subject_type,
-                    subject_id,
+                    _sanitize_for_log(subject_type),
+                    _sanitize_for_log(subject_id),
                 )
                 return
 
