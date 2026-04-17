@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from services.enrichment_service import (
     SUBJECT_JIRA,
     SUBJECT_NOTE,
+    cancel_queue,
     get_latest_enrichment,
     queue_status,
     rerun,
@@ -58,6 +59,14 @@ async def sharpen_all_endpoint(body: SharpenAllRequest | None = None) -> dict:
         include_notes=payload.include_notes,
         include_jira=payload.include_jira,
     )
+
+
+@router.delete("/queue", status_code=200)
+async def cancel_enrichment_queue() -> dict:
+    """Cancel all pending enrichment items."""
+    removed = await cancel_queue()
+    status = await queue_status()
+    return {"removed": removed, **status}
 
 
 @router.get("/{subject_type}/{subject_id:path}")

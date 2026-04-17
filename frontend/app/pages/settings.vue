@@ -287,6 +287,14 @@
             </template>
           </span>
           <span class="sharpen-progress__pct">{{ sharpenProgress }}&thinsp;%</span>
+          <button
+            v-if="sharpenActive && sharpenProgress < 100"
+            class="settings-page__btn settings-page__btn--sm settings-page__btn--danger sharpen-progress__cancel"
+            :disabled="sharpenCancelling"
+            @click="cancelSharpen"
+          >
+            {{ sharpenCancelling ? 'Cancelling…' : 'Cancel' }}
+          </button>
         </div>
         <div class="sharpen-progress__track">
           <div
@@ -737,6 +745,25 @@ async function runSharpen(includeJira: boolean) {
 
 const runSharpenAll = () => runSharpen(true)
 const runSharpenNotesOnly = () => runSharpen(false)
+
+const sharpenCancelling = ref(false)
+
+async function cancelSharpen() {
+  if (sharpenCancelling.value) return
+  sharpenCancelling.value = true
+  try {
+    const resp = await $fetch<{ removed: number }>('/api/enrichment/queue', { method: 'DELETE' })
+    statusMsg.value = `Cancelled — removed ${resp.removed} pending items`
+    await refreshSharpenQueue()
+    sharpenActive.value = false
+    saveSharpenState()
+    stopSharpenPolling()
+  } catch {
+    statusMsg.value = 'Cancel failed'
+  } finally {
+    sharpenCancelling.value = false
+  }
+}
 
 // Battery toggle
 const allowOnBattery = ref(false)
@@ -1716,5 +1743,9 @@ onBeforeUnmount(() => { stopSharpenPolling() })
   outline: none;
   border-color: var(--neon-cyan-60);
   box-shadow: 0 0 8px var(--neon-cyan-08);
+}
+.sharpen-progress__cancel {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 </style>
