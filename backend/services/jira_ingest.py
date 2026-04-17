@@ -699,6 +699,78 @@ def _atomic_write_text(target: Path, content: str) -> None:
     os.replace(tmp, target)
 
 
+async def _index_jira_note(
+    db: aiosqlite.Connection, issue: "Issue", markdown: str, now: str
+) -> None:
+    """Mirror a Jira issue into the generic ``notes`` table.
+
+    Needed so Jira Markdown participates in FTS5 search, structural
+    listing, chunk embeddings (via ``note_chunks.note_id`` FK) and every
+    other generic memory pipeline that keys off ``notes.path``.
+    """
+    from utils.markdown import parse_frontmatter
+
+    fm, body = parse_frontmatter(markdown)
+    note_path = issue.note_path
+    folder = str(Path(note_path).parent) if "/" in note_path else ""
+    tags = json.dumps(fm.get("tags", []), default=str)
+    preview = body[:200].strip()
+    word_count = len(body.split())
+    title = fm.get("title") or issue.issue_key
+
+    await db.execute(
+        """
+        INSERT INTO notes (path, title, folder, content_preview, body, tags, frontmatter,
+                          created_at, updated_at, word_count, indexed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(path) DO UPDATE SET
+            title=excluded.title,
+            folder=excluded.folder,
+            content_preview=excluded.content_preview,
+            body=excluded.body,
+            tags=excluded.tags,
+            frontmatter=excluded.frontmatter,
+            updated_at=excluded.updated_at,
+            word_count=excluded.word_count,
+            indexed_at=excluded.indexed_at
+        """,
+        (
+            note_path,
+            title,
+            folder,
+            preview,
+            body,
+            tags,
+            json.dumps(fm, default=str),
+            issue.created_at or now,
+            issue.updated_at or now,
+            word_count,
+            now,
+        ),
+    )
+
+
+async def _embed_jira_note(note_path: str, content: str, db_path: Path) -> None:
+    """Embed a Jira note (full-note + chunk-level) with ``subject_type='jira_issue'``.
+
+    Safe no-op when embeddings are disabled or fastembed is unavailable.
+    """
+    if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") == "1":
+        return
+    try:
+        from services.embedding_service import embed_note, embed_note_chunks
+    except ImportError:
+        return
+    try:
+        await embed_note(note_path, content, db_path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("embed_note failed for %s: %s", note_path, exc)
+    try:
+        await embed_note_chunks(note_path, content, db_path, subject_type="jira_issue")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("embed_note_chunks failed for %s: %s", note_path, exc)
+
+
 # ────────────────────────────────────────────────────────────────────
 # Persistence
 # ────────────────────────────────────────────────────────────────────
@@ -904,6 +976,9 @@ async def run_import(
 
     project_keys_seen: set = set()
     error_message: Optional[str] = None
+    # (note_path, markdown) pairs for post-commit embedding. Deferred so we don't
+    # nest connections and so a crash mid-loop doesn't leave partial embeddings.
+    embed_queue: List[Tuple[str, str]] = []
 
     try:
         async with aiosqlite.connect(str(db_path)) as db:
@@ -922,22 +997,27 @@ async def run_import(
                     (issue.issue_key,),
                 )
                 row = await cursor.fetchone()
+                md_path = workspace / issue.note_path
                 if row and row[0] == new_hash:
                     # Ensure the Markdown file still exists (user may have deleted it).
-                    md_path = workspace / issue.note_path
                     if md_path.exists():
                         stats.skipped += 1
                         continue
 
                 # Write Markdown first — it is the source of truth.
-                md_path = workspace / issue.note_path
-                _atomic_write_text(md_path, build_markdown(issue))
+                issue_md = build_markdown(issue)
+                _atomic_write_text(md_path, issue_md)
 
                 result = await _upsert_issue(db, issue, now_iso)
                 if result == "inserted":
                     stats.inserted += 1
                 else:
                     stats.updated += 1
+
+                # Mirror into the generic `notes` table so FTS5, structural
+                # listing and chunk-level embeddings all see Jira issues.
+                await _index_jira_note(db, issue, issue_md, now_iso)
+                embed_queue.append((issue.note_path, issue_md))
 
                 # Step 22c: async enrichment queue (cache key includes content_hash).
                 await enqueue_jira_issue(
@@ -955,6 +1035,12 @@ async def run_import(
             await db.commit()
             stats.bytes_processed = file_path.stat().st_size
             stats.project_keys = sorted(project_keys_seen)
+
+        # Embed full-note + chunks for every touched issue AFTER the ingest
+        # connection is closed.  Each call opens its own short-lived
+        # connection, so we avoid nested transactions.
+        for note_path, markdown in embed_queue:
+            await _embed_jira_note(note_path, markdown, db_path)
 
         # Project imported issues into the knowledge graph (step 22b)
         if stats.inserted > 0 or stats.updated > 0:
@@ -999,6 +1085,112 @@ async def run_import(
                 ),
             )
             await db.commit()
+
+    return stats
+
+
+async def backfill_notes_and_embeddings(
+    *, workspace_path: Optional[Path] = None
+) -> Dict[str, int]:
+    """Backfill ``notes`` rows and embeddings for already-imported Jira issues.
+
+    Needed once to heal workspaces imported before Jira issues were mirrored
+    into the ``notes`` table (pre-fix).  Idempotent and safe to re-run.
+
+    Returns counts: ``{"notes_indexed": N, "notes_embedded": N, "chunks_embedded": N}``.
+    """
+    workspace, db_path = _workspace_paths(workspace_path)
+    await init_database(db_path)
+
+    stats = {"notes_indexed": 0, "notes_embedded": 0, "chunks_embedded": 0}
+    if not db_path.exists():
+        return stats
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    async with aiosqlite.connect(str(db_path)) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await (
+            await db.execute(
+                "SELECT issue_key, note_path, created_at, updated_at FROM issues"
+            )
+        ).fetchall()
+
+    # Re-index notes table using the Markdown on disk (source of truth).
+    to_embed: List[Tuple[str, str]] = []
+    async with aiosqlite.connect(str(db_path)) as db:
+        for row in rows:
+            note_path = row["note_path"]
+            if not note_path:
+                continue
+            md_file = workspace / note_path
+            if not md_file.exists():
+                continue
+            try:
+                markdown = md_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+
+            from utils.markdown import parse_frontmatter
+
+            fm, body = parse_frontmatter(markdown)
+            folder = str(Path(note_path).parent) if "/" in note_path else ""
+            tags = json.dumps(fm.get("tags", []), default=str)
+            preview = body[:200].strip()
+            word_count = len(body.split())
+            title = fm.get("title") or row["issue_key"]
+
+            await db.execute(
+                """
+                INSERT INTO notes (path, title, folder, content_preview, body, tags, frontmatter,
+                                  created_at, updated_at, word_count, indexed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(path) DO UPDATE SET
+                    title=excluded.title,
+                    folder=excluded.folder,
+                    content_preview=excluded.content_preview,
+                    body=excluded.body,
+                    tags=excluded.tags,
+                    frontmatter=excluded.frontmatter,
+                    updated_at=excluded.updated_at,
+                    word_count=excluded.word_count,
+                    indexed_at=excluded.indexed_at
+                """,
+                (
+                    note_path, title, folder, preview, body, tags,
+                    json.dumps(fm, default=str),
+                    row["created_at"] or now, row["updated_at"] or now,
+                    word_count, now,
+                ),
+            )
+            stats["notes_indexed"] += 1
+            to_embed.append((note_path, markdown))
+        await db.commit()
+
+    # Embeddings — short-lived connections per note inside the helpers.
+    if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") == "1":
+        return stats
+
+    try:
+        from services.embedding_service import embed_note, embed_note_chunks
+    except ImportError:
+        return stats
+
+    for note_path, markdown in to_embed:
+        try:
+            if await embed_note(note_path, markdown, db_path):
+                stats["notes_embedded"] += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("backfill embed_note failed for %s: %s", note_path, exc)
+        try:
+            n = await embed_note_chunks(
+                note_path, markdown, db_path, subject_type="jira_issue"
+            )
+            stats["chunks_embedded"] += int(n or 0)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "backfill embed_note_chunks failed for %s: %s", note_path, exc
+            )
 
     return stats
 
