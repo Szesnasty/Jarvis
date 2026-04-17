@@ -227,11 +227,15 @@ async def queue_status(workspace_path: Optional[Path] = None) -> dict[str, Any]:
             "SELECT COUNT(1) FROM enrichments WHERE status='failed' AND created_at >= ?",
             (failed_cutoff,),
         )).fetchone())[0]
+        completed_total = (await (await db.execute(
+            "SELECT COUNT(1) FROM enrichments WHERE status='ok'"
+        )).fetchone())[0]
 
     return {
         "pending": int(pending),
         "processing": int(processing),
         "failed_last_hour": int(failed_last_hour),
+        "completed_total": int(completed_total),
         "model_id": select_model_id(workspace_path),
     }
 

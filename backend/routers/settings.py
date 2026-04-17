@@ -103,10 +103,11 @@ async def get_usage_by_day():
 async def get_enrichment_settings():
     ws = get_settings().workspace_path
     prefs = preference_service.load_preferences(workspace_path=ws)
-    from services.enrichment.runtime import is_on_battery_power
+    from services.enrichment.runtime import is_on_battery_power, select_model_id
     return {
         "allow_on_battery": prefs.get("enrichment_allow_on_battery", "false") == "true",
         "on_battery": is_on_battery_power(),
+        "model_id": select_model_id(ws),
     }
 
 
@@ -120,7 +121,22 @@ async def update_enrichment_settings(body: dict):
             "true" if allow else "false",
             workspace_path=ws,
         )
+    model_id = body.get("model_id")
+    if model_id is not None:
+        import json as _json
+        config_path = ws / "app" / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            data = _json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+        except (OSError, _json.JSONDecodeError):
+            data = {}
+        if not isinstance(data.get("enrichment"), dict):
+            data["enrichment"] = {}
+        data["enrichment"]["model_id"] = str(model_id).strip()
+        config_path.write_text(_json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     prefs = preference_service.load_preferences(workspace_path=ws)
+    from services.enrichment.runtime import select_model_id
     return {
         "allow_on_battery": prefs.get("enrichment_allow_on_battery", "false") == "true",
+        "model_id": select_model_id(ws),
     }

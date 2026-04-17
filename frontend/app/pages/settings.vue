@@ -99,6 +99,19 @@
           >
             <div class="local-models__installed-info">
               <span class="local-models__installed-name">{{ m.label }}</span>
+              <span class="local-models__quality" :title="qualityDots(m.preset).label">
+                <span
+                  v-for="i in qualityDots(m.preset).filled"
+                  :key="'f'+i"
+                  class="local-models__dot local-models__dot--filled"
+                  :style="{ '--dot-index': i }"
+                />
+                <span
+                  v-for="i in qualityDots(m.preset).empty"
+                  :key="'e'+i"
+                  class="local-models__dot local-models__dot--empty"
+                />
+              </span>
               <span v-if="m.active" class="local-models__installed-badge">Active</span>
               <span class="local-models__installed-meta">{{ m.download_size_gb }} GB · Context {{ m.context_window }}</span>
             </div>
@@ -218,9 +231,18 @@
         Runs entirely on your machine via Ollama. No API calls to Anthropic.
       </p>
       <div class="sharpen-section__meta">
-        <span class="sharpen-section__chip">
-          Model: <strong>{{ sharpenQueue?.model_id || 'auto' }}</strong>
-        </span>
+        <div class="sharpen-section__model-select">
+          <label class="sharpen-section__model-label">Model:</label>
+          <select
+            class="sharpen-section__model-dropdown"
+            :value="enrichmentModelId"
+            @change="changeEnrichmentModel(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="m in installedLocalModels" :key="m.litellm_model" :value="m.litellm_model">
+              {{ m.label }} · {{ qualityDotsText(m.preset) }}
+            </option>
+          </select>
+        </div>
         <span class="sharpen-section__chip" v-if="sharpenQueue">
           Queue: <strong>{{ sharpenQueue.pending }}</strong> pending /
           <strong>{{ sharpenQueue.processing }}</strong> processing
@@ -576,14 +598,14 @@ async function rebuildGraphAction() {
 }
 
 // ── Sharpen with Local AI ──
-type SharpenQueue = { pending: number; processing: number; failed_last_hour: number; model_id: string }
+type SharpenQueue = { pending: number; processing: number; failed_last_hour: number; completed_total: number; model_id: string }
 type SharpenResult = { queued_notes: number; queued_jira: number; queued: number; skipped: number; model_id: string }
 
 const SHARPEN_KEY = 'jarvis_sharpen_progress'
 
 interface SharpenState {
   total: number
-  startActive: number
+  completedAtStart: number
   active: boolean
   lastResult: SharpenResult | null
 }
@@ -593,14 +615,14 @@ function loadSharpenState(): SharpenState {
     const raw = localStorage.getItem(SHARPEN_KEY)
     if (raw) return JSON.parse(raw)
   } catch { /* ignore */ }
-  return { total: 0, startActive: 0, active: false, lastResult: null }
+  return { total: 0, completedAtStart: 0, active: false, lastResult: null }
 }
 
 function saveSharpenState() {
   try {
     localStorage.setItem(SHARPEN_KEY, JSON.stringify({
       total: sharpenTotal.value,
-      startActive: sharpenStartActive.value,
+      completedAtStart: sharpenCompletedAtStart.value,
       active: sharpenActive.value,
       lastResult: sharpenLastResult.value,
     }))
@@ -614,15 +636,15 @@ function clearSharpenState() {
 const sharpenQueue = ref<SharpenQueue | null>(null)
 const sharpenRunning = ref(false)
 const sharpenLastResult = ref<SharpenResult | null>(null)
-const sharpenTotal = ref(0)       // items enqueued by our last sharpen call
-const sharpenStartActive = ref(0) // pending+processing right after enqueue
-const sharpenActive = ref(false)  // true while worker is consuming our batch
+const sharpenTotal = ref(0)              // items enqueued by our last sharpen call
+const sharpenCompletedAtStart = ref(0)   // completed_total snapshot right after enqueue
+const sharpenActive = ref(false)         // true while worker is consuming our batch
 let sharpenPollTimer: ReturnType<typeof setInterval> | null = null
 
 const sharpenDone = computed((): number => {
   if (!sharpenTotal.value) return 0
-  const current = (sharpenQueue.value?.pending ?? 0) + (sharpenQueue.value?.processing ?? 0)
-  return Math.min(sharpenTotal.value, Math.max(0, sharpenStartActive.value - current))
+  const completedNow = sharpenQueue.value?.completed_total ?? 0
+  return Math.min(sharpenTotal.value, Math.max(0, completedNow - sharpenCompletedAtStart.value))
 })
 
 const sharpenProgress = computed((): number => {
@@ -661,7 +683,7 @@ async function runSharpen(includeJira: boolean) {
   sharpenRunning.value = true
   // reset progress for new run
   sharpenTotal.value = 0
-  sharpenStartActive.value = 0
+  sharpenCompletedAtStart.value = 0
   sharpenActive.value = false
   clearSharpenState()
   stopSharpenPolling()
@@ -674,7 +696,7 @@ async function runSharpen(includeJira: boolean) {
     sharpenTotal.value = result.queued
     statusMsg.value = `Enqueued ${result.queued} items for local AI sharpening`
     await refreshSharpenQueue()
-    sharpenStartActive.value = (sharpenQueue.value?.pending ?? 0) + (sharpenQueue.value?.processing ?? 0)
+    sharpenCompletedAtStart.value = sharpenQueue.value?.completed_total ?? 0
     if (result.queued > 0) {
       sharpenActive.value = true
       saveSharpenState()
@@ -693,14 +715,54 @@ const runSharpenNotesOnly = () => runSharpen(false)
 // Battery toggle
 const allowOnBattery = ref(false)
 const onBattery = ref<boolean | null>(null) // null = not yet loaded
+const enrichmentModelId = ref('')
+
+// Quality dots (shared with ModelSelector)
+type LocalModelPreset = 'fast' | 'everyday' | 'balanced' | 'long-docs' | 'reasoning' | 'code' | 'best-local'
+
+const PRESET_QUALITY: Record<LocalModelPreset, number> = {
+  'fast': 1, 'everyday': 2, 'balanced': 3, 'long-docs': 3,
+  'reasoning': 4, 'code': 4, 'best-local': 5,
+}
+const PRESET_LABEL: Record<LocalModelPreset, string> = {
+  'fast': 'Fast · light', 'everyday': 'Good · everyday', 'balanced': 'Solid · balanced',
+  'long-docs': 'Solid · long docs', 'reasoning': 'Strong · reasoning',
+  'code': 'Strong · coding', 'best-local': 'Best local',
+}
+
+function qualityDots(preset: string): { filled: number; empty: number; label: string } {
+  const q = PRESET_QUALITY[preset as LocalModelPreset] ?? 3
+  const label = PRESET_LABEL[preset as LocalModelPreset] ?? preset
+  return { filled: q, empty: 5 - q, label }
+}
+
+function qualityDotsText(preset: string): string {
+  const q = PRESET_QUALITY[preset as LocalModelPreset] ?? 3
+  return '●'.repeat(q) + '○'.repeat(5 - q)
+}
 
 async function loadEnrichmentSettings() {
   try {
-    const resp = await $fetch<{ allow_on_battery: boolean; on_battery: boolean }>('/api/settings/enrichment')
+    const resp = await $fetch<{ allow_on_battery: boolean; on_battery: boolean; model_id: string }>('/api/settings/enrichment')
     allowOnBattery.value = resp.allow_on_battery
     onBattery.value = resp.on_battery
+    enrichmentModelId.value = resp.model_id
   } catch {
     onBattery.value = null
+  }
+}
+
+async function changeEnrichmentModel(litellmModel: string) {
+  enrichmentModelId.value = litellmModel
+  try {
+    await $fetch('/api/settings/enrichment', {
+      method: 'PATCH',
+      body: { model_id: litellmModel },
+    })
+    await refreshSharpenQueue()
+    statusMsg.value = `Enrichment model set to ${litellmModel.replace('ollama_chat/', '')}`
+  } catch {
+    statusMsg.value = 'Failed to update enrichment model'
   }
 }
 
@@ -718,7 +780,7 @@ onMounted(async () => {
   const saved = loadSharpenState()
   if (saved.total > 0) {
     sharpenTotal.value = saved.total
-    sharpenStartActive.value = saved.startActive
+    sharpenCompletedAtStart.value = saved.completedAtStart
     sharpenActive.value = saved.active
     sharpenLastResult.value = saved.lastResult
   }
@@ -1579,5 +1641,54 @@ onBeforeUnmount(() => { stopSharpenPolling() })
 .sharpen-section__battery-hint {
   font-size: 0.78rem;
   color: rgba(250, 204, 21, 0.7);
+}
+
+/* Quality dots (installed models) */
+.local-models__quality {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 0.35rem;
+}
+.local-models__dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+.local-models__dot--filled {
+  background: color-mix(in srgb, var(--neon-cyan) calc(40% + var(--dot-index, 1) * 12%), #888);
+  box-shadow: 0 0 3px color-mix(in srgb, var(--neon-cyan) calc(var(--dot-index, 1) * 12%), transparent);
+}
+.local-models__dot--empty {
+  background: var(--border-default);
+  opacity: 0.35;
+}
+
+/* Enrichment model selector */
+.sharpen-section__model-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+.sharpen-section__model-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.sharpen-section__model-dropdown {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  cursor: pointer;
+  min-width: 180px;
+}
+.sharpen-section__model-dropdown:focus {
+  outline: none;
+  border-color: var(--neon-cyan-60);
+  box-shadow: 0 0 8px var(--neon-cyan-08);
 }
 </style>
