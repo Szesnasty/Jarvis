@@ -87,7 +87,7 @@
         "backend/tests/test_enrichment_pipeline.py"
       ],
       "depends_on": ["jira-ingest", "local-models", "database"],
-      "last_updated": "2025-07-20",
+      "last_updated": "2026-04-17",
       "status": "current"
     },
     "jira-graph": {
