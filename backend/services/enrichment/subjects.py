@@ -28,7 +28,7 @@ def truncate(text: str, limit: int) -> str:
     s = (text or "").strip()
     if len(s) <= limit:
         return s
-    return s[: max(0, limit - 1)].rstrip() + "..."
+    return s[: max(0, limit - 3)].rstrip() + "..."
 
 
 def fallback_keywords(*parts: str) -> list[str]:
