@@ -209,8 +209,14 @@ async def embed_note_chunks(
     note_path: str,
     content: str,
     db_path: Path,
+    subject_type: str = "note",
 ) -> int:
     """Chunk a note, embed each chunk, store in SQLite.
+
+    Args:
+        subject_type: the subject kind (``note``, ``jira_issue``,
+            ``url_ingest``, etc.).  Stored in ``note_chunks.subject_type``
+            and passed to the chunker for section-weighting.
 
     Returns number of chunks embedded.
     """
@@ -223,6 +229,7 @@ async def embed_note_chunks(
         content,
         title=fm.get("title", ""),
         tags=[str(t) for t in fm.get("tags", [])],
+        subject_kind=subject_type,
     )
 
     async with aiosqlite.connect(str(db_path)) as db:
@@ -242,9 +249,9 @@ async def embed_note_chunks(
         for chunk in chunks:
             # Insert chunk record
             cursor = await db.execute(
-                "INSERT INTO note_chunks (note_id, path, chunk_index, section_title, chunk_text, token_count, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (note_id, note_path, chunk.index, chunk.section_title, chunk.text, chunk.token_count, now),
+                "INSERT INTO note_chunks (note_id, path, chunk_index, section_title, chunk_text, token_count, subject_type, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (note_id, note_path, chunk.index, chunk.section_title, chunk.text, chunk.token_count, subject_type, now),
             )
             chunk_id = cursor.lastrowid
 

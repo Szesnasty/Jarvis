@@ -87,6 +87,15 @@ def create_workspace(workspace_path: Optional[Path] = None) -> dict:
         }
         config_file = path / "app" / "config.json"
         config_file.write_text(json.dumps(config, indent=2))
+
+        # Seed built-in specialists (e.g. Jira Strategist)
+        try:
+            from services.specialist_service import seed_builtin_specialists
+            seeded = seed_builtin_specialists(path)
+            if seeded:
+                logger.info("Seeded built-in specialists: %s", seeded)
+        except Exception as exc:
+            logger.warning("Failed to seed specialists: %s", exc)
     except Exception:
         import shutil
         shutil.rmtree(path, ignore_errors=True)

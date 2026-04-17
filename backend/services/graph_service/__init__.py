@@ -55,3 +55,8 @@ from services.graph_service.jira_projection import (  # noqa: F401
 from services.graph_service.soft_edges import (  # noqa: F401
     rebuild_soft_edges,
 )
+
+# --- Cross-Source Linking (step 22e) ---
+from services.graph_service.cross_source import (  # noqa: F401
+    rebuild_cross_source_edges,
+)

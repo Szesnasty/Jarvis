@@ -168,7 +168,7 @@
         "frontend/app/components/SpecialistKnowledgePanel.vue"
       ],
       "depends_on": ["memory"],
-      "last_updated": "2026-04-15",
+      "last_updated": "2026-04-17",
       "status": "current"
     },
     "sessions": {
@@ -309,6 +309,35 @@
         "frontend/tests/composables/useLocalModelsIntegration.test.ts"
       ],
       "depends_on": ["chat", "api-key-management", "workspace-onboarding"],
+      "last_updated": "2026-04-17",
+      "status": "current"
+    },
+    "cross-source-linking": {
+      "doc": "docs/features/cross-source-linking.md",
+      "type": "feature",
+      "sources": [
+        "backend/services/graph_service/cross_source.py",
+        "backend/services/graph_service/builder.py",
+        "backend/services/graph_service/__init__.py",
+        "backend/services/chunking.py",
+        "backend/services/embedding_service.py",
+        "backend/models/database.py",
+        "backend/routers/graph.py",
+        "backend/tests/test_cross_source.py"
+      ],
+      "depends_on": ["knowledge-graph", "soft-edges", "jira-graph", "enrichment-pipeline", "memory"],
+      "last_updated": "2026-04-17",
+      "status": "current"
+    },
+    "jira-strategist": {
+      "doc": "docs/features/jira-strategist.md",
+      "type": "feature",
+      "sources": [
+        "backend/services/specialist_service.py",
+        "backend/services/workspace_service.py",
+        "backend/main.py"
+      ],
+      "depends_on": ["specialists", "jira-ingest", "cross-source-linking"],
       "last_updated": "2026-04-17",
       "status": "current"
     }

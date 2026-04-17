@@ -41,6 +41,14 @@ async def lifespan(app: FastAPI):
         count = await reindex_all()
         if count > 0:
             logger.info("Startup reindex: %d notes indexed", count)
+        # Seed built-in specialists for existing workspaces
+        try:
+            from services.specialist_service import seed_builtin_specialists
+            seeded = seed_builtin_specialists()
+            if seeded:
+                logger.info("Seeded built-in specialists: %s", seeded)
+        except Exception as exc:
+            logger.debug("Specialist seeding skipped: %s", exc)
         await start_workers()
     yield
     await stop_workers()

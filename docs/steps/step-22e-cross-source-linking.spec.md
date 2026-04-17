@@ -6,7 +6,7 @@
 > type participates. This step is what turns Jarvis from "a better
 > grep over my notes" into a context system.
 
-**Status**: ⬜ Not started
+**Status**: ✅ Implemented
 **Depends on**: 22b (node types), 22c (enrichment), 22d (soft edges),
 step-20a (chunking), step-20c (chunk graph edges), step-20d (entity
 canonicalisation)
