@@ -1,8 +1,15 @@
-"""Hybrid retrieval pipeline combining BM25, cosine similarity and graph scoring.
+"""Hybrid retrieval pipeline combining BM25, cosine similarity, graph scoring,
+and (optionally) enrichment facet matching.
 
 Each signal contributes a normalized [0,1] score. Weights are re-normalized
 when a signal is unavailable so the pipeline degrades gracefully. Results
 include a ``_signals`` dict for transparency/debugging.
+
+Step 22f adds:
+- Enrichment match signal (weight 0.15 when active)
+- Post-fusion boosts for explicit keys, sprint, blockers
+- Facet pre-filtering on the issue candidate set
+- Feature-gated via JARVIS_FEATURE_JIRA_RETRIEVAL=1
 """
 
 import json
@@ -11,6 +18,8 @@ import os
 from typing import Dict, List, Optional, Set
 
 from services import graph_service, memory_service
+from services.retrieval.intent import FacetFilter, QueryIntent
+from services.retrieval.intent_parser import parse_intent
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +28,26 @@ WEIGHT_BM25 = 0.25
 WEIGHT_COSINE = 0.40
 WEIGHT_GRAPH = 0.35
 
+# Jira-aware weights (step 22f) — enrichment signal takes 0.15
+WEIGHT_BM25_JIRA = 0.22
+WEIGHT_COSINE_JIRA = 0.33
+WEIGHT_GRAPH_JIRA = 0.30
+WEIGHT_ENRICHMENT = 0.15
+
+# Post-fusion boosts (step 22f)
+BOOST_EXPLICIT_KEY = 0.30
+BOOST_BLOCKER_WORKING_SET = 0.10
+BOOST_SPRINT_ACTIVE = 0.05
+BOOST_CAP = 0.40
+
 # Semantic anchor matching thresholds (step 20b)
 _ANCHOR_SIMILARITY_THRESHOLD = 0.50
 _MAX_SEMANTIC_ANCHORS = 5
+
+
+def _is_jira_retrieval_enabled() -> bool:
+    """Check if Jira-aware retrieval is feature-gated on."""
+    return os.environ.get("JARVIS_FEATURE_JIRA_RETRIEVAL") == "1"
 
 
 def _extract_query_entities_fallback(query: str, graph: graph_service.Graph) -> List[str]:
@@ -175,6 +201,190 @@ def _compute_graph_score(
     return min(raw, 1.0)
 
 
+# ── Enrichment signal (step 22f) ──────────────────────────────────
+
+
+async def _load_enrichments_for_paths(
+    paths: List[str],
+    workspace_path=None,
+) -> Dict[str, Dict]:
+    """Load latest enrichment payloads for a batch of note paths.
+
+    Returns {path: enrichment_payload_dict}.
+    """
+    if not paths:
+        return {}
+
+    import aiosqlite
+
+    db_p = memory_service._db_path(workspace_path)
+    if not db_p.exists():
+        return {}
+
+    result: Dict[str, Dict] = {}
+    async with aiosqlite.connect(str(db_p)) as db:
+        db.row_factory = aiosqlite.Row
+        placeholders = ",".join("?" for _ in paths)
+        cursor = await db.execute(
+            f"""
+            SELECT subject_id, payload
+            FROM latest_enrichment
+            WHERE subject_type = 'jira_issue'
+              AND subject_id IN ({placeholders})
+            """,
+            paths,
+        )
+        rows = await cursor.fetchall()
+        for row in rows:
+            try:
+                result[row["subject_id"]] = json.loads(row["payload"])
+            except (json.JSONDecodeError, TypeError):
+                continue
+    return result
+
+
+def _compute_enrichment_score(
+    enrichment: Optional[Dict],
+    intent: QueryIntent,
+) -> float:
+    """Score a candidate based on enrichment facet match against intent."""
+    if not enrichment:
+        return 0.0
+
+    score = 0.0
+    if intent.business_area_hint and enrichment.get("business_area") == intent.business_area_hint:
+        score += 0.5
+    if intent.risk_hint == "high-risk" and enrichment.get("risk_level") == "high":
+        score += 0.3
+    if intent.risk_hint == "unclear" and enrichment.get("ambiguity_level") == "unclear":
+        score += 0.2
+
+    return min(score, 1.0)
+
+
+async def _apply_facet_filter(
+    candidates: Dict[str, Dict],
+    facets: FacetFilter,
+    workspace_path=None,
+) -> Dict[str, Dict]:
+    """Apply hard facet filters to narrow the candidate set.
+
+    Non-issue candidates are always kept (unless wants_issues_only).
+    Only issue candidates are filtered by facet values from frontmatter.
+    """
+    if facets.is_empty:
+        return candidates
+
+    import aiosqlite
+
+    db_p = memory_service._db_path(workspace_path)
+    if not db_p.exists():
+        return candidates
+
+    # Find which candidates are issues (in jira/ folder)
+    issue_paths = [p for p in candidates if p.startswith("jira/")]
+    if not issue_paths:
+        return candidates
+
+    # Load frontmatter for issue candidates
+    async with aiosqlite.connect(str(db_p)) as db:
+        db.row_factory = aiosqlite.Row
+        placeholders = ",".join("?" for _ in issue_paths)
+        cursor = await db.execute(
+            f"SELECT path, frontmatter FROM notes WHERE path IN ({placeholders})",
+            issue_paths,
+        )
+        rows = await cursor.fetchall()
+
+    fm_map: Dict[str, Dict] = {}
+    for row in rows:
+        try:
+            fm_map[row["path"]] = json.loads(row["frontmatter"])
+        except (json.JSONDecodeError, TypeError):
+            fm_map[row["path"]] = {}
+
+    filtered = {}
+    for path, data in candidates.items():
+        # Non-issue candidates pass through
+        if not path.startswith("jira/"):
+            filtered[path] = data
+            continue
+
+        fm = fm_map.get(path, {})
+        if not _matches_facets(fm, facets):
+            continue
+        filtered[path] = data
+
+    return filtered
+
+
+def _matches_facets(frontmatter: Dict, facets: FacetFilter) -> bool:
+    """Check if a note's frontmatter matches all specified facet values."""
+    if facets.status_category:
+        val = frontmatter.get("status_category", "")
+        if val not in facets.status_category:
+            return False
+
+    if facets.sprint_state:
+        # "active" sprint check — we look at whether the issue has any sprint
+        # with state matching. Since frontmatter stores sprint name only,
+        # we treat any sprinted issue as "active" for now.
+        if "active" in facets.sprint_state:
+            sprint = frontmatter.get("sprint", "")
+            if not sprint:
+                return False
+
+    if facets.sprint_name:
+        sprints = frontmatter.get("sprints", [])
+        if not any(s in facets.sprint_name for s in sprints):
+            return False
+
+    if facets.assignee:
+        assignee = frontmatter.get("assignee", "")
+        if assignee not in facets.assignee:
+            return False
+
+    if facets.project_key:
+        pk = frontmatter.get("project_key", "")
+        if pk not in facets.project_key:
+            return False
+
+    if facets.business_area or facets.risk_level or facets.ambiguity_level or facets.work_type:
+        # These require enrichment data — skip frontmatter-only filtering
+        # (enrichment signal handles scoring for these)
+        pass
+
+    return True
+
+
+def _compute_post_fusion_boost(
+    path: str,
+    intent: QueryIntent,
+    enrichment: Optional[Dict],
+) -> float:
+    """Compute additive boost after fusion. Capped at BOOST_CAP."""
+    boost = 0.0
+
+    # Explicit key boost
+    if intent.keys_in_query:
+        fm_key = _extract_issue_key_from_path(path)
+        if fm_key and fm_key in intent.keys_in_query:
+            boost += BOOST_EXPLICIT_KEY
+
+    # Sprint active boost
+    if intent.sprint_filter == "active" and path.startswith("jira/"):
+        boost += BOOST_SPRINT_ACTIVE
+
+    return min(boost, BOOST_CAP)
+
+
+def _extract_issue_key_from_path(path: str) -> Optional[str]:
+    """Extract issue key from path like 'jira/PROJ/PROJ-123.md'."""
+    import re
+    m = re.search(r"([A-Z][A-Z0-9]{1,9}-\d{1,6})\.md$", path)
+    return m.group(1) if m else None
+
+
 async def _get_note_meta(path: str, workspace_path=None) -> Optional[Dict]:
     """Look up note metadata directly from SQLite for candidates found
     only by embeddings (no BM25 match)."""
@@ -227,9 +437,33 @@ async def retrieve(
     limit: int = 5,
     workspace_path=None,
 ) -> List[Dict]:
-    """Hybrid retrieval combining BM25, chunk cosine similarity and graph scoring."""
+    """Hybrid retrieval combining BM25, chunk cosine similarity and graph scoring.
+
+    When ``JARVIS_FEATURE_JIRA_RETRIEVAL=1`` is set, also runs intent
+    parsing, enrichment scoring, facet filtering, and post-fusion boosts.
+    """
+    intent, results = await retrieve_with_intent(query, limit=limit, workspace_path=workspace_path)
+    return results
+
+
+async def retrieve_with_intent(
+    query: str,
+    limit: int = 5,
+    workspace_path=None,
+    facets_override: Optional[FacetFilter] = None,
+) -> tuple:
+    """Full retrieval returning both ``(QueryIntent, results)``."""
     if not query or not query.strip():
-        return []
+        return QueryIntent(text=query or ""), []
+
+    jira_enabled = _is_jira_retrieval_enabled()
+
+    # Parse intent (always — cheap and deterministic)
+    intent = parse_intent(query)
+
+    # Merge explicit facet overrides from API
+    if facets_override and not facets_override.is_empty:
+        intent.facets = facets_override
 
     # --- Signal 1: BM25 candidates ---
     fts_candidates = await memory_service.list_notes(
@@ -251,6 +485,7 @@ async def retrieve(
             "_bm25": bm25_norm,
             "_cosine": 0.0,
             "_graph": 0.0,
+            "_enrichment": 0.0,
             "_best_chunk": None,
             "_best_section": None,
         }
@@ -290,6 +525,7 @@ async def retrieve(
                                     "_bm25": 0.0,
                                     "_cosine": score,
                                     "_graph": 0.0,
+                                    "_enrichment": 0.0,
                                     "_best_chunk": cr.get("best_chunk_text"),
                                     "_best_section": cr.get("best_chunk_section"),
                                 }
@@ -313,6 +549,7 @@ async def retrieve(
                                         "_bm25": 0.0,
                                         "_cosine": norm_score,
                                         "_graph": 0.0,
+                                        "_enrichment": 0.0,
                                         "_best_chunk": None,
                                         "_best_section": None,
                                     }
@@ -322,7 +559,24 @@ async def retrieve(
             logger.warning("Cosine retrieval failed: %s", exc)
 
     if not candidate_pool:
-        return []
+        return intent, []
+
+    # --- Facet pre-filter (step 22f) ---
+    if jira_enabled and intent.has_jira_signals and not intent.facets.is_empty:
+        candidate_pool = await _apply_facet_filter(
+            candidate_pool, intent.facets, workspace_path,
+        )
+        if not candidate_pool:
+            return intent, []
+
+    # Filter to issues only when intent demands it
+    if jira_enabled and intent.wants_issues_only:
+        issue_candidates = {
+            p: d for p, d in candidate_pool.items() if p.startswith("jira/")
+        }
+        # Only restrict if we have issues — otherwise fall back to all
+        if issue_candidates:
+            candidate_pool = issue_candidates
 
     # --- Signal 3: Graph scoring (with semantic anchors) ---
     graph = graph_service.load_graph(workspace_path)
@@ -341,30 +595,71 @@ async def retrieve(
                 node_id, graph, anchors, candidate_ids
             )
 
+    # --- Signal 4: Enrichment match (step 22f, gated) ---
+    enrichment_available = False
+    enrichments: Dict[str, Dict] = {}
+    if jira_enabled and intent.has_jira_signals:
+        issue_paths = [p for p in candidate_pool if p.startswith("jira/")]
+        if issue_paths:
+            enrichments = await _load_enrichments_for_paths(
+                issue_paths, workspace_path,
+            )
+            if enrichments:
+                enrichment_available = True
+                for path in issue_paths:
+                    if path in candidate_pool:
+                        candidate_pool[path]["_enrichment"] = _compute_enrichment_score(
+                            enrichments.get(path), intent,
+                        )
+
     # --- Weighted fusion ---
-    w_bm25 = WEIGHT_BM25
-    w_cos = WEIGHT_COSINE if cosine_available else 0.0
-    w_graph = WEIGHT_GRAPH if graph else 0.0
-    total_w = w_bm25 + w_cos + w_graph or 1.0
+    if jira_enabled and enrichment_available:
+        w_bm25 = WEIGHT_BM25_JIRA
+        w_cos = WEIGHT_COSINE_JIRA if cosine_available else 0.0
+        w_graph = WEIGHT_GRAPH_JIRA if graph else 0.0
+        w_enrich = WEIGHT_ENRICHMENT
+    else:
+        w_bm25 = WEIGHT_BM25
+        w_cos = WEIGHT_COSINE if cosine_available else 0.0
+        w_graph = WEIGHT_GRAPH if graph else 0.0
+        w_enrich = 0.0
+
+    total_w = w_bm25 + w_cos + w_graph + w_enrich or 1.0
     w_bm25 /= total_w
     w_cos /= total_w
     w_graph /= total_w
+    w_enrich /= total_w
 
     scored: List[Dict] = []
-    for data in candidate_pool.values():
-        final = (
+    for path, data in candidate_pool.items():
+        fused = (
             w_bm25 * data["_bm25"]
             + w_cos * data["_cosine"]
             + w_graph * data["_graph"]
+            + w_enrich * data.get("_enrichment", 0.0)
         )
+
+        # Post-fusion boosts (step 22f)
+        boost = 0.0
+        if jira_enabled and intent.has_jira_signals:
+            boost = _compute_post_fusion_boost(path, intent, enrichments.get(path))
+
+        final = fused + boost
+
+        signals = {
+            "bm25": round(data["_bm25"], 3),
+            "cosine": round(data["_cosine"], 3),
+            "graph": round(data["_graph"], 3),
+        }
+        if enrichment_available:
+            signals["enrichment"] = round(data.get("_enrichment", 0.0), 3)
+        if boost > 0:
+            signals["boost"] = round(boost, 3)
+
         scored.append({
             **data,
             "_score": final,
-            "_signals": {
-                "bm25": round(data["_bm25"], 3),
-                "cosine": round(data["_cosine"], 3),
-                "graph": round(data["_graph"], 3),
-            },
+            "_signals": signals,
         })
 
     # Sort by fused score; tie-breaker: recency
@@ -381,7 +676,8 @@ async def retrieve(
         r.pop("_bm25", None)
         r.pop("_cosine", None)
         r.pop("_graph", None)
+        r.pop("_enrichment", None)
         r.pop("_bm25_score", None)
         r.pop("_node_id", None)
 
-    return result
+    return intent, result

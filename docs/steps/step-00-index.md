@@ -146,8 +146,30 @@
 | [22c](step-22c-local-enrichment.spec.md) | Local-model enrichment pipeline (classification / risk / ambiguity / summary) | ✅ | → 3rd |
 | [22d](step-22d-soft-edges.spec.md) | Soft edges (same_topic / likely_dependency / business_area) with confidence | ✅ | → 3rd ∥ |
 | [22e](step-22e-cross-source-linking.spec.md) | Cross-source linking: issue ↔ note / decision / doc, intra-file chunk edges | ✅ | → 4th |
-| [22f](step-22f-jira-retrieval.spec.md) | Jira-aware hybrid retrieval with facets, boosts and structured context | ⬜ | → 5th |
+| [22f](step-22f-jira-retrieval.spec.md) | Jira-aware hybrid retrieval with facets, boosts and structured context | ✅ | → 5th |
 | [22g](step-22g-jira-strategist.spec.md) | `Jira Strategist` specialist + sprint/blocker tools + Duel presets | ⬜ | → 6th |
+
+---
+
+## Phase 17 — User-Controlled Indexing & Model Selection
+
+> **Execution order**: 23a → 23b → 23c → 23d → 23e → 23f
+> Backend config first, then frontend controls, then cost estimation,
+> then the warning dialog, then manual reindex actions, then guard writes.
+>
+> **Core rule**: The user decides what gets indexed, how deeply, and by
+> which model. Local-first default. API use requires explicit opt-in
+> with cost transparency.
+
+| Step | Title | Status | Order |
+|------|-------|--------|-------|
+| [23](step-23-indexing-control.spec.md) | User-controlled indexing & model selection — overview + full spec | ⬜ | — |
+| 23a | Indexing config backend: settings schema, migration, API endpoints | ⬜ | → 1st |
+| 23b | Indexing config frontend: Settings tab, mode picker, scope selector | ⬜ | → 2nd |
+| 23c | Cost estimation engine: token counting, model pricing, estimate API | ⬜ | → 3rd |
+| 23d | Cost warning dialog: modal, provider switch guard, confirmation flow | ⬜ | → 4th |
+| 23e | Manual reindex actions: rebuild, re-enrich, per-folder, progress WS | ⬜ | → 5th |
+| 23f | Guard embedding/enrichment writes behind config flags | ⬜ | → 6th |
 
 ---
 

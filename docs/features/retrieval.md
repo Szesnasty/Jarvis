@@ -3,18 +3,21 @@ title: Hybrid Retrieval Pipeline
 status: active
 type: feature
 sources:
-  - backend/services/retrieval.py
+  - backend/services/retrieval/__init__.py
+  - backend/services/retrieval/pipeline.py
   - backend/services/context_builder.py
 depends_on: [memory, knowledge-graph]
-last_reviewed: 2026-04-14
-last_updated: 2026-04-14
+last_reviewed: 2025-07-27
+last_updated: 2025-07-27
 ---
 
 # Hybrid Retrieval Pipeline
 
 ## Summary
 
-The retrieval pipeline finds the notes most relevant to a user's message and assembles them into a compact context string for Claude. It fuses three independent signals — **BM25** full-text ranking, **cosine similarity** over local embeddings, and **graph** connectivity scoring — into a single ranked list. Each signal contributes a normalized `[0, 1]` score with default weights `0.35 / 0.35 / 0.30`, and weights are renormalized on the fly when a signal is unavailable so the pipeline degrades gracefully (no embeddings, no graph, or neither). Every returned note carries a `_signals` dict exposing the raw per-signal scores for transparency and debugging.
+The retrieval pipeline finds the notes most relevant to a user's message and assembles them into a compact context string for Claude. It fuses three independent signals — **BM25** full-text ranking, **cosine similarity** over local embeddings, and **graph** connectivity scoring — into a single ranked list. Each signal contributes a normalized `[0, 1]` score with default weights `0.25 / 0.40 / 0.35`, and weights are renormalized on the fly when a signal is unavailable so the pipeline degrades gracefully (no embeddings, no graph, or neither). Every returned note carries a `_signals` dict exposing the raw per-signal scores for transparency and debugging.
+
+> **Note**: As of step 22f, `retrieval.py` was refactored into a `retrieval/` package. The core pipeline logic lives in `retrieval/pipeline.py`; imports via `from services.retrieval import retrieve` remain unchanged. See [jira-retrieval.md](jira-retrieval.md) for the Jira-aware extensions.
 
 ## How It Works
 

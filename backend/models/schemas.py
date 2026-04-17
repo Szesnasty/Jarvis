@@ -187,3 +187,40 @@ class SpecialistFileInfoResponse(BaseModel):
     title: str
     size: int
     created_at: str
+
+
+# Step 22f: Retrieval search
+class FacetFilterRequest(BaseModel):
+    status_category: Optional[list[str]] = None
+    sprint_state: Optional[list[str]] = None
+    sprint_name: Optional[list[str]] = None
+    assignee: Optional[list[str]] = None
+    project_key: Optional[list[str]] = None
+    business_area: Optional[list[str]] = None
+    risk_level: Optional[list[str]] = None
+    ambiguity_level: Optional[list[str]] = None
+    work_type: Optional[list[str]] = None
+
+
+class RetrievalSearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+    facets: Optional[FacetFilterRequest] = None
+
+
+class IntentResponse(BaseModel):
+    text: str
+    wants_issues_only: bool = False
+    wants_open_only: bool = False
+    sprint_filter: Optional[str] = None
+    assignee_filter: Optional[str] = None
+    business_area_hint: Optional[str] = None
+    risk_hint: Optional[str] = None
+    keys_in_query: list[str] = []
+    has_jira_signals: bool = False
+
+
+class RetrievalSearchResponse(BaseModel):
+    results: list[dict]
+    intent: IntentResponse
+    result_count: int
