@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.4.1...backend-v0.5.0) (2026-04-17)
+
+
+### ✨ Features
+
+* **22e:** cross-source linking + Jira Strategist specialist ([07d2f23](https://github.com/Szesnasty/Jarvis/commit/07d2f2347e65a1fcaa6a47b5d456648fa0022672))
+* **22f:** Jira-aware hybrid retrieval pipeline ([458d92a](https://github.com/Szesnasty/Jarvis/commit/458d92a9c40d4a7770b082f0fb91ccfc3d3befa1))
+* **22g:** Jira Strategist specialist + tools + duel presets ([d882081](https://github.com/Szesnasty/Jarvis/commit/d8820815a55304bee402ff99b970b422acda4d53))
+* add enrichment pipeline and soft graph edges ([93d5473](https://github.com/Szesnasty/Jarvis/commit/93d5473c4efd05aaaa7a276316fa40fd5baa1f82))
+* **chunking:** multi-granularity strategy - 2.6x more vectors per Jira issue ([959ab97](https://github.com/Szesnasty/Jarvis/commit/959ab97a723ada124d897ceae09dd58af27b4dac))
+* **enrichment:** add Cancel button to stop sharpen queue ([cf7e00d](https://github.com/Szesnasty/Jarvis/commit/cf7e00d6c1c714787785d155d611edbb3d4767dd))
+* **enrichment:** one-click 'sharpen all' via local AI from Settings ([0a5f25d](https://github.com/Szesnasty/Jarvis/commit/0a5f25dfa53f2a1d03c1130ec81f327b5afede15))
+* **ingest:** support large jira csv/xml imports ([08eb0c9](https://github.com/Szesnasty/Jarvis/commit/08eb0c9ac86de7c85a66bd3c8d9d024ab81c455e))
+* Jira import UX, graph colors, and node preview improvements ([e55708e](https://github.com/Szesnasty/Jarvis/commit/e55708eeb8e96192005f4c07d854b80712b448bd))
+* **jira:** add streaming XML and CSV ingest ([8392d9d](https://github.com/Szesnasty/Jarvis/commit/8392d9d435f6e6ca9f21f98c8b6df408aeaa7ba2))
+* **retrieval:** denser chunking + local cross-encoder reranker ([4444d26](https://github.com/Szesnasty/Jarvis/commit/4444d26cc968fb542ac1a3862db792c386a805f5))
+* **settings:** battery toggle for enrichment worker ([8006cbf](https://github.com/Szesnasty/Jarvis/commit/8006cbf4ea4bb88c2782124a5153551387925280))
+* **settings:** selectable enrichment model and robust sharpen progress ([330fd12](https://github.com/Szesnasty/Jarvis/commit/330fd1269e745adc2ff5bb4de46f0d9aee962ef6))
+
+
+### 🐛 Bug Fixes
+
+* **22:** Jira issues indexed into notes table + chunk embeddings + PL vocab ([1cad68b](https://github.com/Szesnasty/Jarvis/commit/1cad68be95f1a6c779eccff149b64d69fd37417d))
+* **enrichment:** unload Ollama model on cancel to stop GPU heat ([4bda714](https://github.com/Szesnasty/Jarvis/commit/4bda714892890e9cc16503e1af73f55b73c6fcf0))
+* resolve CodeQL security warnings and failing tests ([8eb1b3f](https://github.com/Szesnasty/Jarvis/commit/8eb1b3fe3e4a9bfd04bd5e25735233701652a5e2))
+* **security:** restrict CORS headers + add missing pytest-asyncio dep ([9ad05dc](https://github.com/Szesnasty/Jarvis/commit/9ad05dc825398c872da4c75c49208504902c89cd))
+* **tests:** update upload size limit constant to 500 MB ([4237cfd](https://github.com/Szesnasty/Jarvis/commit/4237cfd136686e16e75dd4fdf3a3a49bc54adb05))
+
 ## [0.4.1](https://github.com/Szesnasty/Jarvis/compare/backend-v0.4.0...backend-v0.4.1) (2026-04-16)
 
 
