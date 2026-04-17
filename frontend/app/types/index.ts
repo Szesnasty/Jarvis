@@ -158,6 +158,8 @@ export interface GraphStats {
 export interface GraphNodeDetail {
   node: GraphNode
   preview: string | null
+  metadata?: Record<string, unknown>
+  note_path?: string | null
   connected_notes: GraphNode[]
   connected_tags: string[]
   connected_people: string[]

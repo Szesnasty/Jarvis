@@ -59,17 +59,33 @@ let resizeObserver: ResizeObserver | null = null
 
 // --- Color palette ---
 const NODE_COLOR: Record<string, string> = {
-  note: 'rgba(2, 254, 255, 1)',
-  tag: '#34d399',
-  person: '#c084fc',
-  area: '#fb923c',
+  // Core Jarvis types
+  note:   'rgba(2, 254, 255, 1)',     // cyan
+  tag:    '#34d399',                  // emerald
+  person: '#c084fc',                  // violet
+  area:   '#fb923c',                  // orange
+  // Jira projection
+  jira_issue:     '#60a5fa',          // sky blue  — generic issue
+  jira_epic:      '#f472b6',          // pink      — epics pop
+  jira_project:   '#facc15',          // amber     — projects big & bright
+  jira_person:    '#c084fc',          // violet    — same as person
+  jira_sprint:    '#22d3ee',          // teal      — sprints
+  jira_label:     '#a3e635',          // lime      — labels
+  jira_component: '#f97316',          // orange-red — components
 }
 
 const NODE_GLOW: Record<string, string> = {
-  note: 'rgba(2, 254, 255, 0.5)',
-  tag: 'rgba(52, 211, 153, 0.5)',
+  note:   'rgba(2, 254, 255, 0.5)',
+  tag:    'rgba(52, 211, 153, 0.5)',
   person: 'rgba(192, 132, 252, 0.5)',
-  area: 'rgba(251, 146, 60, 0.5)',
+  area:   'rgba(251, 146, 60, 0.5)',
+  jira_issue:     'rgba(96, 165, 250, 0.5)',
+  jira_epic:      'rgba(244, 114, 182, 0.6)',
+  jira_project:   'rgba(250, 204, 21, 0.55)',
+  jira_person:    'rgba(192, 132, 252, 0.5)',
+  jira_sprint:    'rgba(34, 211, 238, 0.5)',
+  jira_label:     'rgba(163, 230, 53, 0.45)',
+  jira_component: 'rgba(249, 115, 22, 0.5)',
 }
 
 const EDGE_COLOR: Record<string, string> = {
@@ -80,6 +96,20 @@ const EDGE_COLOR: Record<string, string> = {
   related:  'rgba(2, 254, 255, 0.65)',
   similar_to: 'rgba(129, 140, 248, 0.6)', // indigo for semantic similarity
   temporal: 'rgba(250, 204, 21, 0.35)',
+  // Jira edges
+  in_project:        'rgba(250, 204, 21, 0.55)',  // amber (project)
+  in_epic:           'rgba(244, 114, 182, 0.75)', // pink (epic)
+  is_epic_shadow:    'rgba(244, 114, 182, 0.35)',
+  parent_of:         'rgba(96, 165, 250, 0.7)',   // sky blue (hierarchy)
+  blocks:            'rgba(239, 68, 68, 0.85)',   // red — blocks
+  depends_on:        'rgba(239, 68, 68, 0.6)',
+  duplicate_of:      'rgba(148, 163, 184, 0.55)', // slate
+  relates_to:        'rgba(96, 165, 250, 0.5)',
+  assigned_to:       'rgba(192, 132, 252, 0.6)',  // violet (person)
+  in_sprint:         'rgba(34, 211, 238, 0.6)',   // teal
+  has_label:         'rgba(163, 230, 53, 0.55)',  // lime
+  has_component:     'rgba(249, 115, 22, 0.6)',   // orange
+  commented_on:      'rgba(192, 132, 252, 0.4)',
 }
 
 const EDGE_PARTICLE_COLOR: Record<string, string> = {
@@ -107,7 +137,21 @@ function computeDegrees(): Record<string, number> {
 }
 
 function nodeRadius(type: string, degree: number): number {
-  const base = type === 'area' ? 7 : type === 'person' ? 5 : type === 'note' ? 4 : 3
+  // Bigger, more prominent: projects & epics (anchors of the Jira graph)
+  const baseByType: Record<string, number> = {
+    area: 7,
+    jira_project: 9,
+    jira_epic: 8,
+    jira_sprint: 6,
+    person: 5,
+    jira_person: 5,
+    note: 4,
+    jira_issue: 4,
+    jira_component: 3.5,
+    jira_label: 3,
+    tag: 3,
+  }
+  const base = baseByType[type] ?? 3
   return base + Math.min(degree * 0.4, 8)
 }
 

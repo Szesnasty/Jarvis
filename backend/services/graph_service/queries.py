@@ -69,6 +69,8 @@ def get_node_detail(node_id: str, workspace_path: Optional[Path] = None) -> Opti
 
     # For note nodes: read preview from file
     preview = None
+    metadata: Dict = {}
+    note_path: Optional[str] = None
     if node.type == "note":
         path = node_id[5:]  # strip "note:"
         mem = _memory_path(workspace_path)
@@ -76,16 +78,53 @@ def get_node_detail(node_id: str, workspace_path: Optional[Path] = None) -> Opti
         if filepath.exists():
             try:
                 content = filepath.read_text(encoding="utf-8", errors="replace")
-                _fm, body = parse_frontmatter(content)
+                fm, body = parse_frontmatter(content)
                 preview = body[:2000].strip()
+                metadata = fm or {}
+                note_path = path
             except Exception:
                 pass
+    elif node.type == "jira_issue":
+        # Jira issues live at `memory/jira/{PROJECT}/{KEY}.md`. Look up the
+        # exact path via the `issues` table (it was recorded at import time).
+        issue_key = node_id[6:] if node_id.startswith("issue:") else node_id
+        try:
+            import sqlite3
+            base = _memory_path(workspace_path).parent
+            db_path = base / "app" / "jarvis.db"
+            if db_path.exists():
+                conn = sqlite3.connect(str(db_path))
+                try:
+                    row = conn.execute(
+                        "SELECT note_path FROM issues WHERE issue_key = ?",
+                        (issue_key,),
+                    ).fetchone()
+                finally:
+                    conn.close()
+                if row and row[0]:
+                    note_path_raw = row[0]
+                    # Back-compat: tolerate legacy "memory/" prefix.
+                    if note_path_raw.startswith("memory/"):
+                        note_path_raw = note_path_raw[len("memory/"):]
+                    note_path = note_path_raw
+                    filepath = _memory_path(workspace_path) / note_path_raw
+                    if filepath.exists():
+                        content = filepath.read_text(
+                            encoding="utf-8", errors="replace"
+                        )
+                        fm, body = parse_frontmatter(content)
+                        preview = body[:2000].strip()
+                        metadata = fm or {}
+        except Exception:
+            pass
 
     degree = sum(1 for e in graph.edges if e.source == node_id or e.target == node_id)
 
     return {
         "node": {"id": node.id, "type": node.type, "label": node.label, "folder": node.folder},
         "preview": preview,
+        "metadata": metadata,
+        "note_path": note_path,
         "connected_notes": connected_notes,
         "connected_tags": connected_tags,
         "connected_people": connected_people,
