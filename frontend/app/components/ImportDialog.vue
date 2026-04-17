@@ -13,7 +13,7 @@
         <input
           ref="fileInput"
           type="file"
-          accept=".md,.txt,.pdf"
+          accept=".md,.txt,.pdf,.csv,.xml"
           class="import-dialog__file-input"
           @change="handleFileSelect"
         />
@@ -108,7 +108,12 @@ async function handleImport() {
       method: 'POST',
       body: formData,
     })
-    success.value = `Imported: ${result.path}`
+    // Structured imports (CSV/XML) return { notes: [...], total_notes, format }
+    if (result.total_notes) {
+      success.value = `Imported ${result.total_notes} notes from ${result.source} (${result.format})`
+    } else {
+      success.value = `Imported: ${result.path}`
+    }
     emit('imported', result)
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : 'Import failed'

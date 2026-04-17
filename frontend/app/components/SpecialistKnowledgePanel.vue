@@ -40,7 +40,7 @@
         <input
           ref="fileInputRef"
           type="file"
-          accept=".md,.txt,.pdf,.csv,.json"
+          accept=".md,.txt,.pdf,.csv,.xml,.json"
           multiple
           class="know-panel__file-input"
           @change="handleFileSelect"
@@ -139,8 +139,8 @@ const urlIngesting = ref(false)
 const errorMsg = ref('')
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
-const ALLOWED_EXTS = new Set(['md', 'txt', 'pdf', 'csv', 'json'])
-const MAX_FILE_BYTES = 50 * 1024 * 1024 // 50 MB
+const ALLOWED_EXTS = new Set(['md', 'txt', 'pdf', 'csv', 'xml', 'json'])
+const MAX_FILE_BYTES = 500 * 1024 * 1024 // 500 MB (supports large Jira CSV/XML exports)
 
 function triggerFileInput() {
   fileInputRef.value?.click()
@@ -154,7 +154,7 @@ function validateFiles(fileList: FileList): { valid: File[]; rejected: string[] 
     if (!ALLOWED_EXTS.has(ext)) {
       rejected.push(`${file.name} (unsupported type)`)
     } else if (file.size > MAX_FILE_BYTES) {
-      rejected.push(`${file.name} (exceeds 50 MB)`)
+      rejected.push(`${file.name} (exceeds 500 MB)`)
     } else {
       valid.push(file)
     }
