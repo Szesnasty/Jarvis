@@ -188,12 +188,25 @@
       "doc": "docs/features/retrieval.md",
       "type": "feature",
       "sources": [
-        "backend/services/retrieval.py",
+        "backend/services/retrieval/__init__.py",
+        "backend/services/retrieval/pipeline.py",
         "backend/services/context_builder.py",
         "backend/services/chunking.py"
       ],
       "depends_on": ["memory", "knowledge-graph"],
-      "last_updated": "2026-04-17",
+      "last_updated": "2025-07-27",
+      "status": "current"
+    },
+    "jira-retrieval": {
+      "doc": "docs/features/jira-retrieval.md",
+      "type": "feature",
+      "sources": [
+        "backend/services/retrieval/intent.py",
+        "backend/services/retrieval/intent_parser.py",
+        "backend/routers/retrieval_search.py"
+      ],
+      "depends_on": ["retrieval", "enrichment", "knowledge-graph"],
+      "last_updated": "2025-07-27",
       "status": "current"
     },
     "planning": {
