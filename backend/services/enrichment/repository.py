@@ -12,9 +12,9 @@ import logging
 
 from models.database import init_database
 
-from .models import PROMPT_VERSION, QueueItem, SUBJECT_JIRA
+from .models import PROMPT_VERSION, QueueItem, SUBJECT_JIRA, SUBJECT_NOTE
 from .runtime import db_path, select_model_id, utc_now, workspace
-from .subjects import resolve_content_hash
+from .subjects import allowed_note_path, resolve_content_hash
 
 logger = logging.getLogger(__name__)
 
@@ -336,3 +336,91 @@ async def rerun(
         await db.commit()
 
     return queued
+
+
+async def sharpen_all(
+    *,
+    reason: str = "manual_sharpen_all",
+    include_notes: bool = True,
+    include_jira: bool = True,
+    workspace_path: Optional[Path] = None,
+) -> dict[str, int]:
+    """Enqueue every eligible note and Jira issue for local-AI enrichment.
+
+    Walks the memory/ folder for *.md files (filtered by allowed_note_path)
+    and pulls all known Jira issues. Existing successful enrichments with the
+    same content_hash + model + prompt are skipped silently inside the worker
+    via cache_hit_exists, so re-running is cheap.
+    """
+    ws = workspace(workspace_path)
+    target = db_path(workspace_path)
+    await init_database(target)
+
+    queued_notes = 0
+    queued_jira = 0
+    skipped = 0
+
+    async with aiosqlite.connect(str(target)) as db:
+        if include_notes:
+            mem = ws / "memory"
+            if mem.exists():
+                for md_file in sorted(mem.rglob("*.md")):
+                    try:
+                        rel = md_file.relative_to(ws).as_posix()
+                    except ValueError:
+                        continue
+                    if not allowed_note_path(rel):
+                        skipped += 1
+                        continue
+                    content_hash = await resolve_content_hash(
+                        db, ws, SUBJECT_NOTE, rel
+                    )
+                    if not content_hash:
+                        skipped += 1
+                        continue
+                    await enqueue_item(
+                        SUBJECT_NOTE,
+                        rel,
+                        content_hash,
+                        reason=reason,
+                        db=db,
+                        workspace_path=workspace_path,
+                    )
+                    queued_notes += 1
+
+        if include_jira:
+            rows = await (
+                await db.execute(
+                    "SELECT issue_key, content_hash FROM issues"
+                )
+            ).fetchall()
+            for issue_key, content_hash in rows:
+                if not content_hash:
+                    skipped += 1
+                    continue
+                await enqueue_item(
+                    SUBJECT_JIRA,
+                    str(issue_key),
+                    str(content_hash),
+                    reason=reason,
+                    db=db,
+                    workspace_path=workspace_path,
+                )
+                queued_jira += 1
+
+        await db.commit()
+
+    logger.info(
+        "sharpen_all enqueued notes=%d jira=%d skipped=%d (reason=%s)",
+        queued_notes,
+        queued_jira,
+        skipped,
+        reason,
+    )
+    return {
+        "queued_notes": queued_notes,
+        "queued_jira": queued_jira,
+        "queued": queued_notes + queued_jira,
+        "skipped": skipped,
+        "model_id": select_model_id(workspace_path),
+    }
