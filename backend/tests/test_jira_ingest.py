@@ -310,3 +310,116 @@ def test_build_markdown_empty_optionals():
     assert "## Description" not in md
     assert "## Comments" not in md
     assert "## Links" not in md
+
+
+# ────────────────────────────────────────────────────────────────────
+# Generic indexing: Jira → notes table + chunks (Phase 16 fix regression)
+# ────────────────────────────────────────────────────────────────────
+
+
+async def test_import_mirrors_issues_into_notes_table(ws: Path):
+    """Jira Markdown must land in the `notes` table so FTS5 and chunk
+    embeddings pick it up. Before the fix, the `notes` table was empty
+    after a Jira import."""
+    await run_import(FIXTURES / "small.xml", workspace_path=ws)
+
+    db_path = ws / "app" / "jarvis.db"
+    async with aiosqlite.connect(str(db_path)) as db:
+        db.row_factory = aiosqlite.Row
+        notes = await (await db.execute(
+            "SELECT path, title, body FROM notes WHERE path LIKE 'memory/jira/%'"
+        )).fetchall()
+        paths = {n["path"] for n in notes}
+        assert len(paths) == 5
+        assert any(p.endswith("ONB-142.md") for p in paths)
+
+        # FTS5 must find Jira content by free-text.
+        hits = await (await db.execute(
+            "SELECT path FROM notes WHERE rowid IN "
+            "(SELECT rowid FROM notes_fts WHERE notes_fts MATCH 'onboarding')"
+        )).fetchall()
+        assert any(h["path"].startswith("memory/jira/") for h in hits)
+
+
+async def test_reimport_updates_notes_body(ws: Path, tmp_path: Path):
+    """A second import with a changed description must refresh notes.body."""
+    await run_import(FIXTURES / "small.xml", workspace_path=ws)
+
+    mutated = tmp_path / "mutated.xml"
+    mutated.write_text(
+        '<?xml version="1.0"?><rss version="2.0"><channel><item>'
+        "<title>[ONB-142] Changed title</title>"
+        "<link>https://example.atlassian.net/browse/ONB-142</link>"
+        '<project key="ONB">Onboarding</project>'
+        "<key>ONB-142</key>"
+        "<summary>Changed title</summary>"
+        "<type>Task</type>"
+        "<status>In Progress</status>"
+        "<priority>High</priority>"
+        "<description>BRAND NEW BODY content xyzxyz</description>"
+        "<created>Mon, 1 Jan 2024 10:00:00 +0000</created>"
+        "<updated>Mon, 2 Jan 2024 10:00:00 +0000</updated>"
+        "</item></channel></rss>",
+        encoding="utf-8",
+    )
+    await run_import(mutated, workspace_path=ws)
+
+    db_path = ws / "app" / "jarvis.db"
+    async with aiosqlite.connect(str(db_path)) as db:
+        db.row_factory = aiosqlite.Row
+        row = await (await db.execute(
+            "SELECT body FROM notes WHERE path = 'memory/jira/ONB/ONB-142.md'"
+        )).fetchone()
+        assert row is not None
+        assert "xyzxyz" in row["body"]
+
+
+async def test_backfill_notes_and_embeddings_idempotent(ws: Path):
+    """backfill_notes_and_embeddings heals pre-fix workspaces and is safe
+    to re-run."""
+    from services.jira_ingest import backfill_notes_and_embeddings
+
+    await run_import(FIXTURES / "small.xml", workspace_path=ws)
+
+    db_path = ws / "app" / "jarvis.db"
+    async with aiosqlite.connect(str(db_path)) as db:
+        await db.execute("DELETE FROM notes WHERE path LIKE 'memory/jira/%'")
+        await db.commit()
+
+    stats1 = await backfill_notes_and_embeddings(workspace_path=ws)
+    assert stats1["notes_indexed"] == 5
+
+    stats2 = await backfill_notes_and_embeddings(workspace_path=ws)
+    assert stats2["notes_indexed"] == 5  # upserts every row; disk is the source
+
+
+async def test_import_embeds_jira_chunks_with_correct_subject_type(
+    ws: Path, monkeypatch
+):
+    """When embeddings are enabled, Jira issues get chunk rows stamped
+    with subject_type='jira_issue' (not the default 'note')."""
+    monkeypatch.delenv("JARVIS_DISABLE_EMBEDDINGS", raising=False)
+
+    calls = []
+
+    async def fake_embed_note(path, content, db_path):
+        calls.append(("note", path))
+        return 1
+
+    async def fake_embed_note_chunks(path, content, db_path, subject_type="note"):
+        calls.append(("chunks", path, subject_type))
+        return 3
+
+    import services.embedding_service as emb
+    monkeypatch.setattr(emb, "embed_note", fake_embed_note, raising=True)
+    monkeypatch.setattr(
+        emb, "embed_note_chunks", fake_embed_note_chunks, raising=True
+    )
+
+    await run_import(FIXTURES / "small.xml", workspace_path=ws)
+
+    chunk_calls = [c for c in calls if c[0] == "chunks"]
+    assert chunk_calls, "embed_note_chunks was never called for Jira issues"
+    assert all(c[2] == "jira_issue" for c in chunk_calls), (
+        f"Jira chunks must use subject_type='jira_issue', got {chunk_calls}"
+    )

@@ -16,9 +16,22 @@ from services.retrieval.intent import FacetFilter, QueryIntent
 ISSUE_KEY_RE = re.compile(r"\b([A-Z][A-Z0-9]{1,9}-\d{1,6})\b")
 
 # ── Status words ────────────────────────────────────────────────────
-_STATUS_OPEN = {"open", "to do", "todo", "new", "otwarte", "nowe"}
-_STATUS_IN_PROGRESS = {"in progress", "in-progress", "doing", "w trakcie", "w toku"}
-_STATUS_DONE = {"done", "closed", "resolved", "finished", "zamknięte", "zakończone", "zrobione"}
+_STATUS_OPEN = {
+    "open", "to do", "todo", "new",
+    "otwarte", "otwarty", "otwarta", "nowe", "nowy", "nowa",
+    "do zrobienia", "backlog",
+}
+_STATUS_IN_PROGRESS = {
+    "in progress", "in-progress", "doing",
+    "w trakcie", "w toku", "w realizacji", "realizowane",
+}
+_STATUS_DONE = {
+    "done", "closed", "resolved", "finished",
+    "zamknięte", "zamknięty", "zamknięta",
+    "zakończone", "zakończony", "zakończona",
+    "zrobione", "zrobiony", "zrobiona",
+    "rozwiązane", "rozwiązany", "rozwiązana",
+}
 
 _STATUS_MAP = {
     **{w: "To Do" for w in _STATUS_OPEN},
@@ -28,7 +41,10 @@ _STATUS_MAP = {
 
 # ── Sprint references ──────────────────────────────────────────────
 _SPRINT_CURRENT_RE = re.compile(
-    r"\b(this sprint|current sprint|aktualn[yiae] sprint|bieżąc[yiae] sprint)\b",
+    r"\b(this sprint|current sprint|"
+    r"aktualn[a-z]* (?:sprint|sprincie|sprintach|sprintu|sprinty|sprintem)|"
+    r"bieżąc[a-z]* (?:sprint|sprincie|sprintach|sprintu|sprinty|sprintem)|"
+    r"w (?:tym|aktualnym|bieżącym) sprincie)\b",
     re.IGNORECASE,
 )
 
@@ -36,31 +52,51 @@ _SPRINT_CURRENT_RE = re.compile(
 _ISSUE_WORDS: Set[str] = {
     "task", "tasks", "ticket", "tickets", "issue", "issues",
     "bug", "bugs", "story", "stories", "epic", "epics",
-    "sprint", "blocker", "blockers",
-    "zadanie", "zadania", "błąd", "błędy", "historia", "historie",
+    "sprint", "sprints", "blocker", "blockers",
+    # Polish variants (nouns + common declensions).
+    "zadanie", "zadania", "zadań", "zadaniom",
+    "zgłoszenie", "zgłoszenia", "zgłoszeń",
+    "błąd", "błędy", "błędów",
+    "historia", "historie", "historii",
+    "sprincie", "sprintach", "sprintu",
+    "blokery", "blokerów",
+    "tiket", "tikety",
     "jira",
 }
 
 # ── Risk / ambiguity hints ─────────────────────────────────────────
 _RISK_WORDS: Set[str] = {
     "risky", "risk", "critical", "blocker", "blockers", "high-risk",
-    "ryzykowne", "krytyczne", "blokujące",
+    # Polish variants.
+    "ryzyko", "ryzyka", "ryzykowne", "ryzykowny", "ryzykowna",
+    "krytyczne", "krytyczny", "krytyczna",
+    "zagrożenie", "zagrożenia", "zagrożeń",
+    "zagrożone", "zagrożony", "zagrożona",
+    "blokujące", "blokujący", "blokująca", "blokuje",
+    "blokowane", "blokowany", "blokowana",
 }
 _AMBIGUITY_WORDS: Set[str] = {
     "unclear", "uncertain", "ambiguous", "vague",
-    "niejasne", "niepewne",
+    # Polish variants.
+    "niejasne", "niejasny", "niejasna",
+    "niepewne", "niepewny", "niepewna",
+    "niedoprecyzowane", "niedoprecyzowany",
+    "dwuznaczne", "dwuznaczny",
 }
 
 # ── Open-only hints ────────────────────────────────────────────────
 _OPEN_HINTS_RE = re.compile(
     r"\b(what('s| is) (open|left|remaining|to do)|"
-    r"co jest otwarte|co zostało)\b",
+    r"co jest otwarte|co zostało(?: do zrobienia)?|"
+    r"co mamy otwarte|co jest w toku)\b",
     re.IGNORECASE,
 )
 
 # ── Blocking / dependency queries ──────────────────────────────────
 _BLOCKS_RE = re.compile(
-    r"\b(what blocks|blocked by|depends on|blocking|blokuje|blokowane przez|zależy od)\b",
+    r"\b(what blocks|blocked by|depends on|blocking|"
+    r"blokuje|blokuj[aą]|blokowane przez|blokowan[yaei]\s+przez|"
+    r"zależy od|zależne od|zależne)\b",
     re.IGNORECASE,
 )
 

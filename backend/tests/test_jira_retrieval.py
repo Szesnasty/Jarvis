@@ -131,6 +131,38 @@ class TestIntentParserAssignee:
         assert intent.assignee_filter == "john"
 
 
+class TestIntentParserPolishVocabulary:
+    """Extended Polish vocabulary (Phase 16 polish fix)."""
+
+    def test_polish_issue_words(self):
+        intent = parse_intent("pokaż zgłoszenia z tego sprintu")
+        assert intent.wants_issues_only is True
+
+    def test_polish_risk_synonyms(self):
+        assert parse_intent("co jest zagrożone?").risk_hint == "high-risk"
+        assert parse_intent("które ryzykowne zadania?").risk_hint == "high-risk"
+        assert parse_intent("co blokuje wydanie?").risk_hint == "high-risk"
+
+    def test_polish_ambiguity_synonyms(self):
+        assert parse_intent("niedoprecyzowane zadania").risk_hint == "unclear"
+        assert parse_intent("dwuznaczne historyjki").risk_hint == "unclear"
+
+    def test_polish_status_masculine_feminine(self):
+        intent = parse_intent("które zadania są zamknięte?")
+        assert "Done" in (intent.facets.status_category or [])
+        intent2 = parse_intent("co jest otwarty?")
+        assert "To Do" in (intent2.facets.status_category or [])
+
+    def test_polish_sprint_declensions(self):
+        assert parse_intent("co w aktualnym sprincie?").sprint_filter == "active"
+        assert parse_intent("bieżącym sprincie ryzyka?").sprint_filter == "active"
+
+    def test_polish_dependency_queries(self):
+        intent = parse_intent("co zależy od ONB-142?")
+        assert "ONB-142" in intent.keys_in_query
+        assert intent.wants_issues_only is True
+
+
 # ── Enrichment signal tests ───────────────────────────────────────
 
 
