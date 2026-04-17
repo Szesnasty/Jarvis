@@ -1,13 +1,8 @@
-import json
-import re
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Optional
+"""Tool JSON definitions exposed to Claude via the Messages API."""
 
-from services import memory_service, planning_service, preference_service, graph_service, session_service
+# ── Core tools ────────────────────────────────────────────────────────────────
 
-
-TOOLS = [
+CORE_TOOLS = [
     {
         "name": "search_notes",
         "description": "Search the user's notes by keyword, tag, or topic. Returns matching note metadata.",
@@ -149,7 +144,8 @@ TOOLS = [
             },
             "required": ["rule"],
         },
-    },    {
+    },
+    {
         "name": "query_graph",
         "description": "Query the knowledge graph to find related notes, people, tags, or topics.",
         "input_schema": {
@@ -221,161 +217,149 @@ TOOLS = [
     },
 ]
 
+# ── Jira tools ────────────────────────────────────────────────────────────────
 
-class ToolNotFoundError(Exception):
-    pass
+JIRA_TOOLS = [
+    {
+        "name": "jira_list_issues",
+        "description": (
+            "List Jira issues from the local index. Supports facet filters "
+            "(status, sprint, assignee, project, priority) and sorting."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "description": "Filter by status category: to-do, in-progress, done",
+                },
+                "sprint": {
+                    "type": "string",
+                    "description": "Filter by sprint name",
+                },
+                "sprint_state": {
+                    "type": "string",
+                    "description": "Filter by sprint state: ACTIVE, CLOSED, FUTURE",
+                },
+                "assignee": {
+                    "type": "string",
+                    "description": "Filter by assignee display name",
+                },
+                "project_key": {
+                    "type": "string",
+                    "description": "Filter by project key (e.g. AUTH)",
+                },
+                "priority": {
+                    "type": "string",
+                    "description": "Filter by priority (High, Medium, Low)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max results (1-50)",
+                    "default": 20,
+                },
+                "sort": {
+                    "type": "string",
+                    "description": "Sort field: updated, risk, priority",
+                    "default": "updated",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "jira_describe_issue",
+        "description": (
+            "Get full details for a Jira issue: metadata, enrichment, "
+            "hard links (blocks/depends_on), soft links, and related notes."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "Issue key, e.g. AUTH-155",
+                },
+            },
+            "required": ["key"],
+        },
+    },
+    {
+        "name": "jira_blockers_of",
+        "description": (
+            "Find all issues that block a given issue: direct blockers, "
+            "transitive blockers (BFS, max depth 3), and likely blockers from soft edges."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "Issue key to find blockers for",
+                },
+            },
+            "required": ["key"],
+        },
+    },
+    {
+        "name": "jira_depends_on",
+        "description": (
+            "Find all issues that depend on a given issue (what it blocks): "
+            "direct dependents, transitive dependents (BFS, max depth 3)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "description": "Issue key to find dependents of",
+                },
+            },
+            "required": ["key"],
+        },
+    },
+    {
+        "name": "jira_sprint_risk",
+        "description": (
+            "Analyse risk for a sprint: list issues with risk/ambiguity levels, "
+            "find top risks, unclear tickets, and bottleneck assignees."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sprint_name": {
+                    "type": "string",
+                    "description": "Sprint name (defaults to active sprint if omitted)",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "jira_cluster_by_topic",
+        "description": (
+            "Cluster issues by topic/business area using enrichment data. "
+            "Optionally restrict to specific root issue keys."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "root_keys": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional: restrict clustering to these issue keys and their neighbours",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "Max clusters to return",
+                    "default": 10,
+                },
+            },
+            "required": [],
+        },
+    },
+]
 
+# ── Combined list (backward compat) ──────────────────────────────────────────
 
-async def execute_tool(
-    name: str,
-    tool_input: dict[str, Any],
-    workspace_path: Optional[Path] = None,
-    session_id: Optional[str] = None,
-    api_key: Optional[str] = None,
-) -> str:
-    """Execute a tool by name and return string result."""
-    if name == "search_notes":
-        results = await memory_service.list_notes(
-            folder=tool_input.get("folder"),
-            search=tool_input["query"],
-            limit=tool_input.get("limit", 10),
-            workspace_path=workspace_path,
-        )
-        if session_id:
-            for r in results:
-                session_service.record_note_access(session_id, r.get("path", ""))
-        return json.dumps(results)
-
-    if name == "read_note":
-        note = await memory_service.get_note(
-            tool_input["path"],
-            workspace_path=workspace_path,
-        )
-        if session_id:
-            session_service.record_note_access(session_id, tool_input["path"])
-        return note["content"]
-
-    if name == "write_note":
-        await memory_service.create_note(
-            tool_input["path"],
-            tool_input["content"],
-            workspace_path=workspace_path,
-        )
-        if session_id:
-            session_service.record_note_access(session_id, tool_input["path"])
-        # Incremental graph update (no full rebuild)
-        try:
-            graph_service.ingest_note(tool_input["path"], workspace_path)
-        except Exception:
-            pass
-        return f"Note saved: {tool_input['path']}"
-
-    if name == "append_note":
-        await memory_service.append_note(
-            tool_input["path"],
-            tool_input["content"],
-            workspace_path=workspace_path,
-        )
-        if session_id:
-            session_service.record_note_access(session_id, tool_input["path"])
-        # Incremental graph update (no full rebuild)
-        try:
-            graph_service.ingest_note(tool_input["path"], workspace_path)
-        except Exception:
-            pass
-        return f"Content appended to: {tool_input['path']}"
-
-    if name == "create_plan":
-        result = await planning_service.create_plan(
-            tool_input["title"],
-            tool_input["items"],
-            workspace_path=workspace_path,
-        )
-        return json.dumps(result)
-
-    if name == "update_plan":
-        content = await planning_service.update_plan_task(
-            tool_input["path"],
-            tool_input["task_index"],
-            tool_input["checked"],
-            workspace_path=workspace_path,
-        )
-        return content
-
-    if name == "summarize_context":
-        return await _execute_summarize(tool_input, workspace_path)
-
-    if name == "save_preference":
-        category = tool_input.get("category", "general")
-        preference_service.save_preference(
-            category,
-            tool_input["rule"],
-            workspace_path=workspace_path,
-        )
-        return f"Preference saved: [{category}] {tool_input['rule']}"
-
-    if name == "query_graph":
-        results = graph_service.query_entity(
-            tool_input["entity"],
-            relation_type=tool_input.get("relation_type"),
-            depth=tool_input.get("depth", 1),
-            workspace_path=workspace_path,
-        )
-        return json.dumps(results)
-
-    if name == "ingest_url":
-        from services.url_ingest import ingest_url
-        result = await ingest_url(
-            tool_input["url"],
-            folder=tool_input.get("folder", "knowledge"),
-            summarize=tool_input.get("summarize", False),
-            api_key=api_key,
-            workspace_path=workspace_path,
-        )
-        if session_id:
-            session_service.record_note_access(session_id, result["path"])
-        return json.dumps(result)
-
-    if name == "web_search":
-        from services.web_search import web_search
-        results = await web_search(
-            tool_input["query"],
-            max_results=tool_input.get("max_results", 5),
-        )
-        return json.dumps(results)
-
-    raise ToolNotFoundError(f"Unknown tool: {name}")
-
-
-def _slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-
-
-async def _execute_summarize(
-    tool_input: dict[str, Any],
-    workspace_path: Optional[Path],
-) -> str:
-    content = tool_input["content"]
-    title = tool_input.get("title", "summary")
-    save = tool_input.get("save", True)
-
-    if not save:
-        return content
-
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    slug = _slugify(title)
-    note_path = f"summaries/{date}-{slug}.md"
-
-    fm_content = (
-        f"---\ntitle: {title}\ntype: summary\n"
-        f"source: conversation\ntags: [summary]\n---\n\n"
-        + content
-    )
-
-    try:
-        await memory_service.create_note(note_path, fm_content, workspace_path)
-    except memory_service.NoteExistsError:
-        # Append instead if it already exists
-        await memory_service.append_note(note_path, f"\n\n{content}", workspace_path)
-
-    return json.dumps({"path": note_path, "saved": True})
+TOOLS: list[dict] = CORE_TOOLS + JIRA_TOOLS

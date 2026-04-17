@@ -378,7 +378,7 @@ _BUILTIN_SPECIALISTS: List[Dict] = [
             "load across the Jira export and the rest of the workspace."
         ),
         "icon": "🎯",
-        "sources": ["memory/jira/**", "memory/decisions/**", "memory/projects/**"],
+        "sources": ["memory/jira/**", "memory/decisions/**", "memory/projects/**", "memory/people/**"],
         "style": {
             "tone": "direct, operational",
             "length": "short, bulleted when listing issues",
@@ -391,10 +391,28 @@ _BUILTIN_SPECIALISTS: List[Dict] = [
         ],
         "tools": [
             "search_notes",
-            "open_note",
+            "read_note",
             "query_graph",
+            "write_note",
+            "jira_list_issues",
+            "jira_describe_issue",
+            "jira_blockers_of",
+            "jira_depends_on",
+            "jira_sprint_risk",
+            "jira_cluster_by_topic",
         ],
-        "examples": [],
+        "examples": [
+            {
+                "user": "What's blocking AUTH-155?",
+                "assistant": (
+                    "**AUTH-155** is blocked by:\n"
+                    "- [AUTH-120] Security audit (hard dependency, status: in-progress)\n"
+                    "- [AUTH-142] Rate limiter refactor (likely, confidence: 0.72)\n\n"
+                    "AUTH-120 is the critical path — it's been in-progress for 8 days "
+                    "with no recent updates. Risk: **high**."
+                ),
+            },
+        ],
     },
 ]
 

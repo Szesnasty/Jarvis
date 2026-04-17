@@ -21,7 +21,7 @@
         "backend/services/claude.py",
         "backend/services/llm_service.py",
         "backend/services/_anthropic_client.py",
-        "backend/services/tools.py",
+        "backend/services/tools/__init__.py",
         "backend/services/token_tracking.py",
         "frontend/app/composables/useChat.ts",
         "frontend/app/composables/useWebSocket.ts",
@@ -281,8 +281,8 @@
         "frontend/app/components/DuelScoreBar.vue"
       ],
       "depends_on": ["chat", "specialists", "knowledge-graph"],
-      "last_updated": "2026-04-15",
-      "status": "current"
+      "last_updated": "2025-07-27",
+      "status": "stale"
     },
     "api-key-management": {
       "doc": "docs/features/api-key-management.md",
@@ -346,12 +346,18 @@
       "doc": "docs/features/jira-strategist.md",
       "type": "feature",
       "sources": [
+        "backend/services/tools/__init__.py",
+        "backend/services/tools/definitions.py",
+        "backend/services/tools/executor.py",
+        "backend/services/tools/jira_tools.py",
+        "backend/services/duel_presets.py",
         "backend/services/specialist_service.py",
-        "backend/services/workspace_service.py",
-        "backend/main.py"
+        "backend/services/council.py",
+        "backend/routers/chat.py",
+        "backend/tests/test_jira_strategist.py"
       ],
-      "depends_on": ["specialists", "jira-ingest", "cross-source-linking"],
-      "last_updated": "2026-04-17",
+      "depends_on": ["specialists", "jira-ingest", "duel", "knowledge-graph", "enrichment-pipeline"],
+      "last_updated": "2025-07-27",
       "status": "current"
     }
   }

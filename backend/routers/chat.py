@@ -394,6 +394,28 @@ async def _handle_duel(
         await _send_event(ws, "duel_error", content=f"Duel failed: {exc}")
 
 
+# ── Duel presets ──────────────────────────────────────────────────────────────
+
+
+@router.get("/duel-presets")
+async def list_duel_presets():
+    """Return all available duel presets (built-in + user-created)."""
+    from services.duel_presets import seed_builtin_presets, list_presets
+    seed_builtin_presets()
+    return list_presets()
+
+
+@router.get("/duel-presets/{preset_id}")
+async def get_duel_preset(preset_id: str):
+    """Return a single duel preset."""
+    from services.duel_presets import get_preset
+    preset = get_preset(preset_id)
+    if not preset:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Preset not found")
+    return preset
+
+
 @router.websocket("/ws")
 async def chat_ws(websocket: WebSocket) -> None:
     # Origin allowlist check — CORSMiddleware does not cover WebSocket
