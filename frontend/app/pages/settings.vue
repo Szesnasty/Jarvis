@@ -572,6 +572,38 @@ async function rebuildGraphAction() {
 type SharpenQueue = { pending: number; processing: number; failed_last_hour: number; model_id: string }
 type SharpenResult = { queued_notes: number; queued_jira: number; queued: number; skipped: number; model_id: string }
 
+const SHARPEN_KEY = 'jarvis_sharpen_progress'
+
+interface SharpenState {
+  total: number
+  startActive: number
+  active: boolean
+  lastResult: SharpenResult | null
+}
+
+function loadSharpenState(): SharpenState {
+  try {
+    const raw = localStorage.getItem(SHARPEN_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch { /* ignore */ }
+  return { total: 0, startActive: 0, active: false, lastResult: null }
+}
+
+function saveSharpenState() {
+  try {
+    localStorage.setItem(SHARPEN_KEY, JSON.stringify({
+      total: sharpenTotal.value,
+      startActive: sharpenStartActive.value,
+      active: sharpenActive.value,
+      lastResult: sharpenLastResult.value,
+    }))
+  } catch { /* ignore */ }
+}
+
+function clearSharpenState() {
+  try { localStorage.removeItem(SHARPEN_KEY) } catch { /* ignore */ }
+}
+
 const sharpenQueue = ref<SharpenQueue | null>(null)
 const sharpenRunning = ref(false)
 const sharpenLastResult = ref<SharpenResult | null>(null)
@@ -601,8 +633,10 @@ function startSharpenPolling() {
   if (sharpenPollTimer) return
   sharpenPollTimer = setInterval(async () => {
     await refreshSharpenQueue()
+    saveSharpenState()
     if (sharpenQueue.value && sharpenQueue.value.pending === 0 && sharpenQueue.value.processing === 0) {
       sharpenActive.value = false
+      saveSharpenState()
       stopSharpenPolling()
     }
   }, 3000)
@@ -622,6 +656,7 @@ async function runSharpen(includeJira: boolean) {
   sharpenTotal.value = 0
   sharpenStartActive.value = 0
   sharpenActive.value = false
+  clearSharpenState()
   stopSharpenPolling()
   try {
     const result = await $fetch<SharpenResult>('/api/enrichment/sharpen-all', {
@@ -635,6 +670,7 @@ async function runSharpen(includeJira: boolean) {
     sharpenStartActive.value = (sharpenQueue.value?.pending ?? 0) + (sharpenQueue.value?.processing ?? 0)
     if (result.queued > 0) {
       sharpenActive.value = true
+      saveSharpenState()
       startSharpenPolling()
     }
   } catch {
@@ -647,7 +683,27 @@ async function runSharpen(includeJira: boolean) {
 const runSharpenAll = () => runSharpen(true)
 const runSharpenNotesOnly = () => runSharpen(false)
 
-onMounted(() => { refreshSharpenQueue() })
+// Restore progress state on mount (survives navigation / page refresh)
+onMounted(async () => {
+  const saved = loadSharpenState()
+  if (saved.total > 0) {
+    sharpenTotal.value = saved.total
+    sharpenStartActive.value = saved.startActive
+    sharpenActive.value = saved.active
+    sharpenLastResult.value = saved.lastResult
+  }
+  await refreshSharpenQueue()
+  // If queue still has items and we had an active run, resume polling
+  if (sharpenTotal.value > 0 && sharpenQueue.value &&
+      (sharpenQueue.value.pending > 0 || sharpenQueue.value.processing > 0)) {
+    sharpenActive.value = true
+    startSharpenPolling()
+  } else if (sharpenTotal.value > 0) {
+    // Queue is empty — run is done
+    sharpenActive.value = false
+    saveSharpenState()
+  }
+})
 onBeforeUnmount(() => { stopSharpenPolling() })
 </script>
 
