@@ -150,7 +150,7 @@ def parse_intent(query: str) -> QueryIntent:
     # --- Assignee (simple "assigned to X" pattern) ---
     assignee_filter: Optional[str] = None
     assignee_match = re.search(
-        r"(?:assigned to|assignee[: ]+|przypisane do)\s+(\S+)",
+        r"(?:assigned to|assignee:?|przypisane do)\s+(\S+)",
         text, re.IGNORECASE,
     )
     if assignee_match:

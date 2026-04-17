@@ -211,7 +211,7 @@ def test_validate_session_id_allows_valid():
 def test_upload_size_limit_constant():
     from routers.memory import MAX_UPLOAD_BYTES
 
-    assert MAX_UPLOAD_BYTES == 50 * 1024 * 1024
+    assert MAX_UPLOAD_BYTES == 500 * 1024 * 1024
 
 
 def test_folder_validation_regex():

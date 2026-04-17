@@ -60,7 +60,7 @@ async def test_xml_ingest_small(ws: Path):
         assert row["priority"] == "High"
         assert row["assignee"] == "michal.kowalski"
         assert row["epic_key"] == "ONB-100"
-        assert row["note_path"] == "memory/jira/ONB/ONB-142.md"
+        assert row["note_path"] == "jira/ONB/ONB-142.md"
 
         labels = [r[0] for r in await (await db.execute(
             "SELECT label FROM issue_labels WHERE issue_key = ? ORDER BY label",
@@ -327,7 +327,7 @@ async def test_import_mirrors_issues_into_notes_table(ws: Path):
     async with aiosqlite.connect(str(db_path)) as db:
         db.row_factory = aiosqlite.Row
         notes = await (await db.execute(
-            "SELECT path, title, body FROM notes WHERE path LIKE 'memory/jira/%'"
+            "SELECT path, title, body FROM notes WHERE path LIKE 'jira/%'"
         )).fetchall()
         paths = {n["path"] for n in notes}
         assert len(paths) == 5
@@ -338,7 +338,7 @@ async def test_import_mirrors_issues_into_notes_table(ws: Path):
             "SELECT path FROM notes WHERE rowid IN "
             "(SELECT rowid FROM notes_fts WHERE notes_fts MATCH 'onboarding')"
         )).fetchall()
-        assert any(h["path"].startswith("memory/jira/") for h in hits)
+        assert any(h["path"].startswith("jira/") for h in hits)
 
 
 async def test_reimport_updates_notes_body(ws: Path, tmp_path: Path):
@@ -368,7 +368,7 @@ async def test_reimport_updates_notes_body(ws: Path, tmp_path: Path):
     async with aiosqlite.connect(str(db_path)) as db:
         db.row_factory = aiosqlite.Row
         row = await (await db.execute(
-            "SELECT body FROM notes WHERE path = 'memory/jira/ONB/ONB-142.md'"
+            "SELECT body FROM notes WHERE path = 'jira/ONB/ONB-142.md'"
         )).fetchone()
         assert row is not None
         assert "xyzxyz" in row["body"]

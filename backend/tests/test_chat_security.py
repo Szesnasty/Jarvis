@@ -120,7 +120,7 @@ async def test_tool_results_sanitized():
     from services.tools import execute_tool
 
     # search_notes with no results is safe
-    with patch("services.tools.memory_service") as mock_ms:
+    with patch("services.tools.executor.memory_service") as mock_ms:
         mock_ms.list_notes = AsyncMock(return_value=[])
         result = await execute_tool("search_notes", {"query": "anything"})
 
