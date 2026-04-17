@@ -365,3 +365,57 @@ def count_specialist_files(spec_id: str, workspace_path: Optional[Path] = None) 
 def reset_state() -> None:
     global _active_specialists
     _active_specialists = []
+
+
+# ── Built-in specialists ─────────────────────────────────────
+
+_BUILTIN_SPECIALISTS: List[Dict] = [
+    {
+        "id": "jira-strategist",
+        "name": "Jira Strategist",
+        "role": (
+            "Helps analyse tasks, clusters, blockers, sprint risk and owner "
+            "load across the Jira export and the rest of the workspace."
+        ),
+        "icon": "🎯",
+        "sources": ["memory/jira/**", "memory/decisions/**", "memory/projects/**"],
+        "style": {
+            "tone": "direct, operational",
+            "length": "short, bulleted when listing issues",
+            "citation": "always include issue keys in brackets",
+        },
+        "rules": [
+            "Never invent issue keys — only cite keys that appear in context.",
+            "When listing blockers, use hard 'blocks' / 'depends_on' edges first, then soft 'likely_dependency_on' flagged as '(likely)'.",
+            "When a task is unclear, say so explicitly and cite the enrichment ambiguity level.",
+        ],
+        "tools": [
+            "search_notes",
+            "open_note",
+            "query_graph",
+        ],
+        "examples": [],
+    },
+]
+
+
+def seed_builtin_specialists(workspace_path: Optional[Path] = None) -> List[str]:
+    """Ensure all built-in specialists exist in the agents directory.
+
+    Only creates missing specialists — never overwrites user edits.
+    Returns list of specialist IDs that were created.
+    """
+    created: List[str] = []
+    agents = _agents_dir(workspace_path)
+
+    for spec in _BUILTIN_SPECIALISTS:
+        filepath = agents / ("%s.json" % spec["id"])
+        if filepath.exists():
+            continue
+
+        now = datetime.now(timezone.utc).isoformat()
+        data = dict(spec, created_at=now, updated_at=now, builtin=True)
+        filepath.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        created.append(spec["id"])
+
+    return created

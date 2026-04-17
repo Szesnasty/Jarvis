@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS note_chunks (
     section_title TEXT DEFAULT '',
     chunk_text TEXT NOT NULL,
     token_count INTEGER NOT NULL,
+    subject_type TEXT NOT NULL DEFAULT 'note',
     created_at TEXT NOT NULL,
     FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE,
     UNIQUE(path, chunk_index)
@@ -271,7 +272,7 @@ CREATE INDEX IF NOT EXISTS idx_eq_status_created ON enrichment_queue(status, cre
 """
 
 
-_VALID_TABLES = {"notes"}
+_VALID_TABLES = {"notes", "note_chunks"}
 
 
 async def _column_exists(db, table: str, column: str) -> bool:
@@ -323,6 +324,13 @@ async def init_database(db_path: Path) -> None:
 
         await db.executescript(EMBEDDINGS_SQL)
         await db.executescript(CHUNKS_SQL)
+
+        # Step 22e: add subject_type to note_chunks for cross-source linking
+        if not await _column_exists(db, "note_chunks", "subject_type"):
+            await db.execute(
+                "ALTER TABLE note_chunks ADD COLUMN subject_type TEXT NOT NULL DEFAULT 'note'"
+            )
+
         await db.executescript(NODE_EMBEDDINGS_SQL)
         await db.executescript(ENTITY_ALIASES_SQL)
         await db.executescript(JIRA_SQL)

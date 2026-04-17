@@ -277,6 +277,15 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
     except Exception as exc:
         logger.debug("Soft edge rebuild skipped: %s", exc)
 
+    # Pass 11: Cross-source linking + intra-file edges (step 22e)
+    try:
+        from services.graph_service.cross_source import rebuild_cross_source_edges
+        cross_count = rebuild_cross_source_edges(ws, graph)
+        if cross_count:
+            logger.info("Cross-source: %d edges added", cross_count)
+    except Exception as exc:
+        logger.debug("Cross-source edge rebuild skipped: %s", exc)
+
     # Pass 9: Embed node labels for semantic anchoring (step 20b)
     if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") != "1":
         try:

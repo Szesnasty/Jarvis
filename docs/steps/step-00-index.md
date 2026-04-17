@@ -145,7 +145,7 @@
 | [22b](step-22b-jira-entities-graph.spec.md) | Jira node types + explicit (hard) graph edges | ✅ | → 2nd |
 | [22c](step-22c-local-enrichment.spec.md) | Local-model enrichment pipeline (classification / risk / ambiguity / summary) | ✅ | → 3rd |
 | [22d](step-22d-soft-edges.spec.md) | Soft edges (same_topic / likely_dependency / business_area) with confidence | ✅ | → 3rd ∥ |
-| [22e](step-22e-cross-source-linking.spec.md) | Cross-source linking: issue ↔ note / decision / doc, intra-file chunk edges | ⬜ | → 4th |
+| [22e](step-22e-cross-source-linking.spec.md) | Cross-source linking: issue ↔ note / decision / doc, intra-file chunk edges | ✅ | → 4th |
 | [22f](step-22f-jira-retrieval.spec.md) | Jira-aware hybrid retrieval with facets, boosts and structured context | ⬜ | → 5th |
 | [22g](step-22g-jira-strategist.spec.md) | `Jira Strategist` specialist + sprint/blocker tools + Duel presets | ⬜ | → 6th |
 

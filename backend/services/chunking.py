@@ -93,8 +93,13 @@ def chunk_markdown(
     tags: Optional[List[str]] = None,
     max_chunk_tokens: int = 300,
     overlap_tokens: int = 50,
+    subject_kind: str = "note",
 ) -> List[Chunk]:
     """Split markdown content into semantically meaningful chunks.
+
+    Args:
+        subject_kind: hint for section weighting. On ``jira_issue``, the
+            title is repeated in every chunk prefix to boost relevance.
 
     Strategy:
     1. Parse frontmatter to extract title + tags
@@ -150,13 +155,14 @@ def chunk_markdown(
 
     for section_title, section_text in sections:
         # Context prefix for embedding: title + section heading
+        # For jira_issue subjects, always include title for relevance
         parts = []
         if title:
             parts.append(title)
         if section_title:
             parts.append(section_title)
-        if tag_str and len(chunks) == 0:
-            # Include tags only in first chunk
+        if tag_str and (len(chunks) == 0 or subject_kind == "jira_issue"):
+            # Include tags in first chunk; for jira issues include in all
             parts.append(tag_str)
 
         context_prefix = ". ".join(parts) + ". " if parts else ""

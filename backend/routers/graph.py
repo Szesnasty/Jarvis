@@ -140,6 +140,27 @@ async def rebuild_soft_edges_endpoint():
     return {"status": "ok", "edges_added": count}
 
 
+@router.post("/rebuild-cross-source")
+async def rebuild_cross_source_endpoint():
+    """Rebuild cross-source and intra-file edges (step 22e)."""
+    import asyncio
+    from services.graph_service.cross_source import rebuild_cross_source_edges
+    from config import get_settings
+
+    graph = graph_service.load_graph()
+    if graph is None:
+        graph_service.invalidate_cache()
+        graph = await asyncio.to_thread(graph_service.rebuild_graph)
+
+    ws = get_settings().workspace_path
+    count = await asyncio.to_thread(rebuild_cross_source_edges, ws, graph)
+
+    from services.graph_service.builder import _save_and_cache
+    _save_and_cache(graph)
+
+    return {"status": "ok", "edges_added": count}
+
+
 @router.get("/edges")
 async def get_edges(origin: str = None, type: str = None):
     """List edges with optional origin/type filters."""
