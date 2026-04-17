@@ -221,6 +221,56 @@ CREATE INDEX IF NOT EXISTS idx_imports_started ON jira_imports(started_at);
 """
 
 
+# Step 22c: local-model enrichment cache + queue
+ENRICHMENT_SQL = """
+CREATE TABLE IF NOT EXISTS enrichments (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_type     TEXT NOT NULL,
+    subject_id       TEXT NOT NULL,
+    content_hash     TEXT NOT NULL,
+    model_id         TEXT NOT NULL,
+    prompt_version   INTEGER NOT NULL,
+    status           TEXT NOT NULL,
+    payload          TEXT NOT NULL,
+    raw_output       TEXT,
+    tokens_in        INTEGER,
+    tokens_out       INTEGER,
+    duration_ms      INTEGER,
+    created_at       TEXT NOT NULL,
+    UNIQUE(subject_type, subject_id, content_hash, model_id, prompt_version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_enrich_subject ON enrichments(subject_type, subject_id);
+CREATE INDEX IF NOT EXISTS idx_enrich_status  ON enrichments(status);
+CREATE INDEX IF NOT EXISTS idx_enrich_created ON enrichments(created_at);
+
+CREATE VIEW IF NOT EXISTS latest_enrichment AS
+SELECT e.*
+FROM enrichments e
+JOIN (
+    SELECT subject_type, subject_id, MAX(created_at) AS mx
+    FROM enrichments WHERE status='ok' GROUP BY 1,2
+) l
+ON e.subject_type = l.subject_type
+AND e.subject_id = l.subject_id
+AND e.created_at = l.mx;
+
+CREATE TABLE IF NOT EXISTS enrichment_queue (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_type  TEXT NOT NULL,
+    subject_id    TEXT NOT NULL,
+    content_hash  TEXT NOT NULL,
+    reason        TEXT,
+    created_at    TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'pending',
+    started_at    TEXT,
+    UNIQUE(subject_type, subject_id, content_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_eq_status_created ON enrichment_queue(status, created_at);
+"""
+
+
 _VALID_TABLES = {"notes"}
 
 
@@ -276,4 +326,5 @@ async def init_database(db_path: Path) -> None:
         await db.executescript(NODE_EMBEDDINGS_SQL)
         await db.executescript(ENTITY_ALIASES_SQL)
         await db.executescript(JIRA_SQL)
+        await db.executescript(ENRICHMENT_SQL)
         await db.commit()

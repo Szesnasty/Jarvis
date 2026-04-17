@@ -268,6 +268,15 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
     except Exception as exc:
         logger.debug("Jira projection skipped: %s", exc)
 
+    # Pass 10: Derived soft edges (step 22d)
+    try:
+        from services.graph_service.soft_edges import rebuild_soft_edges
+        soft_count = rebuild_soft_edges(ws, graph)
+        if soft_count:
+            logger.info("Soft edges: %d derived edges added", soft_count)
+    except Exception as exc:
+        logger.debug("Soft edge rebuild skipped: %s", exc)
+
     # Pass 9: Embed node labels for semantic anchoring (step 20b)
     if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") != "1":
         try:
