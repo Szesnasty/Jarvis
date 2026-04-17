@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!DOCTYPE foo [
+  <!ENTITY xxe SYSTEM "file:///etc/passwd">
+]>
+<rss version="0.92">
+  <channel>
+    <item>
+      <key>EVIL-1</key>
+      <summary>&xxe;</summary>
+      <type>Task</type>
+      <status>Open</status>
+      <created>Mon, 1 Feb 2026 09:00:00 +0000</created>
+      <updated>Mon, 1 Feb 2026 09:00:00 +0000</updated>
+    </item>
+  </channel>
+</rss>

@@ -54,6 +54,18 @@
       "last_updated": "2026-04-16",
       "status": "current"
     },
+    "jira-ingest": {
+      "doc": "docs/features/jira-ingest.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/jira.py",
+        "backend/services/jira_ingest.py",
+        "backend/models/database.py"
+      ],
+      "depends_on": ["memory", "database"],
+      "last_updated": "2026-04-17",
+      "status": "current"
+    },
     "knowledge-graph": {
       "doc": "docs/features/knowledge-graph.md",
       "type": "feature",
