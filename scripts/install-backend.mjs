@@ -1,5 +1,8 @@
 import { spawnSync } from 'node:child_process';
+import * as fs from 'node:fs';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
@@ -433,7 +436,73 @@ async function main() {
   }
   run(venvPythonRel, ['-m', 'pip', 'install', '-r', 'requirements.txt'], { cwd: 'backend' });
 
+  // Install backend as editable so the `jarvis-mcp` console script is generated.
+  console.log('[install-backend] installing backend package (registers `jarvis-mcp` CLI)');
+  run(venvPythonRel, ['-m', 'pip', 'install', '-e', '.'], { cwd: 'backend' });
+
+  await setupMcpCli();
+
   console.log(`${GREEN}[install-backend] done${RESET}`);
+}
+
+async function setupMcpCli() {
+  // Symlink jarvis-mcp into ~/.local/bin so MCP clients can spawn it without
+  // any absolute paths in their config files.
+  if (isWin) {
+    console.log(
+      `${DIM}[install-backend] skipping ~/.local/bin symlink on Windows; use full path or add backend\\.venv\\Scripts to PATH${RESET}`,
+    );
+    return;
+  }
+
+  const homedir = os.homedir();
+  const localBin = path.join(homedir, '.local', 'bin');
+  const target = path.resolve('backend', '.venv', 'bin', 'jarvis-mcp');
+  const linkPath = path.join(localBin, 'jarvis-mcp');
+
+  if (!fs.existsSync(target)) {
+    console.warn(`${DIM}[install-backend] jarvis-mcp binary not found at ${target}; skipping symlink${RESET}`);
+    return;
+  }
+
+  fs.mkdirSync(localBin, { recursive: true });
+  try {
+    if (fs.existsSync(linkPath) || fs.lstatSync(linkPath, { throwIfNoEntry: false })) {
+      fs.unlinkSync(linkPath);
+    }
+  } catch {
+    /* ignore — best-effort cleanup */
+  }
+  try {
+    fs.symlinkSync(target, linkPath);
+    console.log(`${GREEN}[install-backend] linked jarvis-mcp -> ${linkPath}${RESET}`);
+  } catch (err) {
+    console.warn(`[install-backend] could not symlink ${linkPath}: ${err.message}`);
+    return;
+  }
+
+  // Persist workspace path to ~/.jarvis/config.toml so jarvis-mcp can find it
+  // without any environment variables or CLI flags.
+  const workspaceFromEnv = process.env.JARVIS_WORKSPACE;
+  const workspace = workspaceFromEnv && workspaceFromEnv.trim()
+    ? workspaceFromEnv.trim()
+    : path.join(homedir, 'Jarvis');
+
+  const configDir = path.join(homedir, '.jarvis');
+  const configFile = path.join(configDir, 'config.toml');
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(configFile, `workspace = "${workspace}"\n`, 'utf8');
+  console.log(`${GREEN}[install-backend] wrote ${configFile} (workspace=${workspace})${RESET}`);
+
+  // PATH check
+  const pathEntries = (process.env.PATH || '').split(path.delimiter);
+  if (!pathEntries.includes(localBin)) {
+    console.log(
+      `${DIM}[install-backend] note: ${localBin} is not on your PATH. Add it via:${RESET}\n` +
+        `    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc\n` +
+        `${DIM}  GUI apps (Cursor, Claude Desktop) usually still find symlinks here on macOS.${RESET}`,
+    );
+  }
 }
 
 main().catch((err) => {

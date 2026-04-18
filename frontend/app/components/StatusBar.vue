@@ -25,22 +25,6 @@
     </span>
 
     <button
-      type="button"
-      class="status-bar__mcp"
-      :class="{ 'status-bar__mcp--on': mcpRunning, 'status-bar__mcp--busy': mcpLoading }"
-      :title="mcpTooltip"
-      :disabled="mcpLoading"
-      @click="onMcpClick"
-      @contextmenu.prevent="goToMcpSettings"
-    >
-      <span class="status-bar__mcp-dot" />
-      <span class="status-bar__mcp-label">MCP</span>
-      <span v-if="mcpRunning && mcp.status.value.tool_count" class="status-bar__mcp-count">
-        {{ mcp.status.value.tool_count }}
-      </span>
-    </button>
-
-    <button
       class="status-bar__hamburger"
       :class="{ 'status-bar__hamburger--open': menuOpen }"
       aria-label="Toggle navigation"
@@ -56,14 +40,11 @@
 <script setup lang="ts">
 import { useLocalModels } from '~/composables/useLocalModels'
 import { useApiKeys } from '~/composables/useApiKeys'
-import { useMcp } from '~/composables/useMcp'
 
 const { backendStatus, chatActive } = useAppState()
 const menuOpen = ref(false)
 const { activeProvider } = useApiKeys()
 const localModels = useLocalModels()
-const mcp = useMcp()
-const router = useRouter()
 
 const route = useRoute()
 watch(() => route.path, () => {
@@ -79,41 +60,6 @@ const statusText = computed(() => {
   }
   return base
 })
-
-// ── MCP toggle ──
-const mcpRunning = computed(() => mcp.running.value)
-const mcpLoading = computed(() => mcp.loading.value)
-
-const mcpTooltip = computed(() => {
-  const s = mcp.status.value
-  if (s.running) {
-    const calls = s.calls_today ? ` · ${s.calls_today} calls today` : ''
-    return `MCP server running · ${s.tool_count} tools on :${s.port}${calls}\nClick to stop · Right-click for settings`
-  }
-  return `MCP server stopped — ${s.tool_count} tools available\nClick to start · Right-click for settings`
-})
-
-async function onMcpClick() {
-  if (mcpLoading.value) return
-  if (mcpRunning.value) {
-    await mcp.stop()
-  } else {
-    await mcp.start()
-  }
-}
-
-function goToMcpSettings() {
-  void router.push('/settings#mcp')
-}
-
-onMounted(() => {
-  if (backendStatus.value === 'online') mcp.startPolling(8000)
-})
-watch(backendStatus, (v) => {
-  if (v === 'online') mcp.startPolling(8000)
-  else mcp.stopPolling()
-})
-onBeforeUnmount(() => mcp.stopPolling())
 </script>
 
 <style scoped>
