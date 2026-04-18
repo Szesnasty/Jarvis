@@ -25,6 +25,22 @@
     </span>
 
     <button
+      type="button"
+      class="status-bar__mcp"
+      :class="{ 'status-bar__mcp--on': mcpRunning, 'status-bar__mcp--busy': mcpLoading }"
+      :title="mcpTooltip"
+      :disabled="mcpLoading"
+      @click="onMcpClick"
+      @contextmenu.prevent="goToMcpSettings"
+    >
+      <span class="status-bar__mcp-dot" />
+      <span class="status-bar__mcp-label">MCP</span>
+      <span v-if="mcpRunning && mcp.status.value.tool_count" class="status-bar__mcp-count">
+        {{ mcp.status.value.tool_count }}
+      </span>
+    </button>
+
+    <button
       class="status-bar__hamburger"
       :class="{ 'status-bar__hamburger--open': menuOpen }"
       aria-label="Toggle navigation"
@@ -40,11 +56,14 @@
 <script setup lang="ts">
 import { useLocalModels } from '~/composables/useLocalModels'
 import { useApiKeys } from '~/composables/useApiKeys'
+import { useMcp } from '~/composables/useMcp'
 
 const { backendStatus, chatActive } = useAppState()
 const menuOpen = ref(false)
 const { activeProvider } = useApiKeys()
 const localModels = useLocalModels()
+const mcp = useMcp()
+const router = useRouter()
 
 const route = useRoute()
 watch(() => route.path, () => {
@@ -60,6 +79,41 @@ const statusText = computed(() => {
   }
   return base
 })
+
+// ── MCP toggle ──
+const mcpRunning = computed(() => mcp.running.value)
+const mcpLoading = computed(() => mcp.loading.value)
+
+const mcpTooltip = computed(() => {
+  const s = mcp.status.value
+  if (s.running) {
+    const calls = s.calls_today ? ` · ${s.calls_today} calls today` : ''
+    return `MCP server running · ${s.tool_count} tools on :${s.port}${calls}\nClick to stop · Right-click for settings`
+  }
+  return `MCP server stopped — ${s.tool_count} tools available\nClick to start · Right-click for settings`
+})
+
+async function onMcpClick() {
+  if (mcpLoading.value) return
+  if (mcpRunning.value) {
+    await mcp.stop()
+  } else {
+    await mcp.start()
+  }
+}
+
+function goToMcpSettings() {
+  void router.push('/settings#mcp')
+}
+
+onMounted(() => {
+  if (backendStatus.value === 'online') mcp.startPolling(8000)
+})
+watch(backendStatus, (v) => {
+  if (v === 'online') mcp.startPolling(8000)
+  else mcp.stopPolling()
+})
+onBeforeUnmount(() => mcp.stopPolling())
 </script>
 
 <style scoped>
@@ -198,6 +252,83 @@ const statusText = computed(() => {
   color: var(--neon-yellow);
   background-color: rgba(234, 179, 8, 0.08);
   border-color: rgba(234, 179, 8, 0.2);
+}
+
+/* ── MCP toggle pill ── */
+.status-bar__mcp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 0.5rem;
+  padding: 0.18rem 0.6rem 0.18rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background-color: rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.status-bar__mcp:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: rgba(148, 163, 184, 0.14);
+  border-color: var(--border-default);
+}
+
+.status-bar__mcp:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.status-bar__mcp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--text-muted, #64748b);
+  box-shadow: 0 0 0 0 transparent;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.status-bar__mcp--on {
+  color: var(--neon-cyan);
+  background-color: var(--neon-cyan-08);
+  border-color: var(--neon-cyan-30);
+  text-shadow: 0 0 6px var(--neon-cyan-30);
+  box-shadow: 0 0 10px var(--neon-cyan-08);
+}
+
+.status-bar__mcp--on:hover:not(:disabled) {
+  background-color: var(--neon-cyan-15, rgba(34, 211, 238, 0.18));
+}
+
+.status-bar__mcp--on .status-bar__mcp-dot {
+  background-color: #22d3ee;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.7), 0 0 2px rgba(34, 211, 238, 1);
+  animation: mcpPulse 2.4s ease-in-out infinite;
+}
+
+.status-bar__mcp--busy {
+  opacity: 0.75;
+}
+
+.status-bar__mcp-count {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  padding: 0 0.35rem;
+  border-radius: 9999px;
+  background-color: rgba(34, 211, 238, 0.18);
+  color: var(--neon-cyan);
+  font-size: 0.66rem;
+}
+
+@keyframes mcpPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 
 /* ── Backdrop (mobile only) ── */

@@ -204,6 +204,131 @@
       <p class="settings-page__path">{{ workspacePath }}</p>
     </section>
 
+    <!-- MCP Server -->
+    <section id="mcp" class="settings-page__section mcp-section">
+      <div class="mcp-section__header">
+        <div>
+          <h2 class="settings-page__section-title">MCP Server</h2>
+          <p class="mcp-section__lead">
+            Expose your <strong>entire workspace</strong> — every note, conversation,
+            Jira issue and graph entity — to any MCP-compatible AI client
+            (Claude Desktop, Cursor, VS Code Copilot, Continue, Zed). Read-only
+            by default, runs locally, never leaves your machine.
+          </p>
+        </div>
+        <span
+          class="mcp-section__pill"
+          :class="{ 'mcp-section__pill--on': mcp.running.value }"
+        >
+          <span class="mcp-section__dot" />
+          {{ mcp.running.value ? 'Running' : 'Stopped' }}
+        </span>
+      </div>
+
+      <div class="mcp-section__grid">
+        <div class="mcp-stat">
+          <span class="mcp-stat__label">Tools available</span>
+          <span class="mcp-stat__value">{{ mcp.status.value.tool_count || 25 }}</span>
+        </div>
+        <div class="mcp-stat">
+          <span class="mcp-stat__label">Calls today</span>
+          <span class="mcp-stat__value">{{ mcp.status.value.calls_today }}</span>
+        </div>
+        <div class="mcp-stat">
+          <span class="mcp-stat__label">Top tool</span>
+          <span class="mcp-stat__value mcp-stat__value--small">{{ mcp.status.value.top_tool || '—' }}</span>
+        </div>
+        <div class="mcp-stat">
+          <span class="mcp-stat__label">Last call</span>
+          <span class="mcp-stat__value mcp-stat__value--small">{{ formatLastCall(mcp.status.value.last_call) }}</span>
+        </div>
+      </div>
+
+      <div class="settings-page__actions mcp-section__actions">
+        <button
+          v-if="!mcp.running.value"
+          class="settings-page__btn settings-page__btn--primary"
+          :disabled="mcp.loading.value"
+          @click="startMcp"
+        >
+          {{ mcp.loading.value ? 'Starting…' : `Start SSE on :${mcpPort}` }}
+        </button>
+        <button
+          v-else
+          class="settings-page__btn"
+          :disabled="mcp.loading.value"
+          @click="mcp.stop()"
+        >
+          Stop server
+        </button>
+        <input
+          v-model.number="mcpPort"
+          type="number"
+          class="mcp-section__port"
+          :disabled="mcp.running.value"
+          min="1024"
+          max="65535"
+        />
+        <a class="settings-page__btn" href="/docs/features/mcp-server/" target="_blank" rel="noopener">
+          Docs
+        </a>
+      </div>
+
+      <div v-if="mcp.error.value" class="mcp-section__error">{{ mcp.error.value }}</div>
+
+      <!-- Token manager -->
+      <div class="mcp-section__token">
+        <div class="mcp-section__token-header">
+          <h3 class="mcp-section__sub">Bearer token</h3>
+          <span class="mcp-section__token-hint">Required for SSE clients · stored at <code>app/mcp_token</code></span>
+        </div>
+        <div class="mcp-section__token-row">
+          <input
+            class="mcp-section__token-input"
+            :value="tokenDisplay"
+            readonly
+            :type="showToken ? 'text' : 'password'"
+            spellcheck="false"
+          />
+          <button class="settings-page__btn" @click="showToken = !showToken">
+            {{ showToken ? 'Hide' : 'Reveal' }}
+          </button>
+          <button class="settings-page__btn" :disabled="!mcp.token.value" @click="copyToken">
+            {{ tokenCopied ? 'Copied ✓' : 'Copy' }}
+          </button>
+          <button class="settings-page__btn" :disabled="mcp.loading.value" @click="rotateToken">
+            Regenerate
+          </button>
+        </div>
+      </div>
+
+      <!-- Snippet generator -->
+      <div class="mcp-section__snippets">
+        <h3 class="mcp-section__sub">Client config snippets</h3>
+        <div class="mcp-tabs">
+          <button
+            v-for="t in snippetTabs"
+            :key="t.id"
+            class="mcp-tab"
+            :class="{ 'mcp-tab--active': activeSnippet === t.id }"
+            @click="activeSnippet = t.id"
+          >
+            {{ t.label }}
+          </button>
+        </div>
+        <p class="mcp-section__snippet-hint">{{ activeSnippetHint }}</p>
+        <div class="mcp-snippet">
+          <pre class="mcp-snippet__code"><code>{{ activeSnippetText }}</code></pre>
+          <button class="mcp-snippet__copy" @click="copySnippet">
+            {{ snippetCopied ? 'Copied ✓' : 'Copy' }}
+          </button>
+        </div>
+        <p class="mcp-section__paste-path">
+          <strong>Paste into:</strong> <code>{{ activeSnippetPath }}</code>
+        </p>
+      </div>
+    </section>
+
     <!-- Voice -->
     <section class="settings-page__section">
       <h2 class="settings-page__section-title">Voice Settings</h2>
@@ -220,100 +345,6 @@
         <button class="settings-page__btn" @click="reindexMemory">Reindex Memory</button>
         <button class="settings-page__btn" @click="rebuildGraphAction">Rebuild Graph</button>
       </div>
-    </section>
-
-    <!-- Privacy & Network kill-switches -->
-    <section class="settings-page__section privacy-section">
-      <div class="privacy-header">
-        <h2 class="settings-page__section-title">Privacy &amp; Network</h2>
-        <span class="privacy-badge" :class="{ 'privacy-badge--active': privacy?.offline_mode }">
-          {{ privacy?.offline_mode ? '🛡️ Offline mode active' : 'Hybrid mode' }}
-        </span>
-      </div>
-      <p class="settings-page__hint">
-        Control which outbound network calls Jarvis is allowed to make.
-        Local Ollama, embeddings and reranker are <strong>never</strong> blocked —
-        they run entirely on this machine.
-      </p>
-
-      <!-- Master switch -->
-      <div class="privacy-row privacy-row--master">
-        <label class="privacy-toggle" :class="{ 'privacy-toggle--locked': privacy?.offline_mode_locked }">
-          <input
-            type="checkbox"
-            :checked="!!privacy?.offline_mode"
-            :disabled="privacy?.offline_mode_locked || privacySaving"
-            @change="setPrivacy('offline_mode', ($event.target as HTMLInputElement).checked)"
-          />
-          <span class="privacy-toggle__main">
-            <strong>Offline mode</strong>
-            <span class="privacy-toggle__sub">
-              Hard-block every outbound integration: cloud LLMs, web search, URL ingest.
-              Only local Ollama works.
-            </span>
-          </span>
-        </label>
-        <p v-if="privacy?.offline_mode_locked" class="privacy-locked-note">
-          🔒 Locked by <code>JARVIS_OFFLINE_MODE</code> environment variable.
-        </p>
-      </div>
-
-      <!-- Per-feature toggles -->
-      <div class="privacy-row" :class="{ 'privacy-row--disabled': privacy?.offline_mode }">
-        <label class="privacy-toggle">
-          <input
-            type="checkbox"
-            :checked="!!privacy?.cloud_providers_enabled"
-            :disabled="privacy?.offline_mode || privacySaving"
-            @change="setPrivacy('cloud_providers_enabled', ($event.target as HTMLInputElement).checked)"
-          />
-          <span class="privacy-toggle__main">
-            <strong>Allow cloud LLM providers</strong>
-            <span class="privacy-toggle__sub">
-              Anthropic / OpenAI / Google. <strong>Sends your prompts and retrieved
-              notes (including imported Jira issues) to the chosen provider.</strong>
-            </span>
-          </span>
-        </label>
-      </div>
-
-      <div class="privacy-row" :class="{ 'privacy-row--disabled': privacy?.offline_mode }">
-        <label class="privacy-toggle">
-          <input
-            type="checkbox"
-            :checked="!!privacy?.web_search_enabled"
-            :disabled="privacy?.offline_mode || privacySaving"
-            @change="setPrivacy('web_search_enabled', ($event.target as HTMLInputElement).checked)"
-          />
-          <span class="privacy-toggle__main">
-            <strong>Allow web search</strong>
-            <span class="privacy-toggle__sub">
-              DuckDuckGo. Sends the search query (not your notes) when the assistant uses
-              the web_search tool.
-            </span>
-          </span>
-        </label>
-      </div>
-
-      <div class="privacy-row" :class="{ 'privacy-row--disabled': privacy?.offline_mode }">
-        <label class="privacy-toggle">
-          <input
-            type="checkbox"
-            :checked="!!privacy?.url_ingest_enabled"
-            :disabled="privacy?.offline_mode || privacySaving"
-            @change="setPrivacy('url_ingest_enabled', ($event.target as HTMLInputElement).checked)"
-          />
-          <span class="privacy-toggle__main">
-            <strong>Allow URL ingest</strong>
-            <span class="privacy-toggle__sub">
-              Fetch web pages and YouTube metadata/transcripts for imports. Outbound HTTP
-              to public URLs (private IPs are blocked).
-            </span>
-          </span>
-        </label>
-      </div>
-
-      <p v-if="privacyError" class="privacy-error">{{ privacyError }}</p>
     </section>
 
     <!-- Sharpen all (local AI enrichment) -->
@@ -545,9 +576,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type { ProviderConfig } from '~/types'
 import { ICON_LOCK } from '~/composables/providerIcons'
+import { useMcp } from '~/composables/useMcp'
 
 const lockIcon = ICON_LOCK
 
@@ -587,47 +619,6 @@ const budget = ref<{ daily_budget: number; used_today: number; percent: number; 
 const budgetValue = ref(100000)
 const history = ref<{ date: string; total_tokens: number }[]>([])
 const statusMsg = ref('')
-
-// Privacy & network kill-switches
-type PrivacyState = {
-  offline_mode: boolean
-  offline_mode_locked: boolean
-  web_search_enabled: boolean
-  url_ingest_enabled: boolean
-  cloud_providers_enabled: boolean
-}
-const privacy = ref<PrivacyState | null>(null)
-const privacySaving = ref(false)
-const privacyError = ref('')
-
-async function loadPrivacy() {
-  try {
-    privacy.value = await $fetch<PrivacyState>('/api/settings/privacy')
-  } catch {
-    privacyError.value = 'Failed to load privacy settings'
-  }
-}
-
-async function setPrivacy(key: keyof PrivacyState, value: boolean) {
-  privacySaving.value = true
-  privacyError.value = ''
-  try {
-    privacy.value = await $fetch<PrivacyState>('/api/settings/privacy', {
-      method: 'PATCH',
-      body: { [key]: value },
-    })
-    statusMsg.value = value
-      ? `Enabled: ${String(key).replaceAll('_', ' ')}`
-      : `Disabled: ${String(key).replaceAll('_', ' ')}`
-  } catch (e: unknown) {
-    const err = e as { data?: { detail?: string } }
-    privacyError.value = err?.data?.detail ?? 'Failed to update privacy settings'
-    // Refresh authoritative state
-    await loadPrivacy()
-  } finally {
-    privacySaving.value = false
-  }
-}
 
 // Provider keys
 const apiKeys = useApiKeys()
@@ -714,9 +705,6 @@ onMounted(async () => {
 
   // Load local models state
   localModels.refreshAll()
-
-  // Load privacy / network kill-switches
-  loadPrivacy()
 })
 
 async function updateVoicePrefs() {
@@ -989,6 +977,145 @@ onMounted(async () => {
   }
 })
 onBeforeUnmount(() => { stopSharpenPolling() })
+
+// ─────────────────────────────────────────────────────────────────────────
+// MCP Server panel
+// ─────────────────────────────────────────────────────────────────────────
+const mcp = useMcp()
+const mcpPort = ref(8765)
+const showToken = ref(false)
+const tokenCopied = ref(false)
+const snippetCopied = ref(false)
+
+type SnippetId = 'claude' | 'cursor' | 'vscode' | 'continue' | 'sse'
+
+interface SnippetTab {
+  id: SnippetId
+  label: string
+  hint: string
+  path: string
+  builder: 'stdio' | 'sse' | 'vscode'
+}
+
+const snippetTabs: SnippetTab[] = [
+  {
+    id: 'claude',
+    label: 'Claude Desktop',
+    hint: 'Stdio transport — Claude Desktop launches Jarvis on demand. No need to keep the SSE server running.',
+    path: '~/Library/Application Support/Claude/claude_desktop_config.json',
+    builder: 'stdio',
+  },
+  {
+    id: 'cursor',
+    label: 'Cursor',
+    hint: 'Stdio transport — Cursor → Settings → MCP → Add. Drop this in or save to the path below.',
+    path: '~/.cursor/mcp.json',
+    builder: 'stdio',
+  },
+  {
+    id: 'vscode',
+    label: 'VS Code / Copilot',
+    hint: 'Stdio transport — works with GitHub Copilot Chat (MCP-enabled) and the Continue extension.',
+    path: '<workspace>/.vscode/mcp.json',
+    builder: 'vscode',
+  },
+  {
+    id: 'continue',
+    label: 'Continue',
+    hint: 'Stdio transport — Continue.dev config file (used by both VS Code and JetBrains).',
+    path: '~/.continue/config.json (mcpServers field)',
+    builder: 'stdio',
+  },
+  {
+    id: 'sse',
+    label: 'SSE (HTTP)',
+    hint: 'Use this when your client only supports HTTP/SSE transport. Requires the SSE server to be running.',
+    path: 'Whatever your client expects — Authorization: Bearer <token>',
+    builder: 'sse',
+  },
+]
+
+const activeSnippet = ref<SnippetId>('claude')
+
+const snippetCtx = computed(() => ({
+  pythonPath: mcp.status.value.python_path || '<jarvis-backend>/.venv/bin/python',
+  backendDir: mcp.status.value.backend_dir || '<jarvis-backend>',
+  workspacePath: mcp.status.value.workspace_path || workspacePath.value || '<jarvis-workspace>',
+  port: mcpPort.value,
+  token: mcp.token.value,
+  sseUrl: `http://127.0.0.1:${mcpPort.value}/sse`,
+}))
+
+const activeSnippetTab = computed(() =>
+  snippetTabs.find((t) => t.id === activeSnippet.value) ?? snippetTabs[0]!,
+)
+const activeSnippetHint = computed(() => activeSnippetTab.value.hint)
+const activeSnippetPath = computed(() => activeSnippetTab.value.path)
+
+const activeSnippetText = computed(() => {
+  const ctx = snippetCtx.value
+  switch (activeSnippetTab.value.builder) {
+    case 'sse': return mcp.buildSseConfig(ctx)
+    case 'vscode': return mcp.buildVscodeConfig(ctx)
+    case 'stdio':
+    default: return mcp.buildStdioConfig(ctx)
+  }
+})
+
+const tokenDisplay = computed(() => {
+  if (!mcp.token.value) return ''
+  if (showToken.value) return mcp.token.value
+  return mcp.token.value.slice(0, 6) + '••••••••••••••••••••••••' + mcp.token.value.slice(-4)
+})
+
+function formatLastCall(iso: string | null): string {
+  if (!iso) return 'never'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000)
+  if (diffSec < 60) return `${diffSec}s ago`
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
+  return d.toLocaleString()
+}
+
+async function startMcp() {
+  await mcp.start(mcpPort.value)
+}
+
+async function copyToken() {
+  if (!mcp.token.value) return
+  try {
+    await navigator.clipboard.writeText(mcp.token.value)
+    tokenCopied.value = true
+    setTimeout(() => { tokenCopied.value = false }, 1500)
+  } catch { /* ignore */ }
+}
+
+async function copySnippet() {
+  try {
+    await navigator.clipboard.writeText(activeSnippetText.value)
+    snippetCopied.value = true
+    setTimeout(() => { snippetCopied.value = false }, 1500)
+  } catch { /* ignore */ }
+}
+
+async function rotateToken() {
+  if (!confirm('Regenerate the MCP bearer token? All connected clients will need to re-authenticate.')) return
+  await mcp.regenerateToken()
+}
+
+onMounted(async () => {
+  // Refresh first so Start/Stop button shows correct state immediately
+  await mcp.refreshStatus()
+  await mcp.fetchToken()
+  mcp.startPolling(8000)
+  if (typeof window !== 'undefined' && window.location.hash === '#mcp') {
+    await nextTick()
+    document.getElementById('mcp')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+})
+onBeforeUnmount(() => { mcp.stopPolling() })
 </script>
 
 <style scoped>
@@ -1887,99 +2014,290 @@ onBeforeUnmount(() => { stopSharpenPolling() })
   flex-shrink: 0;
 }
 
-/* ── Privacy & Network ─────────────────────────────────────────────── */
-.privacy-section {
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  padding: 1.25rem;
-  background: rgba(255, 255, 255, 0.01);
+/* ──────────────────────────────────────────────────────────────────────
+   MCP Server panel
+   ────────────────────────────────────────────────────────────────────── */
+.mcp-section {
+  scroll-margin-top: 80px;
 }
-.privacy-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-.privacy-badge {
-  font-size: 0.75rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-.privacy-badge--active {
-  background: rgba(80, 220, 140, 0.12);
-  border-color: rgba(80, 220, 140, 0.4);
-  color: rgb(140, 230, 170);
-}
-.privacy-row {
-  margin-top: 0.85rem;
-  padding-top: 0.85rem;
-  border-top: 1px dashed var(--border-subtle);
-}
-.privacy-row:first-of-type {
-  border-top: none;
-  padding-top: 0;
-}
-.privacy-row--master {
-  padding: 0.85rem;
-  background: rgba(255, 200, 80, 0.04);
-  border: 1px solid rgba(255, 200, 80, 0.18);
-  border-radius: 6px;
-  margin-top: 1rem;
-}
-.privacy-row--disabled {
-  opacity: 0.5;
-}
-.privacy-toggle {
+
+.mcp-section__header {
   display: flex;
   align-items: flex-start;
-  gap: 0.65rem;
-  cursor: pointer;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
 }
-.privacy-toggle--locked {
-  cursor: not-allowed;
+
+.mcp-section__lead {
+  margin: 0.25rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  max-width: 70ch;
 }
-.privacy-toggle input[type='checkbox'] {
-  margin-top: 0.25rem;
+
+.mcp-section__lead strong {
+  color: var(--neon-cyan);
+}
+
+.mcp-section__pill {
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background-color: rgba(148, 163, 184, 0.08);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
 }
-.privacy-toggle__main {
+
+.mcp-section__pill--on {
+  color: var(--neon-cyan);
+  background-color: var(--neon-cyan-08);
+  border-color: var(--neon-cyan-30);
+  text-shadow: 0 0 6px var(--neon-cyan-30);
+}
+
+.mcp-section__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--text-muted, #64748b);
+}
+
+.mcp-section__pill--on .mcp-section__dot {
+  background-color: #22d3ee;
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.7);
+  animation: mcpPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes mcpPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.mcp-section__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.mcp-stat {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.25rem;
+  padding: 0.65rem 0.85rem;
+  background-color: var(--bg-elevated, rgba(148, 163, 184, 0.04));
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
 }
-.privacy-toggle__main strong {
-  font-size: 0.92rem;
+
+.mcp-stat__label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted, #94a3b8);
+}
+
+.mcp-stat__value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.mcp-stat__value--small {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.mcp-section__actions {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.mcp-section__port {
+  width: 90px;
+  padding: 0.4rem 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  background-color: var(--bg-elevated, rgba(148, 163, 184, 0.04));
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
   color: var(--text-primary);
 }
-.privacy-toggle__sub {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  line-height: 1.4;
+
+.mcp-section__port:disabled {
+  opacity: 0.55;
 }
-.privacy-locked-note {
-  margin-top: 0.5rem;
+
+.mcp-section__error {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--neon-red, #f87171);
+  background-color: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 6px;
+}
+
+.mcp-section__sub {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.mcp-section__token {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.mcp-section__token-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.mcp-section__token-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.mcp-section__token-hint code {
+  padding: 0.05rem 0.3rem;
+  background-color: rgba(148, 163, 184, 0.1);
+  border-radius: 3px;
+  font-size: 0.72rem;
+}
+
+.mcp-section__token-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.mcp-section__token-input {
+  flex: 1 1 320px;
+  min-width: 0;
+  padding: 0.45rem 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  background-color: var(--bg-elevated, rgba(148, 163, 184, 0.04));
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+
+.mcp-section__snippets {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.mcp-tabs {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mcp-tab {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mcp-tab:hover {
+  color: var(--text-primary);
+  background-color: var(--neon-cyan-08);
+}
+
+.mcp-tab--active {
+  color: var(--neon-cyan);
+  background-color: var(--neon-cyan-08);
+  border-color: var(--neon-cyan-30);
+  text-shadow: 0 0 6px var(--neon-cyan-30);
+}
+
+.mcp-section__snippet-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.mcp-snippet {
+  position: relative;
+  background-color: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mcp-snippet__code {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: #e2e8f0;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.mcp-snippet__copy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background-color: rgba(34, 211, 238, 0.1);
+  color: var(--neon-cyan);
+  border: 1px solid var(--neon-cyan-30);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mcp-snippet__copy:hover {
+  background-color: rgba(34, 211, 238, 0.2);
+}
+
+.mcp-section__paste-path {
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.mcp-section__paste-path code {
+  padding: 0.1rem 0.4rem;
+  background-color: rgba(148, 163, 184, 0.1);
+  border-radius: 4px;
   font-size: 0.75rem;
   color: var(--text-secondary);
-}
-.privacy-locked-note code {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.72rem;
-  padding: 0.05rem 0.3rem;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.06);
-}
-.privacy-error {
-  margin-top: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: 4px;
-  background: rgba(220, 80, 80, 0.1);
-  border: 1px solid rgba(220, 80, 80, 0.3);
-  color: rgb(240, 160, 160);
-  font-size: 0.82rem;
 }
 </style>
