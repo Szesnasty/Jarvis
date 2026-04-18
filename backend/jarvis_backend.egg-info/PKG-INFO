@@ -1,5 +1,5 @@
 Metadata-Version: 2.4
 Name: jarvis-backend
-Version: 0.4.1
+Version: 0.6.0
 Summary: Jarvis — An AI workspace that remembers what matters (backend)
 Requires-Python: >=3.12

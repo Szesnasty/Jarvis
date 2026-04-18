@@ -1,7 +1,12 @@
-"""MCP call logger — append-only JSONL at app/logs/mcp.jsonl."""
+"""MCP audit logger — append-only JSONL at <workspace>/app/logs/mcp.jsonl.
+
+Format unchanged from previous implementation (services/mcp/mcp_logging.py)
+to keep historical logs readable.
+"""
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import logging
@@ -9,7 +14,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +26,6 @@ _log_path: Path | None = None
 
 
 def _resolve_log_path(workspace_path: Path) -> Path:
-    """Ensure the log dir exists and rotate if the day has changed."""
     global _current_day, _log_path
 
     log_dir = workspace_path / _LOG_DIR_NAME
@@ -35,7 +39,7 @@ def _resolve_log_path(workspace_path: Path) -> Path:
         try:
             current_file.rename(rotated)
         except OSError:
-            pass  # already rotated or concurrent access
+            pass
 
     _current_day = today
     _log_path = current_file
@@ -43,8 +47,7 @@ def _resolve_log_path(workspace_path: Path) -> Path:
 
 
 def hash_args(args: dict[str, Any]) -> str:
-    """Deterministic hash of tool arguments (for privacy — don't log raw args)."""
-    canonical = json.dumps(args, sort_keys=True, separators=(",", ":"))
+    canonical = json.dumps(args, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
@@ -63,9 +66,8 @@ async def log_call(
     *,
     tool: str,
     args: dict[str, Any],
-    client_id: str = "unknown",
+    client_id: str = "stdio",
 ):
-    """Context manager that logs the tool call start/end with timing."""
     entry: dict[str, Any] = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "tool": tool,
@@ -88,8 +90,32 @@ async def log_call(
         _write_entry(workspace_path, entry)
 
 
+def audit(tool_name: str, workspace_provider: Callable[[], Path]):
+    """Decorator that logs every call to a FastMCP tool handler.
+
+    Args:
+        tool_name: canonical tool name as registered with FastMCP.
+        workspace_provider: zero-arg callable returning the active workspace path.
+    """
+
+    def decorator(fn: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
+        @functools.wraps(fn)
+        async def wrapper(**kwargs: Any) -> Any:
+            ws = workspace_provider()
+            async with log_call(ws, tool=tool_name, args=kwargs) as entry:
+                result = await fn(**kwargs)
+                try:
+                    entry["output_tokens"] = max(1, len(json.dumps(result, default=str)) // 4)
+                except (TypeError, ValueError):
+                    entry["output_tokens"] = 0
+                return result
+
+        return wrapper
+
+    return decorator
+
+
 def get_stats(workspace_path: Path) -> dict[str, Any]:
-    """Aggregate stats from today's log file for the status endpoint."""
     log_file = _resolve_log_path(workspace_path)
     stats: dict[str, Any] = {"calls_today": 0, "last_call": None, "top_tool": None}
     if not log_file.exists():

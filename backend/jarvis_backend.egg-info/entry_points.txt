@@ -1,0 +1,2 @@
+[console_scripts]
+jarvis-mcp = mcp_server.__main__:main

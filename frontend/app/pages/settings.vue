@@ -213,93 +213,66 @@
             Expose your <strong>entire workspace</strong> — every note, conversation,
             Jira issue and graph entity — to any MCP-compatible AI client
             (Claude Desktop, Cursor, VS Code Copilot, Continue, Zed). Read-only
-            by default, runs locally, never leaves your machine.
+            by default, runs locally as a stdio CLI launched on demand by your
+            client. Nothing leaves your machine.
           </p>
         </div>
         <span
           class="mcp-section__pill"
-          :class="{ 'mcp-section__pill--on': mcp.running.value }"
+          :class="{ 'mcp-section__pill--on': mcp.info.value.cli_on_path }"
         >
           <span class="mcp-section__dot" />
-          {{ mcp.running.value ? 'Running' : 'Stopped' }}
+          {{ mcp.info.value.cli_on_path ? 'CLI on PATH' : 'CLI not on PATH' }}
         </span>
       </div>
 
       <div class="mcp-section__grid">
         <div class="mcp-stat">
-          <span class="mcp-stat__label">Tools available</span>
-          <span class="mcp-stat__value">{{ mcp.status.value.tool_count || 25 }}</span>
+          <span class="mcp-stat__label">Read tools</span>
+          <span class="mcp-stat__value">{{ mcp.info.value.tool_count }}</span>
+        </div>
+        <div class="mcp-stat">
+          <span class="mcp-stat__label">Write tools (opt-in)</span>
+          <span class="mcp-stat__value">{{ mcp.info.value.write_tool_count }}</span>
         </div>
         <div class="mcp-stat">
           <span class="mcp-stat__label">Calls today</span>
-          <span class="mcp-stat__value">{{ mcp.status.value.calls_today }}</span>
+          <span class="mcp-stat__value">{{ mcp.info.value.calls_today }}</span>
         </div>
         <div class="mcp-stat">
           <span class="mcp-stat__label">Top tool</span>
-          <span class="mcp-stat__value mcp-stat__value--small">{{ mcp.status.value.top_tool || '—' }}</span>
+          <span class="mcp-stat__value mcp-stat__value--small">{{ mcp.info.value.top_tool || '—' }}</span>
         </div>
         <div class="mcp-stat">
           <span class="mcp-stat__label">Last call</span>
-          <span class="mcp-stat__value mcp-stat__value--small">{{ formatLastCall(mcp.status.value.last_call) }}</span>
+          <span class="mcp-stat__value mcp-stat__value--small">{{ formatLastCall(mcp.info.value.last_call) }}</span>
+        </div>
+        <div class="mcp-stat">
+          <span class="mcp-stat__label">Workspace</span>
+          <span class="mcp-stat__value mcp-stat__value--small" :title="mcp.info.value.workspace_path">
+            {{ mcp.info.value.workspace_path || '—' }}
+          </span>
         </div>
       </div>
 
-      <div class="settings-page__actions mcp-section__actions">
-        <button
-          v-if="!mcp.running.value"
-          class="settings-page__btn settings-page__btn--primary"
-          :disabled="mcp.loading.value"
-          @click="startMcp"
-        >
-          {{ mcp.loading.value ? 'Starting…' : `Start SSE on :${mcpPort}` }}
-        </button>
-        <button
-          v-else
-          class="settings-page__btn"
-          :disabled="mcp.loading.value"
-          @click="mcp.stop()"
-        >
-          Stop server
-        </button>
-        <input
-          v-model.number="mcpPort"
-          type="number"
-          class="mcp-section__port"
-          :disabled="mcp.running.value"
-          min="1024"
-          max="65535"
-        />
-        <a class="settings-page__btn" href="/docs/features/mcp-server/" target="_blank" rel="noopener">
-          Docs
-        </a>
+      <div v-if="!mcp.info.value.cli_on_path" class="mcp-section__error">
+        <strong>jarvis-mcp</strong> isn't on your <code>PATH</code>. The bootstrap installer normally
+        symlinks it to <code>~/.local/bin</code>. Either re-run <code>scripts/install-backend.mjs</code>,
+        or use the absolute path snippet below: <code>{{ mcp.info.value.cli_command }}</code>
       </div>
 
       <div v-if="mcp.error.value" class="mcp-section__error">{{ mcp.error.value }}</div>
 
-      <!-- Token manager -->
-      <div class="mcp-section__token">
-        <div class="mcp-section__token-header">
-          <h3 class="mcp-section__sub">Bearer token</h3>
-          <span class="mcp-section__token-hint">Required for SSE clients · stored at <code>app/mcp_token</code></span>
-        </div>
-        <div class="mcp-section__token-row">
-          <input
-            class="mcp-section__token-input"
-            :value="tokenDisplay"
-            readonly
-            :type="showToken ? 'text' : 'password'"
-            spellcheck="false"
-          />
-          <button class="settings-page__btn" @click="showToken = !showToken">
-            {{ showToken ? 'Hide' : 'Reveal' }}
-          </button>
-          <button class="settings-page__btn" :disabled="!mcp.token.value" @click="copyToken">
-            {{ tokenCopied ? 'Copied ✓' : 'Copy' }}
-          </button>
-          <button class="settings-page__btn" :disabled="mcp.loading.value" @click="rotateToken">
-            Regenerate
-          </button>
-        </div>
+      <div class="mcp-section__actions">
+        <button class="settings-page__btn" :disabled="mcp.loading.value" @click="mcp.refreshInfo">
+          {{ mcp.loading.value ? 'Refreshing…' : 'Refresh' }}
+        </button>
+        <a class="settings-page__btn" href="/docs/features/mcp-server/" target="_blank" rel="noopener">
+          Docs
+        </a>
+        <span class="mcp-section__audit-hint">
+          Audit log: <code>{{ mcp.info.value.audit_log_path || '—' }}</code>
+        </span>
       </div>
 
       <!-- Snippet generator -->
@@ -982,69 +955,57 @@ onBeforeUnmount(() => { stopSharpenPolling() })
 // MCP Server panel
 // ─────────────────────────────────────────────────────────────────────────
 const mcp = useMcp()
-const mcpPort = ref(8765)
-const showToken = ref(false)
-const tokenCopied = ref(false)
 const snippetCopied = ref(false)
 
-type SnippetId = 'claude' | 'cursor' | 'vscode' | 'continue' | 'sse'
+type SnippetId = 'claude' | 'cursor' | 'vscode' | 'continue' | 'zed'
 
 interface SnippetTab {
   id: SnippetId
   label: string
   hint: string
   path: string
-  builder: 'stdio' | 'sse' | 'vscode'
+  builder: 'stdio' | 'vscode'
 }
 
 const snippetTabs: SnippetTab[] = [
   {
     id: 'claude',
     label: 'Claude Desktop',
-    hint: 'Stdio transport — Claude Desktop launches Jarvis on demand. No need to keep the SSE server running.',
+    hint: 'Claude Desktop launches jarvis-mcp on demand over stdio. Nothing else to configure.',
     path: '~/Library/Application Support/Claude/claude_desktop_config.json',
     builder: 'stdio',
   },
   {
     id: 'cursor',
     label: 'Cursor',
-    hint: 'Stdio transport — Cursor → Settings → MCP → Add. Drop this in or save to the path below.',
+    hint: 'Cursor → Settings → MCP → Add. Drop this in or save to the path below.',
     path: '~/.cursor/mcp.json',
     builder: 'stdio',
   },
   {
     id: 'vscode',
     label: 'VS Code / Copilot',
-    hint: 'Stdio transport — works with GitHub Copilot Chat (MCP-enabled) and the Continue extension.',
+    hint: 'Works with GitHub Copilot Chat (MCP-enabled) and the Continue extension.',
     path: '<workspace>/.vscode/mcp.json',
     builder: 'vscode',
   },
   {
     id: 'continue',
     label: 'Continue',
-    hint: 'Stdio transport — Continue.dev config file (used by both VS Code and JetBrains).',
+    hint: 'Continue.dev config file (used by both VS Code and JetBrains).',
     path: '~/.continue/config.json (mcpServers field)',
     builder: 'stdio',
   },
   {
-    id: 'sse',
-    label: 'SSE (HTTP)',
-    hint: 'Use this when your client only supports HTTP/SSE transport. Requires the SSE server to be running.',
-    path: 'Whatever your client expects — Authorization: Bearer <token>',
-    builder: 'sse',
+    id: 'zed',
+    label: 'Zed',
+    hint: 'Zed → settings.json → context_servers.',
+    path: '~/.config/zed/settings.json',
+    builder: 'stdio',
   },
 ]
 
-const activeSnippet = ref<SnippetId>('claude')
-
-const snippetCtx = computed(() => ({
-  pythonPath: mcp.status.value.python_path || '<jarvis-backend>/.venv/bin/python',
-  backendDir: mcp.status.value.backend_dir || '<jarvis-backend>',
-  workspacePath: mcp.status.value.workspace_path || workspacePath.value || '<jarvis-workspace>',
-  port: mcpPort.value,
-  token: mcp.token.value,
-  sseUrl: `http://127.0.0.1:${mcpPort.value}/sse`,
-}))
+const activeSnippet = ref<SnippetId>('cursor')
 
 const activeSnippetTab = computed(() =>
   snippetTabs.find((t) => t.id === activeSnippet.value) ?? snippetTabs[0]!,
@@ -1053,19 +1014,12 @@ const activeSnippetHint = computed(() => activeSnippetTab.value.hint)
 const activeSnippetPath = computed(() => activeSnippetTab.value.path)
 
 const activeSnippetText = computed(() => {
-  const ctx = snippetCtx.value
+  const ctx = mcp.snippetCtx.value
   switch (activeSnippetTab.value.builder) {
-    case 'sse': return mcp.buildSseConfig(ctx)
     case 'vscode': return mcp.buildVscodeConfig(ctx)
     case 'stdio':
     default: return mcp.buildStdioConfig(ctx)
   }
-})
-
-const tokenDisplay = computed(() => {
-  if (!mcp.token.value) return ''
-  if (showToken.value) return mcp.token.value
-  return mcp.token.value.slice(0, 6) + '••••••••••••••••••••••••' + mcp.token.value.slice(-4)
 })
 
 function formatLastCall(iso: string | null): string {
@@ -1079,19 +1033,6 @@ function formatLastCall(iso: string | null): string {
   return d.toLocaleString()
 }
 
-async function startMcp() {
-  await mcp.start(mcpPort.value)
-}
-
-async function copyToken() {
-  if (!mcp.token.value) return
-  try {
-    await navigator.clipboard.writeText(mcp.token.value)
-    tokenCopied.value = true
-    setTimeout(() => { tokenCopied.value = false }, 1500)
-  } catch { /* ignore */ }
-}
-
 async function copySnippet() {
   try {
     await navigator.clipboard.writeText(activeSnippetText.value)
@@ -1100,22 +1041,13 @@ async function copySnippet() {
   } catch { /* ignore */ }
 }
 
-async function rotateToken() {
-  if (!confirm('Regenerate the MCP bearer token? All connected clients will need to re-authenticate.')) return
-  await mcp.regenerateToken()
-}
-
 onMounted(async () => {
-  // Refresh first so Start/Stop button shows correct state immediately
-  await mcp.refreshStatus()
-  await mcp.fetchToken()
-  mcp.startPolling(8000)
+  await mcp.refreshInfo()
   if (typeof window !== 'undefined' && window.location.hash === '#mcp') {
     await nextTick()
     document.getElementById('mcp')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 })
-onBeforeUnmount(() => { mcp.stopPolling() })
 </script>
 
 <style scoped>
