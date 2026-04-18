@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.1](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.8.0...jarvis-v0.8.1) (2026-04-18)
+
+
+### 📝 Documentation
+
+* **mcp:** update mcp-server docs to reflect stdio-only CLI architecture ([883e705](https://github.com/Szesnasty/Jarvis/commit/883e7059c757ab8ee993ecb79da0a07595e226e3))
+* **readme:** deduplicate MCP messaging across sections ([07909a3](https://github.com/Szesnasty/Jarvis/commit/07909a37f2c11b92745aea1ad2b44be29ce3a6c0))
+* **readme:** highlight MCP server — Jarvis as local memory for external AI tools ([ec54b93](https://github.com/Szesnasty/Jarvis/commit/ec54b93acc674439b6a2aa1ecbe4417b83819035))
+* **readme:** tighten positioning and onboarding clarity ([db13be1](https://github.com/Szesnasty/Jarvis/commit/db13be169134f4327ad9fb82f266d72ac5322209))
+
 ## [0.8.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.7.0...jarvis-v0.8.0) (2026-04-18)
 
 
