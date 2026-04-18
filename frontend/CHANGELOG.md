@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.6.0...frontend-v0.7.0) (2026-04-18)
+
+
+### ✨ Features
+
+* add privacy kill-switches & offline mode ([b7d5c24](https://github.com/Szesnasty/Jarvis/commit/b7d5c2425f6586846ecf56812a2d729b72ed045c))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** restore package-lock.json, remove from .gitignore, drop bun.lock ([0d236cc](https://github.com/Szesnasty/Jarvis/commit/0d236ccc0660f5fec40215e7468dac1b1fb3243e))
+
 ## [0.6.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.5.0...frontend-v0.6.0) (2026-04-18)
 
 

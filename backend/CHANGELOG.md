@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.6.0...backend-v0.7.0) (2026-04-18)
+
+
+### ✨ Features
+
+* add privacy kill-switches & offline mode ([b7d5c24](https://github.com/Szesnasty/Jarvis/commit/b7d5c2425f6586846ecf56812a2d729b72ed045c))
+
+
+### 🐛 Bug Fixes
+
+* **tests:** update tests for privacy guard and sprint label injection ([33ed70a](https://github.com/Szesnasty/Jarvis/commit/33ed70a4b44b07ac2a871d48fa8ee3784f464214))
+
 ## [0.6.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.5.0...backend-v0.6.0) (2026-04-18)
 
 
