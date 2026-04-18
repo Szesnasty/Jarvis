@@ -357,6 +357,16 @@ async def ingest_url(
     workspace_path: Optional[Path] = None,
 ) -> Dict:
     """Ingest a URL into memory. Returns note metadata."""
+    from services.privacy import url_ingest_enabled, is_offline_mode
+
+    if not url_ingest_enabled(workspace_path):
+        reason = (
+            "URL ingest is blocked because Offline Mode is enabled."
+            if is_offline_mode(workspace_path)
+            else "URL ingest is disabled in Settings → Privacy."
+        )
+        raise IngestError(reason)
+
     url = _sanitize_url(url)
     url_type, video_id = detect_url_type(url)
 

@@ -12,6 +12,21 @@
           <span>Stored locally in your browser. Never sent to our server.</span>
         </div>
 
+        <div class="modal-card__warning-box" role="alert">
+          <strong>⚠️ Privacy notice</strong>
+          <p>
+            Adding a {{ provider.name }} key means your chats — including any
+            <strong>retrieved notes, imported Jira issues</strong> and other context
+            Jarvis pulls in to answer — will be sent to {{ provider.name }} whenever
+            you select this provider.
+          </p>
+          <p>
+            Prefer fully local? Use <strong>Ollama</strong> instead, or enable
+            <strong>Offline mode</strong> in Settings → Privacy &amp; Network to
+            hard-block all cloud providers.
+          </p>
+        </div>
+
         <label class="modal-card__label" for="api-key-input">API Key</label>
         <div class="modal-card__input-row">
           <input
@@ -214,6 +229,30 @@ watch(() => props.show, (val) => {
   font-size: 0.75rem;
   color: rgba(251, 191, 36, 0.9);
   margin-bottom: 0.5rem;
+}
+.modal-card__warning-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 6px;
+  background: rgba(251, 191, 36, 0.06);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: rgba(251, 191, 36, 0.95);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-bottom: 1rem;
+}
+.modal-card__warning-box strong {
+  font-size: 0.82rem;
+}
+.modal-card__warning-box p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.modal-card__warning-box p strong {
+  color: rgba(251, 191, 36, 0.95);
+  font-size: inherit;
 }
 .modal-card__checkbox {
   display: flex;

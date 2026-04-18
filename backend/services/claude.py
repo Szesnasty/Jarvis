@@ -171,6 +171,11 @@ def _handle_block_stop(tool: _ToolAccumulator) -> Optional[StreamEvent]:
 
 class ClaudeService:
     def __init__(self, api_key: str):
+        from services.privacy import assert_provider_allowed
+
+        # Privacy gate (defense-in-depth) — blocks Anthropic when offline
+        # mode is engaged or cloud providers are disabled in Settings.
+        assert_provider_allowed("anthropic")
         self.client = anthropic.AsyncAnthropic(api_key=api_key)
 
     async def close(self) -> None:

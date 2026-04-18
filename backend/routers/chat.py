@@ -252,6 +252,13 @@ async def _stream_follow_up(
 
 def _make_llm(provider: Optional[str], model: Optional[str], api_key: str, base_url: Optional[str] = None):
     """Create an LLMService for the given provider, or ClaudeService as fallback."""
+    from services.privacy import assert_provider_allowed
+
+    # Privacy gate: block cloud providers when offline mode / cloud disabled.
+    # Ollama and "anthropic"-by-default both pass through to provider checks.
+    effective_provider = provider or "anthropic"
+    assert_provider_allowed(effective_provider)
+
     if provider == "ollama":
         from services.ollama_service import DEFAULT_OLLAMA_BASE_URL
         config = LLMConfig(
@@ -303,7 +310,13 @@ async def _handle_message(
     if budget["level"] == "warning":
         await _send_event(ws, "warning", content=f"Approaching daily token budget ({budget['percent']:.0f}% used).")
 
-    claude = get_llm(api_key or "", provider, model, base_url) if get_llm else _make_llm(provider, model, api_key or "", base_url)
+    from services.privacy import PrivacyBlockedError
+    try:
+        claude = get_llm(api_key or "", provider, model, base_url) if get_llm else _make_llm(provider, model, api_key or "", base_url)
+    except PrivacyBlockedError as exc:
+        await _send_event(ws, "error", content=str(exc))
+        await _send_event(ws, "done", session_id=session_id)
+        return
     assistant_text = ""
     # Specialist attribution: prefix first text_delta with specialist names
     attribution_prefix = ""

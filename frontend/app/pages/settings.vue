@@ -222,6 +222,100 @@
       </div>
     </section>
 
+    <!-- Privacy & Network kill-switches -->
+    <section class="settings-page__section privacy-section">
+      <div class="privacy-header">
+        <h2 class="settings-page__section-title">Privacy &amp; Network</h2>
+        <span class="privacy-badge" :class="{ 'privacy-badge--active': privacy?.offline_mode }">
+          {{ privacy?.offline_mode ? '🛡️ Offline mode active' : 'Hybrid mode' }}
+        </span>
+      </div>
+      <p class="settings-page__hint">
+        Control which outbound network calls Jarvis is allowed to make.
+        Local Ollama, embeddings and reranker are <strong>never</strong> blocked —
+        they run entirely on this machine.
+      </p>
+
+      <!-- Master switch -->
+      <div class="privacy-row privacy-row--master">
+        <label class="privacy-toggle" :class="{ 'privacy-toggle--locked': privacy?.offline_mode_locked }">
+          <input
+            type="checkbox"
+            :checked="!!privacy?.offline_mode"
+            :disabled="privacy?.offline_mode_locked || privacySaving"
+            @change="setPrivacy('offline_mode', ($event.target as HTMLInputElement).checked)"
+          />
+          <span class="privacy-toggle__main">
+            <strong>Offline mode</strong>
+            <span class="privacy-toggle__sub">
+              Hard-block every outbound integration: cloud LLMs, web search, URL ingest.
+              Only local Ollama works.
+            </span>
+          </span>
+        </label>
+        <p v-if="privacy?.offline_mode_locked" class="privacy-locked-note">
+          🔒 Locked by <code>JARVIS_OFFLINE_MODE</code> environment variable.
+        </p>
+      </div>
+
+      <!-- Per-feature toggles -->
+      <div class="privacy-row" :class="{ 'privacy-row--disabled': privacy?.offline_mode }">
+        <label class="privacy-toggle">
+          <input
+            type="checkbox"
+            :checked="!!privacy?.cloud_providers_enabled"
+            :disabled="privacy?.offline_mode || privacySaving"
+            @change="setPrivacy('cloud_providers_enabled', ($event.target as HTMLInputElement).checked)"
+          />
+          <span class="privacy-toggle__main">
+            <strong>Allow cloud LLM providers</strong>
+            <span class="privacy-toggle__sub">
+              Anthropic / OpenAI / Google. <strong>Sends your prompts and retrieved
+              notes (including imported Jira issues) to the chosen provider.</strong>
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div class="privacy-row" :class="{ 'privacy-row--disabled': privacy?.offline_mode }">
+        <label class="privacy-toggle">
+          <input
+            type="checkbox"
+            :checked="!!privacy?.web_search_enabled"
+            :disabled="privacy?.offline_mode || privacySaving"
+            @change="setPrivacy('web_search_enabled', ($event.target as HTMLInputElement).checked)"
+          />
+          <span class="privacy-toggle__main">
+            <strong>Allow web search</strong>
+            <span class="privacy-toggle__sub">
+              DuckDuckGo. Sends the search query (not your notes) when the assistant uses
+              the web_search tool.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div class="privacy-row" :class="{ 'privacy-row--disabled': privacy?.offline_mode }">
+        <label class="privacy-toggle">
+          <input
+            type="checkbox"
+            :checked="!!privacy?.url_ingest_enabled"
+            :disabled="privacy?.offline_mode || privacySaving"
+            @change="setPrivacy('url_ingest_enabled', ($event.target as HTMLInputElement).checked)"
+          />
+          <span class="privacy-toggle__main">
+            <strong>Allow URL ingest</strong>
+            <span class="privacy-toggle__sub">
+              Fetch web pages and YouTube metadata/transcripts for imports. Outbound HTTP
+              to public URLs (private IPs are blocked).
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <p v-if="privacyError" class="privacy-error">{{ privacyError }}</p>
+    </section>
+
     <!-- Sharpen all (local AI enrichment) -->
     <section class="settings-page__section sharpen-section">
       <h2 class="settings-page__section-title">Sharpen with Local AI</h2>
@@ -494,6 +588,47 @@ const budgetValue = ref(100000)
 const history = ref<{ date: string; total_tokens: number }[]>([])
 const statusMsg = ref('')
 
+// Privacy & network kill-switches
+type PrivacyState = {
+  offline_mode: boolean
+  offline_mode_locked: boolean
+  web_search_enabled: boolean
+  url_ingest_enabled: boolean
+  cloud_providers_enabled: boolean
+}
+const privacy = ref<PrivacyState | null>(null)
+const privacySaving = ref(false)
+const privacyError = ref('')
+
+async function loadPrivacy() {
+  try {
+    privacy.value = await $fetch<PrivacyState>('/api/settings/privacy')
+  } catch {
+    privacyError.value = 'Failed to load privacy settings'
+  }
+}
+
+async function setPrivacy(key: keyof PrivacyState, value: boolean) {
+  privacySaving.value = true
+  privacyError.value = ''
+  try {
+    privacy.value = await $fetch<PrivacyState>('/api/settings/privacy', {
+      method: 'PATCH',
+      body: { [key]: value },
+    })
+    statusMsg.value = value
+      ? `Enabled: ${String(key).replaceAll('_', ' ')}`
+      : `Disabled: ${String(key).replaceAll('_', ' ')}`
+  } catch (e: unknown) {
+    const err = e as { data?: { detail?: string } }
+    privacyError.value = err?.data?.detail ?? 'Failed to update privacy settings'
+    // Refresh authoritative state
+    await loadPrivacy()
+  } finally {
+    privacySaving.value = false
+  }
+}
+
 // Provider keys
 const apiKeys = useApiKeys()
 const showAddKeyModal = ref(false)
@@ -579,6 +714,9 @@ onMounted(async () => {
 
   // Load local models state
   localModels.refreshAll()
+
+  // Load privacy / network kill-switches
+  loadPrivacy()
 })
 
 async function updateVoicePrefs() {
@@ -1747,5 +1885,101 @@ onBeforeUnmount(() => { stopSharpenPolling() })
 .sharpen-progress__cancel {
   margin-left: auto;
   flex-shrink: 0;
+}
+
+/* ── Privacy & Network ─────────────────────────────────────────────── */
+.privacy-section {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.01);
+}
+.privacy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.privacy-badge {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.privacy-badge--active {
+  background: rgba(80, 220, 140, 0.12);
+  border-color: rgba(80, 220, 140, 0.4);
+  color: rgb(140, 230, 170);
+}
+.privacy-row {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--border-subtle);
+}
+.privacy-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+.privacy-row--master {
+  padding: 0.85rem;
+  background: rgba(255, 200, 80, 0.04);
+  border: 1px solid rgba(255, 200, 80, 0.18);
+  border-radius: 6px;
+  margin-top: 1rem;
+}
+.privacy-row--disabled {
+  opacity: 0.5;
+}
+.privacy-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+}
+.privacy-toggle--locked {
+  cursor: not-allowed;
+}
+.privacy-toggle input[type='checkbox'] {
+  margin-top: 0.25rem;
+  flex-shrink: 0;
+}
+.privacy-toggle__main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.privacy-toggle__main strong {
+  font-size: 0.92rem;
+  color: var(--text-primary);
+}
+.privacy-toggle__sub {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.privacy-locked-note {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.privacy-locked-note code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.72rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.privacy-error {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  background: rgba(220, 80, 80, 0.1);
+  border: 1px solid rgba(220, 80, 80, 0.3);
+  color: rgb(240, 160, 160);
+  font-size: 0.82rem;
 }
 </style>

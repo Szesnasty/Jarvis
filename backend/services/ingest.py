@@ -148,6 +148,12 @@ async def smart_enrich(
     """Use Claude to enhance a note with summary and tags."""
     import anthropic
     from services.memory_service import _validate_path
+    from services.privacy import assert_provider_allowed, PrivacyBlockedError
+
+    try:
+        assert_provider_allowed("anthropic", workspace_path)
+    except PrivacyBlockedError as exc:
+        raise IngestError(str(exc)) from exc
 
     mem = _memory_dir(workspace_path)
     _validate_path(note_path, mem)
