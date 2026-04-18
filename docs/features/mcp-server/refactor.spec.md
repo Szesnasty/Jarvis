@@ -1,7 +1,7 @@
 # MCP Server Refactor — Spec
 
-**Status:** planned
-**Branch:** `feat/mcp-server` (no commits during work; will squash at end)
+**Status:** ✅ done (shipped in v0.8.0, PR `feat/mcp-server`)
+**Branch:** `feat/mcp-server` (merged to main)
 **Owner:** local-only refactor
 
 ## Goals
