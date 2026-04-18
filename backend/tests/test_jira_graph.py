@@ -256,7 +256,7 @@ async def test_label_nodes(ws: Path):
     assert any("auth" in n.label for n in label_nodes.values())
 
     has_label = [e for e in graph.edges if e.type == "has_label" and e.source == "issue:ONB-142"]
-    assert len(has_label) == 3  # onboarding, auth, session
+    assert len(has_label) == 4  # onboarding, auth, session, sprint14
     assert all(e.weight == 0.8 for e in has_label)
 
 
