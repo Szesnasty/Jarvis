@@ -46,6 +46,7 @@ async def test_ingest_url_youtube_path(monkeypatch):
         }
 
     monkeypatch.setattr(url_ingest, "_ingest_youtube", fake_ingest_youtube)
+    monkeypatch.setattr("services.privacy.url_ingest_enabled", lambda *a, **kw: True)
 
     result = await url_ingest.ingest_url("https://youtu.be/dQw4w9WgXcQ", folder="knowledge")
 
@@ -65,6 +66,7 @@ async def test_ingest_url_webpage_path(monkeypatch):
         }
 
     monkeypatch.setattr(url_ingest, "_ingest_webpage", fake_ingest_web)
+    monkeypatch.setattr("services.privacy.url_ingest_enabled", lambda *a, **kw: True)
 
     result = await url_ingest.ingest_url("https://example.com/post", folder="inbox")
 
@@ -87,6 +89,7 @@ async def test_ingest_url_with_summary(monkeypatch):
         return {"summary": "Short summary"}
 
     monkeypatch.setattr(url_ingest, "_ingest_webpage", fake_ingest_web)
+    monkeypatch.setattr("services.privacy.url_ingest_enabled", lambda *a, **kw: True)
 
     import services.ingest as ingest_mod
     monkeypatch.setattr(ingest_mod, "smart_enrich", fake_smart_enrich)

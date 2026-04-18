@@ -66,7 +66,7 @@ async def test_xml_ingest_small(ws: Path):
             "SELECT label FROM issue_labels WHERE issue_key = ? ORDER BY label",
             ("ONB-142",),
         )).fetchall()]
-        assert labels == ["auth", "onboarding", "session"]
+        assert labels == ["auth", "onboarding", "session", "sprint14"]
 
         components = [r[0] for r in await (await db.execute(
             "SELECT component FROM issue_components WHERE issue_key = ? ORDER BY component",
