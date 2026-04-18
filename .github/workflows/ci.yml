@@ -40,9 +40,30 @@ jobs:
         run: uv pip install --system -r requirements.txt
 
       - name: Download spaCy models
+        # Retry 3x with backoff to ride out transient GitHub 5xx errors when
+        # fetching model wheels from github.com/explosion/spacy-models releases.
+        # Don't fail the build if downloads still error — tests that need NER
+        # should skip via JARVIS_SKIP_NER=1; entity_extraction handles missing
+        # models gracefully.
+        env:
+          PIP_DEFAULT_TIMEOUT: '120'
         run: |
-          python -m spacy download pl_core_news_sm
-          python -m spacy download en_core_web_sm
+          set +e
+          for model in pl_core_news_sm en_core_web_sm; do
+            for attempt in 1 2 3; do
+              echo "::group::spacy download $model (attempt $attempt)"
+              python -m spacy download "$model" && { echo "::endgroup::"; break; }
+              echo "::endgroup::"
+              echo "spaCy download of $model failed (attempt $attempt), retrying in $((attempt * 10))s..."
+              sleep $((attempt * 10))
+            done
+          done
+          # Verify at least the English model is available; if not, log warning
+          # but continue — most tests don't need spaCy NER.
+          python -c "import spacy; spacy.load('en_core_web_sm')" 2>/dev/null \
+            && echo "spaCy en_core_web_sm OK" \
+            || echo "::warning::spaCy en_core_web_sm unavailable — NER-dependent tests may skip"
+          exit 0
 
       - name: Prepare test workspace
         run: mkdir -p /tmp/jarvis-ci/memory /tmp/jarvis-ci/app/sessions /tmp/jarvis-ci/graph /tmp/jarvis-ci/agents
