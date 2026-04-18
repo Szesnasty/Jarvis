@@ -20,9 +20,10 @@ Jarvis helps you:
 - create custom specialists and run structured debates
 - search the web via DuckDuckGo when local memory isn't enough
 - keep your memory local-first and Obsidian-compatible
+- **plug Jarvis into Claude Desktop, Cursor, VS Code, or any MCP client** and reuse your local memory from outside the UI — saving tokens every time
 
 > **Jarvis is not another AI chat with memory.**
-> **It is a personal knowledge system that gets more useful every time you use it.**
+> **It is a personal knowledge system that gets more useful every time you use it — from its own UI *and* from every MCP-aware tool you already love.**
 
 ![Jarvis hero](./docs/assets/hero.png)
 
@@ -115,6 +116,18 @@ Useful outputs become notes, summaries, plans, graph links, and durable context.
 ### Obsidian-compatible
 Your `Jarvis/memory/` folder works as a valid Obsidian vault — plain Markdown, YAML frontmatter, wiki-links, human-readable structure.
 
+### MCP server — Jarvis as local memory for every AI tool
+Jarvis ships with a built-in **Model Context Protocol server** (25 tools over stdio) that turns your workspace into a memory backend any MCP-aware client can use: **Claude Desktop, Cursor, VS Code / GitHub Copilot, Continue**, and more.
+
+Why this matters:
+- **Token savings** — retrieval (BM25 + semantic + graph) runs locally on your machine, so only a small, high-signal context leaves your laptop. You pay cloud providers for reasoning, not for re-explaining context.
+- **One memory, many tools** — ask Cursor to code against notes you saved from a YouTube lecture last month. Ask Claude Desktop to plan next week using your actual project notes. Same memory everywhere.
+- **Local-first by default** — the server runs on your machine over stdio; your notes never leave unless you ask a cloud model to reason about them.
+- **Cost-class budgets** — each MCP tool is tagged free/cheap/standard/premium so you can cap spend per session from Settings.
+- **Ready-to-paste configs** — Settings → MCP shows copy-paste JSON for Claude Desktop, Cursor, VS Code Copilot, and Continue.
+
+> **Jarvis becomes the local brain. Your favorite AI app becomes the face.**
+
 ---
 
 ## What works today
@@ -135,6 +148,7 @@ Your `Jarvis/memory/` folder works as a valid Obsidian vault — plain Markdown,
 - Token tracking with budget controls
 - Session-to-memory write-back with graph updates
 - Obsidian-compatible memory structure
+- **MCP server (25 tools, stdio)** — use Jarvis memory from Claude Desktop, Cursor, VS Code Copilot, Continue, or any MCP-aware client
 
 ---
 
@@ -236,6 +250,23 @@ No API key needed. Everything runs on your machine.
 3. Select your preferred model and start chatting
 
 Both options are first-class. You can switch between them anytime.
+
+### 3. (Optional) Connect Jarvis to Claude Desktop, Cursor, or VS Code
+
+Jarvis exposes a local **MCP server** so external AI tools can read and write your memory — turning Jarvis into a shared brain across every AI app you use.
+
+1. Open **Settings → MCP** in Jarvis
+2. Enable the MCP server
+3. Copy the ready-made JSON snippet for your client:
+   - **Claude Desktop** → paste into `claude_desktop_config.json`
+   - **Cursor** → paste into `~/.cursor/mcp.json`
+   - **VS Code Copilot** → paste into `.vscode/mcp.json`
+   - **Continue** → paste into `~/.continue/config.json`
+4. Restart your client. Jarvis tools (search, memory read/write, graph, sessions) are now available.
+
+Full docs and per-client examples: [`docs/features/mcp-server/`](./docs/features/mcp-server/).
+
+> **Why this saves tokens:** retrieval happens locally in Jarvis. Your cloud model receives a compressed, high-signal context instead of raw files and long chat history.
 
 <details>
 <summary><strong>Zero-prereq bootstrap</strong></summary>
