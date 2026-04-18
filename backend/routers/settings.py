@@ -3,7 +3,7 @@ import json
 from fastapi import APIRouter, HTTPException
 
 from config import get_settings
-from services import preference_service, token_tracking, workspace_service
+from services import preference_service, privacy, token_tracking, workspace_service
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -140,3 +140,35 @@ async def update_enrichment_settings(body: dict):
         "allow_on_battery": prefs.get("enrichment_allow_on_battery", "false") == "true",
         "model_id": select_model_id(ws),
     }
+
+
+@router.get("/privacy")
+async def get_privacy_settings():
+    """Return current privacy / network kill-switch state.
+
+    ``offline_mode_locked`` indicates the env var lock is engaged and the UI
+    should disable the offline-mode toggle.
+    """
+    return privacy.get_privacy_settings()
+
+
+@router.patch("/privacy")
+async def update_privacy_settings(body: dict):
+    """Patch privacy settings. Accepts any subset of:
+    offline_mode, web_search_enabled, url_ingest_enabled, cloud_providers_enabled.
+    """
+    if not isinstance(body, dict) or not body:
+        raise HTTPException(status_code=422, detail="Body must be a non-empty object")
+
+    updates = {}
+    for k, v in body.items():
+        if not isinstance(v, bool):
+            raise HTTPException(status_code=422, detail=f"{k} must be a boolean")
+        updates[k] = v
+
+    try:
+        return privacy.update_privacy_settings(updates)
+    except privacy.PrivacyBlockedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))

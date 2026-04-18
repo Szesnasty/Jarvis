@@ -252,6 +252,11 @@ class LLMService:
     """
 
     def __init__(self, config: LLMConfig):
+        from services.privacy import assert_provider_allowed
+
+        # Privacy gate (defense-in-depth) — blocks cloud providers when
+        # offline mode or cloud_providers_enabled=false. Local Ollama passes.
+        assert_provider_allowed(config.provider)
         self.config = config
         self._litellm_model = self._resolve_model()
 
