@@ -1,12 +1,8 @@
 {
   "mcpServers": {
     "jarvis": {
-      "command": "<JARVIS_BACKEND>/.venv/bin/python",
-      "args": ["-m", "services.mcp", "--transport", "stdio"],
-      "cwd": "<JARVIS_BACKEND>",
-      "env": {
-        "JARVIS_WORKSPACE": "<JARVIS_WORKSPACE>"
-      }
+      "command": "jarvis-mcp",
+      "args": ["--transport", "stdio"]
     }
   }
 }

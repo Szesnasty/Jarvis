@@ -1,9 +1,8 @@
 # Jarvis MCP — Ready-to-Paste Client Configs
 
 Drop-in JSON snippets for connecting popular AI clients to your local Jarvis
-MCP server. All snippets default to the **stdio** transport, which is the
-simplest setup — the client launches Jarvis on demand, no SSE server required,
-no token to manage.
+MCP server. All snippets use the **stdio** transport — the client launches
+`jarvis-mcp` on demand, no background server, no port, no token to manage.
 
 > **Scope:** these configs expose ~22 read-only tools spanning **all notes,
 > conversations, Jira issues, and graph entities** in your workspace — not
@@ -11,7 +10,10 @@ no token to manage.
 > `jarvis_append_note`, `jarvis_summarize_and_save`) are disabled unless
 > `mcp.allow_writes: true` is set in your workspace `app/config.json`.
 
-> **Paths:** The `<JARVIS_BACKEND>` and `<JARVIS_WORKSPACE>` placeholders in the JSON files below are filled in automatically by the **Settings → MCP Server** snippet generator in the Jarvis UI. Copy the generated snippet from there — it will contain your actual paths. The JSON files in this folder are reference templates only.
+> **`jarvis-mcp` on PATH?** The backend installer registers the CLI
+> automatically. If your client complains it can't find the command,
+> open **Settings → MCP** in Jarvis — the snippet generator will substitute
+> an absolute-path fallback pointing at `backend/.venv/bin/jarvis-mcp`.
 
 ---
 
@@ -44,19 +46,6 @@ Paste [`vscode-copilot.json`](./vscode-copilot.json). Requires VS Code
 
 **File:** `~/.continue/config.json` — merge the `experimental` block from
 [`continue.json`](./continue.json) into your existing config.
-
-## SSE / HTTP (any other MCP client)
-
-For clients that only speak HTTP/SSE:
-
-1. Open Jarvis → **Settings → MCP Server**.
-2. Click **Start SSE on :8765**.
-3. Click **Reveal** under "Bearer token", then **Copy**.
-4. Paste [`sse-http.json`](./sse-http.json) into your client and replace
-   `REPLACE_WITH_TOKEN_FROM_SETTINGS_PAGE` with the copied token.
-
-The token lives at `app/mcp_token` in your workspace (mode `0600`) and is
-gitignored. Regenerate any time from the Settings panel.
 
 ---
 
