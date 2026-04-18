@@ -37,6 +37,9 @@ Jarvis/
 .env
 .env.local
 
+# MCP token (per-workspace secret)
+app/mcp_token
+
 # SQLite
 *.db
 *.db-journal
