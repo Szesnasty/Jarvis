@@ -136,6 +136,44 @@ function computeDegrees(): Record<string, number> {
   return deg
 }
 
+// --- Compute sprint membership: issueId -> sprintId ---
+// Each Jira issue with an `in_sprint` edge is pulled toward its sprint node
+// by the cluster force below, so each sprint forms a visible "ball".
+//
+// A ticket can belong to many sprints (e.g. moved from Sprint 42 → Sprint 43).
+// We pick the sprint with the highest number in its label as the "home"
+// cluster — this keeps tickets grouped by their most recent sprint even
+// after that sprint is closed. Active sprints break ties. Sprints without
+// any number fall back to first-seen order.
+function computeSprintMembership(): Record<string, string> {
+  const sprintNumber: Record<string, number> = {}
+  const sprintIsActive: Record<string, boolean> = {}
+  for (const n of props.nodes ?? []) {
+    if (n.type !== 'jira_sprint') continue
+    const match = (n.label ?? '').match(/(\d+)/)
+    if (match && match[1]) sprintNumber[n.id] = parseInt(match[1], 10)
+    sprintIsActive[n.id] = (n.folder ?? '').toLowerCase() === 'active'
+  }
+
+  const map: Record<string, string> = {}
+  for (const e of props.edges ?? []) {
+    if (e.type !== 'in_sprint') continue
+    const current = map[e.source]
+    if (!current) {
+      map[e.source] = e.target
+      continue
+    }
+    const curNum = sprintNumber[current] ?? -1
+    const newNum = sprintNumber[e.target] ?? -1
+    if (newNum > curNum) {
+      map[e.source] = e.target
+    } else if (newNum === curNum && sprintIsActive[e.target] && !sprintIsActive[current]) {
+      map[e.source] = e.target
+    }
+  }
+  return map
+}
+
 function nodeRadius(type: string, degree: number): number {
   // Bigger, more prominent: projects & epics (anchors of the Jira graph)
   const baseByType: Record<string, number> = {
@@ -175,6 +213,51 @@ async function buildGraph() {
 
   const { default: ForceGraph } = await import('force-graph')
   const degrees = computeDegrees()
+  const sprintMembership = computeSprintMembership()
+
+  // Adjacency map: nodeId -> Set of directly connected neighbor ids.
+  // Used by hover-focus: on hover, we dim everything except the hovered
+  // node and its direct neighbors, on top of any active search dimming.
+  const adjacency: Record<string, Set<string>> = {}
+  {
+    const nodeIds = new Set((props.nodes ?? []).map(n => n.id))
+    for (const e of props.edges ?? []) {
+      if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue
+      ;(adjacency[e.source] ??= new Set()).add(e.target)
+      ;(adjacency[e.target] ??= new Set()).add(e.source)
+    }
+  }
+
+  // Lay sprints out on a ring so each sprint becomes its own "continent"
+  // on the canvas. Issues then cluster around their home sprint via the
+  // custom cluster force below, and cross-sprint edges (blocks / depends_on
+  // / relates_to) become visible "highways" between clusters.
+  // Sprints are ordered by the number in their label so adjacent sprints
+  // (Sprint 42 ↔ Sprint 43) sit next to each other on the ring.
+  const sprintNodes = (props.nodes ?? []).filter(n => n.type === 'jira_sprint')
+  sprintNodes.sort((a, b) => {
+    const an = parseInt((a.label ?? '').match(/(\d+)/)?.[1] ?? '0', 10)
+    const bn = parseInt((b.label ?? '').match(/(\d+)/)?.[1] ?? '0', 10)
+    return an - bn
+  })
+  const sprintIds = sprintNodes.map(n => n.id)
+  const sprintInitialPos: Record<string, { x: number; y: number }> = {}
+  if (sprintIds.length > 0) {
+    // Pick ring radius so adjacent sprint clusters sit ~CLUSTER_GAP apart
+    // along the circumference. More gap = more breathing room between
+    // sprint "continents".
+    const CLUSTER_GAP = 420
+    const ringRadius = sprintIds.length === 1
+      ? 0
+      : Math.max(320, (CLUSTER_GAP * sprintIds.length) / (2 * Math.PI))
+    sprintIds.forEach((id, i) => {
+      const angle = (i / sprintIds.length) * 2 * Math.PI
+      sprintInitialPos[id] = {
+        x: Math.cos(angle) * ringRadius,
+        y: Math.sin(angle) * ringRadius,
+      }
+    })
+  }
 
   graph = new ForceGraph(el)
     .backgroundColor('#06080d')
@@ -192,13 +275,25 @@ async function buildGraph() {
       const glow = NODE_GLOW[node.type] ?? 'rgba(156, 163, 175, 0.3)'
       const isHighlighted = props.highlightedNode === node.id
       const isHovered = hoveredNode.value?.id === node.id
+      // "Focus" = hover takes priority, but when nothing is hovered and a
+      // node is clicked (highlightedNode), it acts as sticky hover — the
+      // clicked node + its neighbors stay lit until the panel is closed.
+      const focusId = hoveredNode.value?.id ?? props.highlightedNode ?? null
+      const isFocused = node.id === focusId
+      const isFocusNeighbor = !!focusId && adjacency[focusId]?.has(node.id)
       const isSearchActive = props.searchMatchedIds && props.searchMatchedIds.size > 0
       const isSearchMatch = isSearchActive && props.searchMatchedIds!.has(node.id)
-      const isDimmed = isSearchActive && !isSearchMatch && !isHovered
+      // A node is "dimmed" when:
+      //  - a search is active and this node isn't a match,
+      //  - OR a node is focused (hover or click) and this one is neither
+      //    the focused node nor a direct neighbor.
+      const searchDims = isSearchActive && !isSearchMatch && !isFocused
+      const focusDims = !!focusId && !isFocused && !isFocusNeighbor
+      const isDimmed = searchDims || focusDims
 
-      // When search is active, dim non-matching nodes
+      // When search or focus is active, dim non-matching nodes
       if (isDimmed) {
-        ctx.globalAlpha = 0.15
+        ctx.globalAlpha = focusDims ? 0.08 : 0.15
       }
 
       // Layer 1 — wide, faint outer halo
@@ -297,10 +392,16 @@ async function buildGraph() {
     })
     // --- Edge styling by type ---
     .linkColor((link: any) => {
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+      // Focus dimming: hover > click. When a node is focused, dim edges
+      // that don't touch it.
+      const focusId = hoveredNode.value?.id ?? props.highlightedNode ?? null
+      if (focusId && srcId !== focusId && tgtId !== focusId) {
+        return 'rgba(100, 160, 220, 0.03)'
+      }
       // Dim edges during search if neither endpoint is matched
       if (props.searchMatchedIds && props.searchMatchedIds.size > 0) {
-        const srcId = typeof link.source === 'object' ? link.source.id : link.source
-        const tgtId = typeof link.target === 'object' ? link.target.id : link.target
         if (!props.searchMatchedIds.has(srcId) && !props.searchMatchedIds.has(tgtId)) {
           return 'rgba(100, 160, 220, 0.03)'
         }
@@ -315,16 +416,28 @@ async function buildGraph() {
     })
     .linkWidth((link: any) => {
       const type = link._type || 'tagged'
-      if (type === 'linked' || type === 'related') return 3.5
-      if (type === 'part_of') return 1.2
-      if (type === 'similar_to') return 0.8 + (link._weight ?? 0) * 1.7
-      if (type === 'temporal') return 1.0
-      return 2
+      if (type === 'linked' || type === 'related') return 1.8
+      if (type === 'blocks' || type === 'depends_on') return 1.4
+      if (type === 'in_sprint') return 0.6
+      if (type === 'in_project') return 0.5
+      if (type === 'in_epic') return 0.8
+      if (type === 'part_of') return 0.7
+      if (type === 'similar_to') return 0.5 + (link._weight ?? 0) * 1.0
+      if (type === 'temporal') return 0.5
+      if (type === 'has_label' || type === 'has_component') return 0.5
+      if (type === 'assigned_to' || type === 'reported_by' || type === 'commented_on') return 0.4
+      return 0.7
     })
     .linkLineDash((link: any) => {
       if (link._type === 'part_of') return [2, 2]
       if (link._type === 'similar_to') return [3, 3]
       if (link._type === 'temporal') return [1, 3]
+      if (link._type === 'in_sprint') return [2, 3]
+      if (link._type === 'in_project') return [1, 3]
+      if (link._type === 'has_label') return [1, 2]
+      if (link._type === 'has_component') return [1, 2]
+      if (link._type === 'assigned_to' || link._type === 'reported_by') return [2, 2]
+      if (link._type === 'commented_on') return [1, 3]
       return []
     })
     .linkDirectionalArrowLength((link: any) => {
@@ -398,13 +511,33 @@ async function buildGraph() {
         hoveredNode.value = null
         hoveredDegree.value = 0
       }
+      // Force link colors to re-evaluate so hover-focus dimming applies even
+      // after the physics cooldown has stopped continuous rendering.
+      graph?.linkColor(graph.linkColor())
     })
     .graphData((() => {
       const nodes = props.nodes ?? []
       const edges = props.edges ?? []
       const nodeIds = new Set(nodes.map(n => n.id))
       return {
-        nodes: nodes.map(n => ({ ...n })),
+        nodes: nodes.map(n => {
+          const copy: any = { ...n }
+          // Seed sprint nodes with positions on the ring so the simulation
+          // starts already visually separated (sprint clusters don't all
+          // collapse into the center on first tick).
+          if (n.type === 'jira_sprint' && sprintInitialPos[n.id]) {
+            copy.x = sprintInitialPos[n.id]!.x
+            copy.y = sprintInitialPos[n.id]!.y
+          } else if (n.type === 'jira_issue' && sprintMembership[n.id]) {
+            const anchor = sprintInitialPos[sprintMembership[n.id]!]
+            if (anchor) {
+              // Small random offset around the sprint anchor
+              copy.x = anchor.x + (Math.random() - 0.5) * 80
+              copy.y = anchor.y + (Math.random() - 0.5) * 80
+            }
+          }
+          return copy
+        }),
         links: edges
           .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
           .map(e => ({ source: e.source, target: e.target, _type: e.type, _weight: e.weight, _evidence: e.evidence })),
@@ -412,19 +545,58 @@ async function buildGraph() {
     })())
 
   // --- Force tuning ---
-  // Areas strongly repel, tags weakly repel: tiered charge
+  // Balanced repulsion: enough to spread nodes out, but not so much that
+  // low-degree outliers fly to the edges of the canvas.
   graph.d3Force('charge')?.strength((node: any) => {
     const deg = degrees[node.id] || 0
-    if (node.type === 'area') return -200 - deg * 10
-    if (node.type === 'tag') return -30 - deg * 3
-    return -60 - deg * 5
+    if (node.type === 'jira_sprint') return -400 - deg * 5
+    if (node.type === 'area') return -200 - deg * 8
+    if (node.type === 'jira_project' || node.type === 'jira_epic') return -160 - deg * 6
+    if (node.type === 'tag' || node.type === 'jira_label') return -60 - deg * 3
+    return -100 - deg * 4
   })
   graph.d3Force('link')?.distance((link: any) => {
-    if (link._type === 'part_of') return 50
-    if (link._type === 'tagged') return 35
-    return 45
+    if (link._type === 'in_sprint') return 28
+    if (link._type === 'blocks' || link._type === 'depends_on') return 100
+    if (link._type === 'relates_to' || link._type === 'duplicate_of') return 80
+    if (link._type === 'part_of') return 60
+    if (link._type === 'tagged') return 45
+    if (link._type === 'has_label' || link._type === 'has_component') return 55
+    if (link._type === 'assigned_to' || link._type === 'reported_by') return 60
+    return 55
   })
-  graph.d3Force('center')?.strength(0.05)
+  graph.d3Force('link')?.strength((link: any) => {
+    if (link._type === 'in_sprint') return 1.1
+    if (link._type === 'blocks' || link._type === 'depends_on') return 0.15
+    if (link._type === 'relates_to') return 0.15
+    return 0.35
+  })
+  graph.d3Force('center')?.strength(0.04)
+
+  // Custom cluster force: pull each Jira issue toward its sprint's current
+  // position. Combined with strong sprint-vs-sprint repulsion this produces
+  // the "pęk / kontynenty" effect the user asked for.
+  if (Object.keys(sprintMembership).length > 0) {
+    const clusterStrength = 0.35
+    graph.d3Force('sprintCluster', (alpha: number) => {
+      const data = graph.graphData()
+      const byId: Record<string, any> = {}
+      for (const n of data.nodes) byId[n.id] = n
+      for (const n of data.nodes) {
+        if (n.type !== 'jira_issue') continue
+        const sprintId = sprintMembership[n.id]
+        if (!sprintId) continue
+        const anchor = byId[sprintId]
+        if (!anchor || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) continue
+        const k = alpha * clusterStrength
+        n.vx = (n.vx || 0) + (anchor.x - (n.x ?? 0)) * k
+        n.vy = (n.vy || 0) + (anchor.y - (n.y ?? 0)) * k
+      }
+    })
+  } else {
+    // Clear any lingering cluster force when no sprints are present
+    graph.d3Force('sprintCluster', null)
+  }
 
   // Re-attach ResizeObserver for the new graph instance
   if (containerRef.value) {
@@ -459,7 +631,11 @@ watch(
 
 watch(
   () => props.highlightedNode,
-  () => { graph?.nodeColor(graph.nodeColor()) },
+  () => {
+    // Refresh both nodes and edges so focus-dimming applies/clears.
+    graph?.nodeColor(graph.nodeColor())
+    graph?.linkColor(graph.linkColor())
+  },
 )
 
 watch(

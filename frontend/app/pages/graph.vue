@@ -14,6 +14,7 @@
     <GraphFilterBar
       :filters="filters"
       :orphan-count="orphans.length"
+      :all-nodes="graph.nodes"
       @update:filters="setFilters"
     />
 
@@ -56,7 +57,7 @@ import GraphNodePreview from '~/components/GraphNodePreview.vue'
 import GraphFilterBar from '~/components/GraphFilterBar.vue'
 
 const {
-  stats, selectedNode, orphans, filters,
+  graph, stats, selectedNode, orphans, filters,
   filteredNodes, filteredEdges, highlightedNodeId, searchMatchedNodeIds, selectedSimilarEdges,
   loadGraph, rebuildGraph, selectNode, setFilters,
 } = useGraph()

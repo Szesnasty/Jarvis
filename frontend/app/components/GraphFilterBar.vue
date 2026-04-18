@@ -1,8 +1,8 @@
 <template>
   <div class="filter-bar">
     <div class="filter-bar__group">
-      <label class="filter-bar__toggle" v-for="t in nodeTypes" :key="t.key">
-        <input type="checkbox" :checked="t.enabled" @change="$emit('update:filters', { ...filters, [t.key]: !t.enabled })" />
+      <label class="filter-bar__toggle" v-for="t in nodeTypes" :key="t.type">
+        <input type="checkbox" :checked="t.enabled" @change="toggleType(t.type)" />
         <span class="filter-bar__toggle-dot" :style="{ background: t.color }"></span>
         <span class="filter-bar__toggle-label">{{ t.label }}</span>
       </label>
@@ -38,32 +38,81 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { GraphNode } from '~/types'
 
 export interface GraphFilters {
-  showNotes: boolean
-  showTags: boolean
-  showPeople: boolean
-  showAreas: boolean
+  hiddenTypes: Set<string>
   timeRange: string
   showOrphans: boolean
   searchText: string
 }
 
+// Canonical display names and colors for known node types.
+// Types not listed here get an auto-generated label and grey dot.
+const TYPE_META: Record<string, { label: string; color: string }> = {
+  note:           { label: 'Notes',      color: 'rgba(2, 254, 255, 1)' },
+  tag:            { label: 'Tags',       color: '#34d399' },
+  person:         { label: 'People',     color: '#c084fc' },
+  area:           { label: 'Areas',      color: '#fb923c' },
+  jira_issue:     { label: 'Issues',     color: '#60a5fa' },
+  jira_epic:      { label: 'Epics',      color: '#f472b6' },
+  jira_project:   { label: 'Projects',   color: '#facc15' },
+  jira_person:    { label: 'Jira People', color: '#c084fc' },
+  jira_sprint:    { label: 'Sprints',    color: '#22d3ee' },
+  jira_label:     { label: 'Labels',     color: '#a3e635' },
+  jira_component: { label: 'Components', color: '#f97316' },
+}
+
+// Preferred display order — types listed first appear first in the bar.
+const TYPE_ORDER: string[] = [
+  'note', 'tag', 'person', 'area',
+  'jira_issue', 'jira_epic', 'jira_sprint', 'jira_project',
+  'jira_person', 'jira_label', 'jira_component',
+]
+
 const props = defineProps<{
   filters: GraphFilters
   orphanCount: number
+  /** All nodes currently loaded — used to auto-discover which types exist. */
+  allNodes: GraphNode[]
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   'update:filters': [filters: GraphFilters]
 }>()
 
-const nodeTypes = computed(() => [
-  { key: 'showNotes', label: 'Notes', color: 'rgba(2, 254, 255, 1)', enabled: props.filters.showNotes },
-  { key: 'showTags', label: 'Tags', color: '#34d399', enabled: props.filters.showTags },
-  { key: 'showPeople', label: 'People', color: '#c084fc', enabled: props.filters.showPeople },
-  { key: 'showAreas', label: 'Areas', color: '#fb923c', enabled: props.filters.showAreas },
-])
+function toggleType(type: string) {
+  const next = new Set(props.filters.hiddenTypes)
+  if (next.has(type)) {
+    next.delete(type)
+  } else {
+    next.add(type)
+  }
+  emit('update:filters', { ...props.filters, hiddenTypes: next })
+}
+
+const nodeTypes = computed(() => {
+  // Discover types actually present in the data.
+  const present = new Set(props.allNodes.map(n => n.type))
+  // Sort: known types in preferred order first, then any extras alphabetically.
+  const sorted = [...present].sort((a, b) => {
+    const ai = TYPE_ORDER.indexOf(a)
+    const bi = TYPE_ORDER.indexOf(b)
+    if (ai >= 0 && bi >= 0) return ai - bi
+    if (ai >= 0) return -1
+    if (bi >= 0) return 1
+    return a.localeCompare(b)
+  })
+  return sorted.map(type => {
+    const meta = TYPE_META[type]
+    return {
+      type,
+      label: meta?.label ?? type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      color: meta?.color ?? '#9ca3af',
+      enabled: !props.filters.hiddenTypes.has(type),
+    }
+  })
+})
 </script>
 
 <style scoped>
