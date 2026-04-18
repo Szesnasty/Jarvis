@@ -385,9 +385,16 @@ def _parse_xml_item(elem) -> Issue:
                 if ISSUE_KEY_RE.match(val):
                     epic_key = val
                     break
-        elif key_attr == _CF_SPRINT or "sprint" in cf_id.lower():
+        elif key_attr == _CF_SPRINT or "sprint" in key_attr.lower() or "sprint" in cf_id.lower():
             for val in values:
                 sprint = _parse_sprint_string(val)
+                if sprint is None:
+                    # Jira Cloud RSS exports plain names like "Sprint 44" in
+                    # <customfieldvalue>, not the Java toString form. Fall back
+                    # to treating the raw value as the sprint name.
+                    name = (val or "").strip()
+                    if name:
+                        sprint = Sprint(name=name, state=None)
                 if sprint:
                     sprints.append(sprint)
 
@@ -404,6 +411,18 @@ def _parse_xml_item(elem) -> Issue:
         for l in elem.findall("labels/label")
         if l.text and l.text.strip()
     ]
+    # Auto-inject a `sprint<N>` label for every sprint the issue belongs to
+    # (e.g. "Sprint 42" → "sprint42"). Lets users filter/search by sprint
+    # number even when sprints aren't projected as standalone nodes.
+    _seen_labels = {lab.lower() for lab in labels}
+    for sp in sprints:
+        m = re.search(r"(\d+)", sp.name or "")
+        if not m:
+            continue
+        tag = f"sprint{m.group(1)}"
+        if tag.lower() not in _seen_labels:
+            labels.append(tag)
+            _seen_labels.add(tag.lower())
     components = [
         (c.text or "").strip()
         for c in elem.findall("component")

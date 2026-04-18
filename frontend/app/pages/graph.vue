@@ -32,6 +32,7 @@
           :edges="filteredEdges"
           :highlighted-node="highlightedNodeId"
           :search-matched-ids="searchMatchedNodeIds"
+          :glow-level="filters.glowLevel"
           @node-click="handleNodeClick"
         />
       </div>
