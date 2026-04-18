@@ -43,4 +43,6 @@ Jarvis/
 
 # Logs
 *.log
-package-lock.json
+
+# Bun (we use npm in CI)
+bun.lock
