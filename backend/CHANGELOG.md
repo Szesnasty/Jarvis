@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.7.0...backend-v0.8.0) (2026-04-18)
+
+
+### ✨ Features
+
+* add MCP server with 25 tools, stdio/SSE transports, cost-class budgets ([6e67612](https://github.com/Szesnasty/Jarvis/commit/6e6761202e6333c7a1d92ad113cd35edea34f3b6))
+* **mcp:** frontend toggle + Settings panel + ready-to-paste client configs ([a604281](https://github.com/Szesnasty/Jarvis/commit/a6042810bc1f84076fea50ff1015a98afd25a351))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** add missing mcp dependency and resync frontend lockfile ([569e462](https://github.com/Szesnasty/Jarvis/commit/569e462e414d87d91eea810759046961483c2ab1))
+* **ci:** skip NER-dependent tests when spaCy models unavailable ([73ad82f](https://github.com/Szesnasty/Jarvis/commit/73ad82f70de94c941744a1fc32277748e1d189e8))
+
+
+### ♻️ Refactoring
+
+* **mcp:** migrate to local FastMCP CLI and remove SSE ([6b125f5](https://github.com/Szesnasty/Jarvis/commit/6b125f5bce93f12d04182001ca789abeac4ef638))
+
 ## [0.7.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.6.0...backend-v0.7.0) (2026-04-18)
 
 

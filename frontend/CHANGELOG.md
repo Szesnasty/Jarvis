@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.8.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.7.0...frontend-v0.8.0) (2026-04-18)
+
+
+### ✨ Features
+
+* **mcp:** frontend toggle + Settings panel + ready-to-paste client configs ([a604281](https://github.com/Szesnasty/Jarvis/commit/a6042810bc1f84076fea50ff1015a98afd25a351))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** add missing mcp dependency and resync frontend lockfile ([569e462](https://github.com/Szesnasty/Jarvis/commit/569e462e414d87d91eea810759046961483c2ab1))
+
+
+### ♻️ Refactoring
+
+* **frontend:** split settings page into subcomponents + composables ([bcdd3d4](https://github.com/Szesnasty/Jarvis/commit/bcdd3d4b462abc297cebd814b85efb9c54a4431a))
+* **mcp:** migrate to local FastMCP CLI and remove SSE ([6b125f5](https://github.com/Szesnasty/Jarvis/commit/6b125f5bce93f12d04182001ca789abeac4ef638))
+
 ## [0.7.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.6.0...frontend-v0.7.0) (2026-04-18)
 
 
