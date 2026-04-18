@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import socket
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +95,9 @@ class StatusResponse(BaseModel):
     calls_today: int = 0
     last_call: str | None = None
     top_tool: str | None = None
+    python_path: str = ""
+    backend_dir: str = ""
+    workspace_path: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +116,8 @@ async def mcp_status() -> StatusResponse:
 
     running = _sse_transport is not None and _sse_transport.running
 
+    backend_dir = Path(__file__).parent.parent
+
     return StatusResponse(
         running=running,
         transport="sse" if running else None,
@@ -121,6 +127,9 @@ async def mcp_status() -> StatusResponse:
         calls_today=stats.get("calls_today", 0),
         last_call=stats.get("last_call"),
         top_tool=stats.get("top_tool"),
+        python_path=sys.executable,
+        backend_dir=str(backend_dir),
+        workspace_path=str(ws),
     )
 
 
