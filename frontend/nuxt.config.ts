@@ -3,7 +3,7 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   ssr: false,
   devtools: { enabled: false },
-  css: ['~/assets/css/main.css'],
+  css: ['~/assets/css/main.css', '~/assets/css/settings.css'],
   runtimeConfig: {
     public: {
       backendWsUrl: 'ws://127.0.0.1:8000/api/chat/ws',
