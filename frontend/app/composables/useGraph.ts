@@ -22,12 +22,50 @@ export function useGraph() {
     timeRange: 'all',
     showOrphans: false,
     searchText: '',
+    selectedSprints: new Set<string>(),
+    glowLevel: 'normal',
   })
 
   const { fetchGraph, fetchGraphStats, fetchGraphNeighbors, fetchOrphans, rebuildGraph: apiRebuild } = useApi()
 
+  // When sprints are selected, compute the subgraph membership.
+  // - Issues kept: those connected via `in_sprint` edges to any selected sprint.
+  // - Non-issue / non-sprint nodes kept: those connected to any kept issue.
+  // - Sprint nodes kept: only the selected ones.
+  const sprintSubgraphIds = computed(() => {
+    const selected = filters.value.selectedSprints
+    if (!selected || selected.size === 0) return null
+    const issueIds = new Set<string>()
+    for (const e of graph.value.edges) {
+      if (e.type !== 'in_sprint') continue
+      // in_sprint edges: issue -> sprint (source is issue, target is sprint)
+      if (selected.has(e.target)) issueIds.add(e.source)
+      else if (selected.has(e.source)) issueIds.add(e.target)
+    }
+    const keep = new Set<string>(issueIds)
+    for (const id of selected) keep.add(id)
+    // Pull in directly connected non-issue / non-sprint nodes (labels, epics, people, etc.)
+    const nodeById = new Map(graph.value.nodes.map(n => [n.id, n]))
+    for (const e of graph.value.edges) {
+      const src = nodeById.get(e.source)
+      const tgt = nodeById.get(e.target)
+      if (!src || !tgt) continue
+      if (issueIds.has(e.source) && tgt.type !== 'jira_sprint') keep.add(e.target)
+      if (issueIds.has(e.target) && src.type !== 'jira_sprint') keep.add(e.source)
+    }
+    return keep
+  })
+
   const filteredNodes = computed(() => {
     let nodes = graph.value.nodes
+    const sprintKeep = sprintSubgraphIds.value
+    if (sprintKeep) {
+      nodes = nodes.filter(n => {
+        // Always drop non-selected sprint nodes when sprint filter is active.
+        if (n.type === 'jira_sprint') return filters.value.selectedSprints.has(n.id)
+        return sprintKeep.has(n.id)
+      })
+    }
     if (filters.value.hiddenTypes.size > 0) {
       nodes = nodes.filter(n => !filters.value.hiddenTypes.has(n.type))
     }

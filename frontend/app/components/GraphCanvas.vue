@@ -42,6 +42,7 @@ const props = defineProps<{
   edges: GraphEdge[]
   highlightedNode?: string | null
   searchMatchedIds?: Set<string>
+  glowLevel?: 'off' | 'normal' | 'high'
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +57,60 @@ const tooltipStyle = ref({ left: '0px', top: '0px' })
 
 let graph: any = null
 let resizeObserver: ResizeObserver | null = null
+
+// --- Per-instance render state (recomputed on data change, read by draw callbacks) ---
+let degrees: Record<string, number> = {}
+let adjacency: Record<string, Set<string>> = {}
+let sprintMembership: Record<string, string> = {}
+let sprintInitialPos: Record<string, { x: number; y: number }> = {}
+let perfMode = false          // true when graph is big → disable particles, shadows, halos
+let hoverRafPending = false   // throttle hover re-paints to one per animation frame
+// O(1) edge lookup keyed by "source|target|type" — onLinkHover used to do a
+// linear scan of props.edges per mouse-move event.
+let edgeIndex: Map<string, GraphEdge> = new Map()
+let nodeIndex: Map<string, GraphNode> = new Map()
+
+// Gradient cache: avoid allocating fresh radial gradients every draw.
+// Keyed by "type|roundedRadius". Invalidated when the canvas context changes
+// (which happens on ForceGraph rebuild).
+const gradientCache = new Map<string, {
+  halo: CanvasGradient
+  body: CanvasGradient
+}>()
+let gradientCtx: CanvasRenderingContext2D | null = null
+
+function gradKey(type: string, r: number): string {
+  return `${type}|${Math.round(r)}`
+}
+
+// Build (once per node type/size) the reusable gradients. Returned gradients
+// are CENTERED AT (0,0); draw code must translate the canvas first.
+function getNodeGradients(
+  ctx: CanvasRenderingContext2D,
+  type: string,
+  r: number,
+  color: string,
+  glow: string,
+): { halo: CanvasGradient; body: CanvasGradient } {
+  if (gradientCtx !== ctx) {
+    gradientCache.clear()
+    gradientCtx = ctx
+  }
+  const key = gradKey(type, r)
+  const cached = gradientCache.get(key)
+  if (cached) return cached
+  const halo = ctx.createRadialGradient(0, 0, r * 0.3, 0, 0, r + 12)
+  halo.addColorStop(0, glow.replace(/[\d.]+\)$/, '0.5)'))
+  halo.addColorStop(0.55, glow.replace(/[\d.]+\)$/, '0.2)'))
+  halo.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.0)'))
+  const body = ctx.createRadialGradient(-r * 0.25, -r * 0.25, 0, 0, 0, r)
+  body.addColorStop(0, 'rgba(255,255,255,0.55)')
+  body.addColorStop(0.4, color)
+  body.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.8)'))
+  const entry = { halo, body }
+  gradientCache.set(key, entry)
+  return entry
+}
 
 // --- Color palette ---
 const NODE_COLOR: Record<string, string> = {
@@ -123,6 +178,9 @@ const EDGE_PARTICLE_COLOR: Record<string, string> = {
 }
 
 // --- Compute degree per node (for sizing) ---
+// NOTE: kept only for reference — the real work happens in `recomputeDerived`
+// below, which fuses degrees + adjacency in a single pass over edges.
+// (Intentionally unused; left here so future callers have a lightweight helper.)
 function computeDegrees(): Record<string, number> {
   const deg: Record<string, number> = {}
   const nodes = props.nodes ?? []
@@ -135,6 +193,7 @@ function computeDegrees(): Record<string, number> {
   }
   return deg
 }
+void computeDegrees  // silence "declared but never used"
 
 // --- Compute sprint membership: issueId -> sprintId ---
 // Each Jira issue with an `in_sprint` edge is pulled toward its sprint node
@@ -193,8 +252,118 @@ function nodeRadius(type: string, degree: number): number {
   return base + Math.min(degree * 0.4, 8)
 }
 
+// --- Derived state recomputation (degrees / adjacency / sprint layout) -----
+// Called once at init and then on every data change. Writes to module-level
+// `let` vars that the ForceGraph draw callbacks read on every frame.
+function recomputeDerived() {
+  const nodes = props.nodes ?? []
+  const edges = props.edges ?? []
+
+  // Degrees
+  const deg: Record<string, number> = {}
+  const nodeIds = new Set(nodes.map(n => n.id))
+  // Adjacency
+  const adj: Record<string, Set<string>> = {}
+  for (const e of edges) {
+    if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue
+    deg[e.source] = (deg[e.source] || 0) + 1
+    deg[e.target] = (deg[e.target] || 0) + 1
+    ;(adj[e.source] ??= new Set()).add(e.target)
+    ;(adj[e.target] ??= new Set()).add(e.source)
+  }
+  degrees = deg
+  adjacency = adj
+
+  // Sprint membership + ring layout
+  sprintMembership = computeSprintMembership()
+  const sprintNodes = nodes.filter(n => n.type === 'jira_sprint')
+  sprintNodes.sort((a, b) => {
+    const an = parseInt((a.label ?? '').match(/(\d+)/)?.[1] ?? '0', 10)
+    const bn = parseInt((b.label ?? '').match(/(\d+)/)?.[1] ?? '0', 10)
+    return an - bn
+  })
+  sprintInitialPos = {}
+  if (sprintNodes.length > 0) {
+    const CLUSTER_GAP = 420
+    const ringRadius = sprintNodes.length === 1
+      ? 0
+      : Math.max(320, (CLUSTER_GAP * sprintNodes.length) / (2 * Math.PI))
+    sprintNodes.forEach((n, i) => {
+      const angle = (i / sprintNodes.length) * 2 * Math.PI
+      sprintInitialPos[n.id] = {
+        x: Math.cos(angle) * ringRadius,
+        y: Math.sin(angle) * ringRadius,
+      }
+    })
+  }
+
+  // Perf mode kicks in once the graph is large enough that shadowBlur +
+  // per-edge particles become the bottleneck (empirical threshold).
+  perfMode = nodes.length > 250 || edges.length > 1200
+
+  // Build O(1) edge-index so onLinkHover does not have to linear-scan.
+  edgeIndex = new Map()
+  for (const e of edges) {
+    edgeIndex.set(`${e.source}|${e.target}|${e.type}`, e)
+  }
+  nodeIndex = new Map(nodes.map(n => [n.id, n]))
+}
+
+// Update the force-graph data in place — cheap compared to teardown +
+// rebuild. Preserves physics state and simulation positions.
+function updateGraphData() {
+  if (!graph) return
+  recomputeDerived()
+  const nodes = props.nodes ?? []
+  const edges = props.edges ?? []
+  const nodeIds = new Set(nodes.map(n => n.id))
+
+  // Preserve existing node positions so the user's view doesn't jump on
+  // filter changes. ForceGraph keeps its own mutated node list on the
+  // simulation; we merge those positions into the new node objects.
+  const oldData = graph.graphData()
+  const oldPos = new Map<string, { x: number; y: number; vx: number; vy: number }>()
+  for (const n of oldData.nodes) {
+    if (Number.isFinite(n.x) && Number.isFinite(n.y)) {
+      oldPos.set(n.id, { x: n.x, y: n.y, vx: n.vx ?? 0, vy: n.vy ?? 0 })
+    }
+  }
+
+  const nextNodes = nodes.map(n => {
+    const copy: any = { ...n }
+    const kept = oldPos.get(n.id)
+    if (kept) {
+      copy.x = kept.x; copy.y = kept.y; copy.vx = kept.vx; copy.vy = kept.vy
+    } else if (n.type === 'jira_sprint' && sprintInitialPos[n.id]) {
+      copy.x = sprintInitialPos[n.id]!.x
+      copy.y = sprintInitialPos[n.id]!.y
+    } else if (n.type === 'jira_issue' && sprintMembership[n.id]) {
+      const anchor = sprintInitialPos[sprintMembership[n.id]!]
+      if (anchor) {
+        copy.x = anchor.x + (Math.random() - 0.5) * 80
+        copy.y = anchor.y + (Math.random() - 0.5) * 80
+      }
+    }
+    return copy
+  })
+
+  const nextLinks = edges
+    .filter(e => nodeIds.has(e.source) && nodeIds.has(e.target))
+    .map(e => ({ source: e.source, target: e.target, _type: e.type, _weight: e.weight, _evidence: e.evidence }))
+
+  graph.graphData({ nodes: nextNodes, links: nextLinks })
+  // A short reheat helps the simulation settle after a filter change,
+  // but we skip the 80-tick warmup of a full rebuild.
+  graph.d3ReheatSimulation?.()
+}
+
 async function buildGraph() {
   if (!containerRef.value) return
+  // Fast path: if the graph already exists, just swap data in place.
+  if (graph) {
+    updateGraphData()
+    return
+  }
   const el = containerRef.value
 
   // Disconnect previous ResizeObserver before rebuilding
@@ -202,62 +371,13 @@ async function buildGraph() {
     resizeObserver.disconnect()
     resizeObserver = null
   }
-
-  if (graph) {
-    graph._destructor()
-    graph = null
-  }
   el.innerHTML = ''
 
   if (props.nodes.length === 0) return
 
   const { default: ForceGraph } = await import('force-graph')
-  const degrees = computeDegrees()
-  const sprintMembership = computeSprintMembership()
-
-  // Adjacency map: nodeId -> Set of directly connected neighbor ids.
-  // Used by hover-focus: on hover, we dim everything except the hovered
-  // node and its direct neighbors, on top of any active search dimming.
-  const adjacency: Record<string, Set<string>> = {}
-  {
-    const nodeIds = new Set((props.nodes ?? []).map(n => n.id))
-    for (const e of props.edges ?? []) {
-      if (!nodeIds.has(e.source) || !nodeIds.has(e.target)) continue
-      ;(adjacency[e.source] ??= new Set()).add(e.target)
-      ;(adjacency[e.target] ??= new Set()).add(e.source)
-    }
-  }
-
-  // Lay sprints out on a ring so each sprint becomes its own "continent"
-  // on the canvas. Issues then cluster around their home sprint via the
-  // custom cluster force below, and cross-sprint edges (blocks / depends_on
-  // / relates_to) become visible "highways" between clusters.
-  // Sprints are ordered by the number in their label so adjacent sprints
-  // (Sprint 42 ↔ Sprint 43) sit next to each other on the ring.
-  const sprintNodes = (props.nodes ?? []).filter(n => n.type === 'jira_sprint')
-  sprintNodes.sort((a, b) => {
-    const an = parseInt((a.label ?? '').match(/(\d+)/)?.[1] ?? '0', 10)
-    const bn = parseInt((b.label ?? '').match(/(\d+)/)?.[1] ?? '0', 10)
-    return an - bn
-  })
-  const sprintIds = sprintNodes.map(n => n.id)
-  const sprintInitialPos: Record<string, { x: number; y: number }> = {}
-  if (sprintIds.length > 0) {
-    // Pick ring radius so adjacent sprint clusters sit ~CLUSTER_GAP apart
-    // along the circumference. More gap = more breathing room between
-    // sprint "continents".
-    const CLUSTER_GAP = 420
-    const ringRadius = sprintIds.length === 1
-      ? 0
-      : Math.max(320, (CLUSTER_GAP * sprintIds.length) / (2 * Math.PI))
-    sprintIds.forEach((id, i) => {
-      const angle = (i / sprintIds.length) * 2 * Math.PI
-      sprintInitialPos[id] = {
-        x: Math.cos(angle) * ringRadius,
-        y: Math.sin(angle) * ringRadius,
-      }
-    })
-  }
+  // Populate module-level degrees / adjacency / sprintMembership / sprintInitialPos / perfMode
+  recomputeDerived()
 
   graph = new ForceGraph(el)
     .backgroundColor('#06080d')
@@ -272,7 +392,7 @@ async function buildGraph() {
       const deg = degrees[node.id] || 0
       const r = nodeRadius(node.type, deg)
       const color = NODE_COLOR[node.type] ?? '#9ca3af'
-      const glow = NODE_GLOW[node.type] ?? 'rgba(156, 163, 175, 0.3)'
+      const glowColor = NODE_GLOW[node.type] ?? 'rgba(156, 163, 175, 0.3)'
       const isHighlighted = props.highlightedNode === node.id
       const isHovered = hoveredNode.value?.id === node.id
       // "Focus" = hover takes priority, but when nothing is hovered and a
@@ -283,77 +403,87 @@ async function buildGraph() {
       const isFocusNeighbor = !!focusId && adjacency[focusId]?.has(node.id)
       const isSearchActive = props.searchMatchedIds && props.searchMatchedIds.size > 0
       const isSearchMatch = isSearchActive && props.searchMatchedIds!.has(node.id)
-      // A node is "dimmed" when:
-      //  - a search is active and this node isn't a match,
-      //  - OR a node is focused (hover or click) and this one is neither
-      //    the focused node nor a direct neighbor.
       const searchDims = isSearchActive && !isSearchMatch && !isFocused
       const focusDims = !!focusId && !isFocused && !isFocusNeighbor
       const isDimmed = searchDims || focusDims
+      const isSpecial = isHighlighted || isHovered || isFocused || isFocusNeighbor
 
-      // When search or focus is active, dim non-matching nodes
       if (isDimmed) {
         ctx.globalAlpha = focusDims ? 0.08 : 0.15
       }
 
-      // Layer 1 — wide, faint outer halo
-      const grad1 = ctx.createRadialGradient(node.x, node.y, r * 0.5, node.x, node.y, r + 14)
-      grad1.addColorStop(0, glow.replace(/[\d.]+\)$/, '0.28)'))
-      grad1.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.0)'))
-      ctx.beginPath()
-      ctx.arc(node.x, node.y, r + 14, 0, 2 * Math.PI)
-      ctx.fillStyle = grad1
-      ctx.fill()
+      // LOD: at low zoom, or in perf mode for non-special nodes, skip the
+      // expensive halo + shadowBlur and draw a flat circle. This is where
+      // the bulk of the perf win comes from (shadowBlur is ~10× more
+      // expensive than a plain fill in Canvas2D).
+      // Glow level overrides:
+      //  - 'off'    → always flat (fastest)
+      //  - 'normal' → perfMode still suppresses glow for non-special nodes
+      //  - 'high'   → user explicitly asked for full bloom, ignore perfMode
+      const glow = props.glowLevel ?? 'normal'
+      const lowDetail =
+        glow === 'off' ||
+        (glow === 'normal' && perfMode && !isSpecial) ||
+        globalScale < 0.45
 
-      // Layer 2 — mid glow
-      const grad2 = ctx.createRadialGradient(node.x, node.y, r * 0.3, node.x, node.y, r + 12)
-      grad2.addColorStop(0, glow.replace(/[\d.]+\)$/, '0.45)'))
-      grad2.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.0)'))
-      ctx.beginPath()
-      ctx.arc(node.x, node.y, r + 12, 0, 2 * Math.PI)
-      ctx.fillStyle = grad2
-      ctx.fill()
-
-      // Layer 3 — tight inner glow ring
-      const grad3 = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, r + 4)
-      grad3.addColorStop(0, glow.replace(/[\d.]+\)$/, '0.6)'))
-      grad3.addColorStop(0.6, glow.replace(/[\d.]+\)$/, '0.35)'))
-      grad3.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.0)'))
-      ctx.beginPath()
-      ctx.arc(node.x, node.y, r + 4, 0, 2 * Math.PI)
-      ctx.fillStyle = grad3
-      ctx.fill()
-
-      // Shadow glow on node body
-      if (isHighlighted || isHovered) {
-        ctx.shadowColor = color
-        ctx.shadowBlur = isHighlighted ? 50 : 36
+      if (lowDetail) {
+        ctx.beginPath()
+        ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
+        ctx.fillStyle = color
+        ctx.fill()
       } else {
-        ctx.shadowColor = color
-        ctx.shadowBlur = 28
+        // Cached, pre-built gradients — translated into place instead of
+        // recreated per draw. One halo layer (was three) is visually close
+        // to the original at normal zoom.
+        const grads = getNodeGradients(ctx, node.type, r, color, glowColor)
+        const glowMult = glow === 'high' ? 1.6 : 1.0
+        ctx.save()
+        ctx.translate(node.x, node.y)
+
+        // Halo — in 'high' mode draw an extra outer layer for visible bloom.
+        if (glow === 'high') {
+          ctx.beginPath()
+          ctx.arc(0, 0, (r + 12) * 1.35, 0, 2 * Math.PI)
+          ctx.fillStyle = grads.halo
+          ctx.globalAlpha = (ctx.globalAlpha as number) * 0.45
+          ctx.fill()
+          ctx.globalAlpha = isDimmed ? (focusDims ? 0.08 : 0.15) : 1.0
+        }
+        ctx.beginPath()
+        ctx.arc(0, 0, r + 12, 0, 2 * Math.PI)
+        ctx.fillStyle = grads.halo
+        ctx.fill()
+
+        // Node body — shadowBlur ONLY for special nodes (hover / focus /
+        // highlight). Was on every node, every frame.
+        if (isSpecial) {
+          ctx.shadowColor = color
+          ctx.shadowBlur = (isHighlighted ? 50 : 32) * glowMult
+        } else if (glow === 'high') {
+          ctx.shadowColor = color
+          ctx.shadowBlur = 18
+        }
+        ctx.beginPath()
+        ctx.arc(0, 0, r, 0, 2 * Math.PI)
+        ctx.fillStyle = grads.body
+        ctx.fill()
+        if (isSpecial || glow === 'high') ctx.shadowBlur = 0
+
+        // Thin edge ring — skip in perf mode (another stroke per node = real cost).
+        if (!perfMode || isSpecial) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.22)'
+          ctx.lineWidth = 0.6
+          ctx.stroke()
+        }
+        ctx.restore()
       }
 
-      // Node body — radial gradient core (bright center → dim edge)
-      const bodyGrad = ctx.createRadialGradient(node.x - r * 0.25, node.y - r * 0.25, 0, node.x, node.y, r)
-      bodyGrad.addColorStop(0, 'rgba(255,255,255,0.55)')
-      bodyGrad.addColorStop(0.4, color)
-      bodyGrad.addColorStop(1, glow.replace(/[\d.]+\)$/, '0.8)'))
-      ctx.beginPath()
-      ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
-      ctx.fillStyle = bodyGrad
-      ctx.fill()
-
-      // Bright edge ring
-      ctx.strokeStyle = 'rgba(255,255,255,0.25)'
-      ctx.lineWidth = 0.6
-      ctx.stroke()
-
-      ctx.shadowBlur = 0
-
-      // Label logic: always show for area, show for high-degree nodes, else only on zoom
+      // Label logic: always show for area; for other types respect zoom + focus.
+      // In perf mode we raise the degree threshold to cut out hundreds of text draws.
+      const labelDegThreshold = perfMode ? 8 : 4
       const showLabel =
         node.type === 'area' ||
-        deg >= 4 ||
+        deg >= labelDegThreshold ||
         isHovered ||
         isHighlighted ||
         globalScale > 1.2
@@ -479,13 +609,22 @@ async function buildGraph() {
     })
     .linkDirectionalArrowRelPos(0.85)
     .linkDirectionalParticles((link: any) => {
-      // More particles = more life! Different edge types get different densities
-      if (link._type === 'linked') return 3
-      if (link._type === 'related') return 2
-      if (link._type === 'tagged') return 2
-      if (link._type === 'mentions') return 2
-      if (link._type === 'part_of') return 1
-      return 1
+      // Perf: particles are expensive (each one is a per-frame animated draw).
+      // In perf mode we ONLY animate the edges that touch the focused node —
+      // everything else is static. Below the perf threshold we keep the
+      // "alive" look but with fewer particles than before.
+      if (perfMode) {
+        const srcId = typeof link.source === 'object' ? link.source.id : link.source
+        const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+        const focusId = hoveredNode.value?.id ?? props.highlightedNode ?? null
+        if (!focusId) return 0
+        return (srcId === focusId || tgtId === focusId) ? 2 : 0
+      }
+      if (link._type === 'linked') return 2
+      if (link._type === 'related') return 1
+      if (link._type === 'tagged') return 1
+      if (link._type === 'mentions') return 1
+      return 0
     })
     .linkDirectionalParticleWidth((link: any) => {
       if (link._type === 'linked' || link._type === 'related') return 2.2
@@ -510,26 +649,43 @@ async function buildGraph() {
       // Slight curve to avoid overlapping straight lines
       return link._type === 'part_of' ? 0.15 : 0
     })
+    // When zoomed way out on a big graph, hide low-value noise edges
+    // (sprint/project/label/component memberships + similar_to). Focused
+    // edges stay visible. Huge repaint win on first render + pan/zoom.
+    .linkVisibility((link: any) => {
+      if (!perfMode) return true
+      const zoom = graph?.zoom?.() ?? 1
+      if (zoom >= 0.6) return true
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+      const focusId = hoveredNode.value?.id ?? props.highlightedNode ?? null
+      if (focusId && (srcId === focusId || tgtId === focusId)) return true
+      const noisy = new Set([
+        'in_sprint', 'in_project', 'has_label', 'has_component',
+        'similar_to', 'commented_on', 'temporal',
+      ])
+      return !noisy.has(link._type)
+    })
     // --- Interaction ---
     .enableNodeDrag(true)
     .enableZoomInteraction(true)
     .enablePanInteraction(true)
-    .d3AlphaDecay(0.02)
-    .d3VelocityDecay(0.3)
-    .warmupTicks(80)
-    .cooldownTime(4000)
+    // Faster decay + shorter cooldown in perf mode so the physics sim settles
+    // and stops burning CPU on graphs with thousands of edges. Smaller
+    // warmup also skips a big block of blocking work at render time.
+    .d3AlphaDecay(perfMode ? 0.04 : 0.02)
+    .d3VelocityDecay(perfMode ? 0.45 : 0.3)
+    .warmupTicks(perfMode ? 30 : 80)
+    .cooldownTime(perfMode ? 1800 : 4000)
     .onNodeClick((node: any) => {
-      const orig = props.nodes.find(n => n.id === node.id)
+      const orig = nodeIndex.get(node.id)
       if (orig) emit('nodeClick', orig)
     })
     .onLinkHover((link: any) => {
       if (link) {
-        const orig = props.edges.find(e => {
-          const srcId = typeof link.source === 'object' ? link.source.id : link.source
-          const tgtId = typeof link.target === 'object' ? link.target.id : link.target
-          return e.source === srcId && e.target === tgtId && e.type === link._type
-        })
-        hoveredEdge.value = orig ?? null
+        const srcId = typeof link.source === 'object' ? link.source.id : link.source
+        const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+        hoveredEdge.value = edgeIndex.get(`${srcId}|${tgtId}|${link._type}`) ?? null
       } else {
         hoveredEdge.value = null
       }
@@ -539,7 +695,7 @@ async function buildGraph() {
         containerRef.value.style.cursor = node ? 'pointer' : 'default'
       }
       if (node) {
-        hoveredNode.value = props.nodes.find(n => n.id === node.id) ?? null
+        hoveredNode.value = nodeIndex.get(node.id) ?? null
         hoveredDegree.value = degrees[node.id] || 0
       } else {
         hoveredNode.value = null
@@ -547,9 +703,18 @@ async function buildGraph() {
       }
       // Force link visuals to re-evaluate so hover-focus dimming/boost
       // applies even after the physics cooldown has stopped rendering.
-      graph?.linkColor(graph.linkColor())
-      graph?.linkWidth(graph.linkWidth())
-      graph?.linkLineDash(graph.linkLineDash())
+      // Throttled to one RAF — was previously called synchronously on every
+      // mouse-move over a node, which triggered a full repaint per event.
+      if (!hoverRafPending) {
+        hoverRafPending = true
+        requestAnimationFrame(() => {
+          hoverRafPending = false
+          if (!graph) return
+          graph.linkColor(graph.linkColor())
+          graph.linkWidth(graph.linkWidth())
+          graph.linkLineDash(graph.linkLineDash())
+        })
+      }
     })
     .graphData((() => {
       const nodes = props.nodes ?? []
@@ -645,6 +810,24 @@ async function buildGraph() {
     resizeObserver.observe(containerRef.value)
   }
 
+  // Cap DPR on hi-DPI displays — big win on Retina. force-graph exposes a
+  // numeric setter for the pixel ratio used by the internal canvas.
+  if (perfMode && typeof (graph as any).pixelRatio === 'function') {
+    try { (graph as any).pixelRatio(1.25) } catch { /* API not available in this version */ }
+  }
+
+  // Re-run linkVisibility when the user zooms (perf mode reveals/hides
+  // noisy edges based on zoom level). Throttled to rAF.
+  let zoomRaf = false
+  graph.onZoom?.(() => {
+    if (!perfMode || zoomRaf) return
+    zoomRaf = true
+    requestAnimationFrame(() => {
+      zoomRaf = false
+      graph?.linkVisibility(graph.linkVisibility())
+    })
+  })
+
   setTimeout(() => graph?.zoomToFit(600, 60), 1500)
 }
 
@@ -656,13 +839,22 @@ function zoomOut()   { graph?.zoom(graph.zoom() / 1.4, 300) }
 defineExpose({ zoomToFit, zoomIn, zoomOut })
 
 // Reactivity
+// Shallow watch on array identity — the parent passes freshly computed
+// arrays from `filteredNodes`/`filteredEdges`, so reference equality is a
+// sufficient change signal. A `deep: true` watch over 2k+ edges was a
+// significant hidden cost on every filter / selection change.
+// Debounced one frame so rapid filter toggling coalesces into one update.
+let rebuildTimer: ReturnType<typeof setTimeout> | null = null
 watch(
-  () => [props.nodes, props.edges],
-  async () => {
-    await nextTick()
-    buildGraph()
+  [() => props.nodes, () => props.edges],
+  () => {
+    if (rebuildTimer) clearTimeout(rebuildTimer)
+    rebuildTimer = setTimeout(async () => {
+      rebuildTimer = null
+      await nextTick()
+      buildGraph()
+    }, 50)
   },
-  { deep: true },
 )
 
 watch(
@@ -679,6 +871,14 @@ watch(
 watch(
   () => props.searchMatchedIds,
   () => { graph?.nodeColor(graph.nodeColor()) },
+)
+
+watch(
+  () => props.glowLevel,
+  () => {
+    // Trigger a repaint — node draw reads props.glowLevel directly.
+    graph?.nodeColor(graph.nodeColor())
+  },
 )
 
 function onMouseMove(e: MouseEvent) {
