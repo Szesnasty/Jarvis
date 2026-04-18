@@ -5,6 +5,8 @@
 [![Release](https://img.shields.io/github/v/release/Szesnasty/Jarvis?include_prereleases&label=version)](https://github.com/Szesnasty/Jarvis/releases)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
+<sub>Built by [Łukasz Jakubowski](https://github.com/Szesnasty) & [Jakub Suplicki](https://github.com/jakubsuplicki) · Apache-2.0</sub>
+
 **An AI workspace that remembers what matters.**
 
 Local-first memory, hybrid retrieval, and durable context.
@@ -12,19 +14,36 @@ Run Jarvis on your machine with Ollama or connect your preferred cloud provider.
 Every useful interaction makes the system better over time.
 
 Jarvis helps you:
-- import notes, files, URLs, and YouTube sources into one system
-- retrieve context through keyword + semantic + graph search
+- import notes, files, URLs, and YouTube sources into one memory system
+- retrieve context through keyword, semantic, and graph search
 - turn useful outputs into reusable notes, plans, and summaries
-- run locally with Ollama — no API key required
-- use Anthropic, OpenAI, or Google models when you want cloud power
-- create custom specialists and run structured debates
-- search the web via DuckDuckGo when local memory isn't enough
-- keep your memory local-first and Obsidian-compatible
+- run locally with Ollama or connect Anthropic, OpenAI, or Google
+- create specialists and structured debates on top of your memory
 
 > **Jarvis is not another AI chat with memory.**
 > **It is a personal knowledge system that gets more useful every time you use it.**
 
 ![Jarvis hero](./docs/assets/hero.png)
+
+---
+
+## In one sentence
+
+Jarvis is a local-first personal knowledge system that retrieves from your notes, reasons with AI, and writes useful results back into memory.
+
+---
+
+## Why this exists
+
+Knowledge work is fragmented. Ideas live in notes. Context lives in files. Research lives in links. Decisions disappear into chat history. Useful AI outputs vanish after the session ends.
+
+That creates real costs:
+- repeated thinking
+- lost context
+- higher AI spend rebuilding context over and over
+- no compounding value from what you already know
+
+Jarvis fixes the loop: **input → retrieve → reason → write back → better retrieval next time.**
 
 ---
 
@@ -72,27 +91,28 @@ Start with **Qwen3 8B** if you want the safest default. You can add cloud provid
 
 ---
 
-## Why this exists
-
-Knowledge work is fragmented. Ideas live in notes. Context lives in files. Research lives in links. Decisions disappear into chat history. Useful AI outputs vanish after the session ends.
-
-That creates real costs:
-- repeated thinking
-- lost context
-- higher AI spend rebuilding context over and over
-- no compounding value from what you already know
-
-Jarvis fixes the loop: **input → retrieve → reason → write back → better retrieval next time.**
-
----
-
 ## What makes Jarvis different
 
 ### Your memory belongs to you
 Local Markdown files are the source of truth. Not a proprietary memory layer. Not a database you can't read.
 
-### Retrieval before reasoning
-Jarvis does the expensive work locally first — BM25, semantic search, graph expansion, ranking, compression — then sends only a small, high-signal context to the model. Fewer tokens, lower cost, better answers.
+### Retrieval before reasoning — the real moat
+Most AI apps send your whole prompt to a model and pay for every token. Jarvis does the expensive work locally first, then sends only a small, high-signal context to the model. Fewer tokens, lower cost, better answers.
+
+```mermaid
+flowchart LR
+    Q[Your question] --> BM25[BM25<br/>keyword]
+    Q --> SEM[Semantic<br/>embeddings]
+    Q --> GRAPH[Graph<br/>expansion]
+    BM25 --> RANK[Hybrid ranking]
+    SEM --> RANK
+    GRAPH --> RANK
+    RANK --> COMP[Context<br/>compression]
+    COMP --> MODEL[LLM<br/>local or cloud]
+    MODEL --> OUT[Answer +<br/>write-back to memory]
+```
+
+All steps before the model run on your machine. The LLM sees only the distilled context — not your entire workspace.
 
 ### A real knowledge graph
 Notes, people, projects, topics, and sources are connected through a graph that is part of retrieval and reasoning — not just a visualization.
@@ -130,25 +150,32 @@ Why this matters:
 
 ---
 
-## What works today
+## What's working now
 
-- Browser-based UI with chat, memory browser, graph view, settings
-- Local workspace with Markdown memory
-- **Local models via Ollama** — 7 curated presets, no API key required
-- **Hardware-aware model recommendations** based on your RAM, disk, and GPU
-- Download, manage, and switch models directly from Settings
-- File, URL, and YouTube ingest (including PDF)
-- Interactive graph visualization (D3-based)
-- Graph-guided hybrid retrieval (BM25 + semantic + graph scoring)
+**Core**
+- Browser-based UI — chat, memory browser, graph view, settings
+- Local workspace with Markdown memory (Obsidian-compatible)
+- File, URL, and YouTube ingest (including PDF) — all through the UI
+- Hybrid retrieval: BM25 + semantic + graph scoring
 - Local embeddings via fastembed (multilingual, no API calls)
-- Specialist system with full UI wizard
-- Duel Mode with round-based debate and scored verdict
-- Multi-provider support (Anthropic, OpenAI, Google, Ollama)
-- Web search via DuckDuckGo (no extra API key)
-- Token tracking with budget controls
+- Interactive D3 graph visualization
 - Session-to-memory write-back with graph updates
-- Obsidian-compatible memory structure
+- Token tracking with budget controls
+
+**Models**
+- **Local via Ollama** — 7 curated presets, no API key required
+- **Hardware-aware recommendations** based on your RAM, disk, and GPU
+- Download, switch, and manage models from Settings
+- **Cloud providers** — Anthropic, OpenAI, Google via API key
+- Switch local ↔ cloud per conversation
+
+**Power features**
+- Specialist system with full UI wizard
+- Duel Mode — round-based debate with scored verdict
+- Web search via DuckDuckGo (no extra API key)
 - **Built-in MCP server (25 tools over stdio)** — use Jarvis memory from Claude Desktop, Cursor, VS Code Copilot, Continue, and other MCP-aware clients
+
+**Coming next:** stronger feedback loops, smarter graph enrichment, Council Mode, voice (once quality is reliable).
 
 ---
 
@@ -215,10 +242,10 @@ API keys, model selection, token budgets, workspace path. Everything stays local
 
 ## Quick start
 
-### 1. Install and launch Jarvis
+### 1. One command — everything handled
 
-- **Node.js 20+** — check: `node --version`
-- **Python 3.12 or 3.13** — check: `python3 --version` (macOS/Linux) or `py --version` (Windows)
+Requirements: **Node.js 20+** and **Python 3.12 or 3.13**.
+Don't have them? Jump to [zero-prereq bootstrap](#zero-prereq-bootstrap).
 
 ```bash
 git clone https://github.com/Szesnasty/Jarvis.git
@@ -226,11 +253,13 @@ cd Jarvis
 npm run wake-up-jarvis
 ```
 
-This will install dependencies, build the frontend, and start both servers.
-Open **http://localhost:3000** and create your workspace.
+That single command runs preflight checks, installs backend + frontend dependencies, builds the production bundle, and starts both servers.
+
+Then open **http://localhost:3000**. On first run, Jarvis walks you through a short onboarding and **creates your `~/Jarvis/` workspace** (memory, graph, sessions, config) at the location you pick. You land in a browser UI where you can pick local or cloud models and start importing memory immediately.
+
+From there, drag files, paste URLs, or add YouTube links **directly from the UI** — everything ingested lands in your local Markdown memory and goes straight into retrieval.
 
 > Aliases: `npm run wake`, `npm start`. Stop with **Ctrl+C**.
-> Don't have Node.js or Python? Use a [bootstrap installer](#zero-prereq-bootstrap).
 
 ### 2. Choose how to run it
 
@@ -253,7 +282,7 @@ Both options are first-class. You can switch between them anytime.
 
 ### 3. (Optional) Connect Jarvis to Claude Desktop, Cursor, or VS Code
 
-Jarvis exposes a local **MCP server** so external AI tools can read from and write to your workspace memory.
+Jarvis exposes a local **MCP server** so external AI tools can read from and write to your workspace memory. External clients can search your memory, read notes, create new notes, and reuse graph-linked context without leaving their own interface.
 
 1. Open **Settings → MCP** in Jarvis
 2. Enable the MCP server
@@ -396,11 +425,7 @@ This is **not** the source code — it's your personal data directory.
 
 ### Retrieval pipeline
 
-```
-Query → BM25 → Semantic similarity → Graph expansion → Ranking → Compression → Model
-```
-
-Only a small, high-signal context reaches the model. Fewer tokens, lower cost, better signal density per dollar of API spend.
+Full diagram in [Retrieval before reasoning](#retrieval-before-reasoning--the-real-moat) above. In short: BM25 + semantic + graph run locally, hybrid-rank, compress, and only then hit the model.
 
 ---
 
@@ -422,13 +447,7 @@ Anyone who thinks in notes and wants continuity, not just output.
 
 > *"I don't need another answer. I need a system that helps me stop losing context."*
 
----
-
-## Current status
-
-**Working now:** local workspace, memory CRUD, file/URL/YouTube ingest, hybrid retrieval, graph visualization, specialists, Duel Mode, multi-provider LLM (cloud + local), local models via Ollama with hardware-aware recommendations, token tracking, session write-back, web search.
-
-**Planned next:** stronger feedback loops, smarter graph enrichment, Council Mode, voice (once quality is reliable).
+**Who Jarvis is not for:** if you only want a generic chatbot with no durable memory, this is probably more system than you need. Jarvis is built for people who already work with notes, documents, and recurring context — and want that context to compound over time.
 
 ---
 
@@ -479,19 +498,18 @@ jarvis/
 │   ├── models/         # Pydantic schemas, DB setup
 │   ├── routers/        # API endpoints (chat, memory, graph, specialists…)
 │   ├── services/       # Core logic (retrieval, graph, embeddings, ingest…)
-│   ├── tests/          # 39 test files, ~7k LOC
+│   ├── mcp_server/     # Built-in MCP server (stdio)
+│   ├── tests/          # pytest suite
 │   └── utils/          # Markdown parsing helpers
-├── frontend/           # Nuxt 3 + Vue 3 + TypeScript
+├── frontend/           # Nuxt 4 + Vue 3 + TypeScript
 │   ├── app/
-│   │   ├── components/ # 26 Vue components
+│   │   ├── components/ # UI components
 │   │   ├── composables/# State & logic (chat, duel, graph, voice…)
-│   │   └── pages/      # 7 pages (main, memory, graph, specialists…)
-│   └── tests/
+│   │   └── pages/      # main, memory, graph, specialists, settings…
+│   └── tests/          # vitest suite
 ├── bootstrap/          # Zero-prereq installers (local runtime download)
 ├── scripts/            # Cross-platform Node launchers
 └── docs/               # Project documentation
 ```
 
----
 
-**Jarvis is not an AI chat with memory — it is a personal knowledge system that turns notes, files, links, and AI interactions into lasting, reusable intelligence.**
