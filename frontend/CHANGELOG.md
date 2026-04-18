@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.5.0...frontend-v0.6.0) (2026-04-18)
+
+
+### ✨ Features
+
+* **graph:** cluster Jira issues by sprint with hover focus and dynamic type filters ([daeb16a](https://github.com/Szesnasty/Jarvis/commit/daeb16ae4bbdfd78ec6852f72a21f65457b27746))
+* **graph:** highlight edges connected to focused node ([cd5536c](https://github.com/Szesnasty/Jarvis/commit/cd5536ca1fbdaa9dc3f0c985f46ad85cd158b5be))
+* **specialists:** add system_prompt field and bake in Jira PM prompt ([db2a157](https://github.com/Szesnasty/Jarvis/commit/db2a157dc2a7ac9cb27d7364f1d0d13e126b6967))
+* track tool usage metrics and add token savings tests ([8c83a69](https://github.com/Szesnasty/Jarvis/commit/8c83a69b3789c654c256aaa3d69c4b55d56f2426))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** include cross-platform binaries in lockfile (linux + darwin) ([1150604](https://github.com/Szesnasty/Jarvis/commit/115060443cb99a255eeeab4b7e10cbe8ddf5f4a7))
+* **ci:** regenerate package-lock.json to sync with package.json ([dcbbdd1](https://github.com/Szesnasty/Jarvis/commit/dcbbdd16a5a9aa4d55082372b555545c98ca45e8))
+* sharpen progress bar counts skipped/failed items as done ([fc99fd6](https://github.com/Szesnasty/Jarvis/commit/fc99fd6854083529ec9ff9effce37a8ba22bef05))
+
 ## [0.5.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.4.1...frontend-v0.5.0) (2026-04-17)
 
 

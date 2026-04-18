@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.5.0...backend-v0.6.0) (2026-04-18)
+
+
+### ✨ Features
+
+* remove length limits on enrichment output ([4e7ebe9](https://github.com/Szesnasty/Jarvis/commit/4e7ebe980de216252bae1206fc8ae01d2d79a324))
+* **specialists:** add system_prompt field and bake in Jira PM prompt ([db2a157](https://github.com/Szesnasty/Jarvis/commit/db2a157dc2a7ac9cb27d7364f1d0d13e126b6967))
+* track tool usage metrics and add token savings tests ([8c83a69](https://github.com/Szesnasty/Jarvis/commit/8c83a69b3789c654c256aaa3d69c4b55d56f2426))
+
+
+### 🐛 Bug Fixes
+
+* always start enrichment workers on backend startup ([c792e47](https://github.com/Szesnasty/Jarvis/commit/c792e477b3069b9775de96a59219dbf2c4931acf))
+* **specialists:** return list from GET /active so UI reflects activation ([c8c0e62](https://github.com/Szesnasty/Jarvis/commit/c8c0e62c406408295c6679d5518874c41f565488))
+* truncate produces strings within Pydantic max_length ([9d45f71](https://github.com/Szesnasty/Jarvis/commit/9d45f71a07c8deb615ac29af186bb7ca99bcb9c7))
+
+
+### ⚡ Performance
+
+* **chat:** cap oversized tool_results and compact stale rounds ([46b3afa](https://github.com/Szesnasty/Jarvis/commit/46b3afa8556ea6dffa2362b221b62aad97c69df7))
+
 ## [0.5.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.4.1...backend-v0.5.0) (2026-04-17)
 
 
