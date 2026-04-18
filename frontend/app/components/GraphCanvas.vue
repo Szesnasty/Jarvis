@@ -395,9 +395,10 @@ async function buildGraph() {
       const srcId = typeof link.source === 'object' ? link.source.id : link.source
       const tgtId = typeof link.target === 'object' ? link.target.id : link.target
       // Focus dimming: hover > click. When a node is focused, dim edges
-      // that don't touch it.
+      // that don't touch it; boost edges that DO touch it.
       const focusId = hoveredNode.value?.id ?? props.highlightedNode ?? null
-      if (focusId && srcId !== focusId && tgtId !== focusId) {
+      const touchesFocus = !!focusId && (srcId === focusId || tgtId === focusId)
+      if (focusId && !touchesFocus) {
         return 'rgba(100, 160, 220, 0.03)'
       }
       // Dim edges during search if neither endpoint is matched
@@ -407,6 +408,29 @@ async function buildGraph() {
         }
       }
       const type = link._type || 'tagged'
+      // Brighten edges touching the focused node
+      if (touchesFocus) {
+        const brightColor: Record<string, string> = {
+          in_sprint:     'rgba(34, 211, 238, 0.95)',
+          in_project:    'rgba(250, 204, 21, 0.9)',
+          in_epic:       'rgba(244, 114, 182, 0.95)',
+          blocks:        'rgba(239, 68, 68, 1.0)',
+          depends_on:    'rgba(239, 68, 68, 0.9)',
+          assigned_to:   'rgba(192, 132, 252, 0.9)',
+          relates_to:    'rgba(96, 165, 250, 0.85)',
+          has_label:     'rgba(163, 230, 53, 0.85)',
+          has_component: 'rgba(249, 115, 22, 0.9)',
+          tagged:        'rgba(52, 211, 153, 0.95)',
+          linked:        'rgba(2, 254, 255, 1.0)',
+          mentions:      'rgba(192, 132, 252, 0.95)',
+          part_of:       'rgba(251, 146, 60, 0.9)',
+          related:       'rgba(2, 254, 255, 0.95)',
+          similar_to:    'rgba(129, 140, 248, 0.95)',
+          commented_on:  'rgba(192, 132, 252, 0.8)',
+          parent_of:     'rgba(96, 165, 250, 0.95)',
+        }
+        return brightColor[type] ?? 'rgba(200, 220, 255, 0.85)'
+      }
       if (type === 'similar_to') {
         const w = link._weight ?? 0.5
         const alpha = 0.3 + w * 0.5
@@ -415,20 +439,30 @@ async function buildGraph() {
       return EDGE_COLOR[type] ?? 'rgba(100, 160, 220, 0.15)'
     })
     .linkWidth((link: any) => {
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+      const focusId = hoveredNode.value?.id ?? props.highlightedNode ?? null
+      const touchesFocus = !!focusId && (srcId === focusId || tgtId === focusId)
       const type = link._type || 'tagged'
-      if (type === 'linked' || type === 'related') return 1.8
-      if (type === 'blocks' || type === 'depends_on') return 1.4
-      if (type === 'in_sprint') return 0.6
-      if (type === 'in_project') return 0.5
-      if (type === 'in_epic') return 0.8
-      if (type === 'part_of') return 0.7
-      if (type === 'similar_to') return 0.5 + (link._weight ?? 0) * 1.0
-      if (type === 'temporal') return 0.5
-      if (type === 'has_label' || type === 'has_component') return 0.5
-      if (type === 'assigned_to' || type === 'reported_by' || type === 'commented_on') return 0.4
-      return 0.7
+      let w = 0.7
+      if (type === 'linked' || type === 'related') w = 1.8
+      else if (type === 'blocks' || type === 'depends_on') w = 1.4
+      else if (type === 'in_sprint') w = 0.6
+      else if (type === 'in_project') w = 0.5
+      else if (type === 'in_epic') w = 0.8
+      else if (type === 'part_of') w = 0.7
+      else if (type === 'similar_to') w = 0.5 + (link._weight ?? 0) * 1.0
+      else if (type === 'temporal') w = 0.5
+      else if (type === 'has_label' || type === 'has_component') w = 0.5
+      else if (type === 'assigned_to' || type === 'reported_by' || type === 'commented_on') w = 0.4
+      return touchesFocus ? Math.max(w * 2.5, 2.0) : w
     })
     .linkLineDash((link: any) => {
+      // Focused edges become solid so they pop visually
+      const srcId = typeof link.source === 'object' ? link.source.id : link.source
+      const tgtId = typeof link.target === 'object' ? link.target.id : link.target
+      const focusId = hoveredNode.value?.id ?? props.highlightedNode ?? null
+      if (focusId && (srcId === focusId || tgtId === focusId)) return []
       if (link._type === 'part_of') return [2, 2]
       if (link._type === 'similar_to') return [3, 3]
       if (link._type === 'temporal') return [1, 3]
@@ -511,9 +545,11 @@ async function buildGraph() {
         hoveredNode.value = null
         hoveredDegree.value = 0
       }
-      // Force link colors to re-evaluate so hover-focus dimming applies even
-      // after the physics cooldown has stopped continuous rendering.
+      // Force link visuals to re-evaluate so hover-focus dimming/boost
+      // applies even after the physics cooldown has stopped rendering.
       graph?.linkColor(graph.linkColor())
+      graph?.linkWidth(graph.linkWidth())
+      graph?.linkLineDash(graph.linkLineDash())
     })
     .graphData((() => {
       const nodes = props.nodes ?? []
@@ -632,9 +668,11 @@ watch(
 watch(
   () => props.highlightedNode,
   () => {
-    // Refresh both nodes and edges so focus-dimming applies/clears.
+    // Refresh both nodes and edges so focus-dimming/boost applies/clears.
     graph?.nodeColor(graph.nodeColor())
     graph?.linkColor(graph.linkColor())
+    graph?.linkWidth(graph.linkWidth())
+    graph?.linkLineDash(graph.linkLineDash())
   },
 )
 
