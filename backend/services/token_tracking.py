@@ -41,12 +41,20 @@ def log_usage(
     output_tokens: int,
     model: str = "claude-sonnet-4-20250514",
     context_tokens: int = 0,
+    tool_calls: int = 0,
+    tool_rounds: int = 0,
     provider: str = "anthropic",
     workspace_path: Optional[Path] = None,
 ) -> Dict:
     """Log a single usage entry."""
-    cost_per_input = 3.0 / 1_000_000   # $3/MTok input
-    cost_per_output = 15.0 / 1_000_000  # $15/MTok output
+    # Model-aware pricing (per million tokens)
+    _PRICING = {
+        "claude-haiku-4-20250514": (0.80, 4.0),
+        "claude-sonnet-4-20250514": (3.0, 15.0),
+    }
+    cost_in, cost_out = _PRICING.get(model, (3.0, 15.0))
+    cost_per_input = cost_in / 1_000_000
+    cost_per_output = cost_out / 1_000_000
 
     # Try to use LiteLLM's model cost for non-Anthropic providers
     if provider != "anthropic":
@@ -69,6 +77,8 @@ def log_usage(
         "output_tokens": output_tokens,
         "total_tokens": input_tokens + output_tokens,
         "context_tokens": context_tokens,
+        "tool_calls": tool_calls,
+        "tool_rounds": tool_rounds,
         "model": model,
         "provider": provider,
         "cost_estimate": round(cost_estimate, 6),

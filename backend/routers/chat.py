@@ -197,6 +197,7 @@ async def _stream_follow_up(
     api_key: str,
     usage_acc: list[int],
     depth: int = 1,
+    tool_acc: list[int] | None = None,
 ) -> str:
     """Stream Claude's follow-up after tool execution.
 
@@ -224,6 +225,9 @@ async def _stream_follow_up(
 
     # If Claude wants tool calls, execute them and recurse
     if pending_tools and depth < MAX_TOOL_ROUNDS:
+        if tool_acc is not None:
+            tool_acc[0] += len(pending_tools)
+            tool_acc[1] += 1
         next_messages = tool_messages
         for tool_event in pending_tools:
             await _send_event(ws, "tool_use", name=tool_event.name, input=tool_event.tool_input)
@@ -240,7 +244,7 @@ async def _stream_follow_up(
 
         text += await _stream_follow_up(
             ws, claude, next_messages, system_prompt, tools,
-            session_id, api_key, usage_acc, depth + 1,
+            session_id, api_key, usage_acc, depth + 1, tool_acc=tool_acc,
         )
 
     return text
@@ -308,6 +312,8 @@ async def _handle_message(
         attribution_prefix = f"**[{names}]** "
     # [input_tokens, output_tokens] accumulated across all rounds
     usage_acc = [0, 0]
+    # [tool_calls, tool_rounds] accumulated across all rounds
+    tool_acc = [0, 0]
     pending_tools: list[StreamEvent] = []
 
     async for event in claude.stream_response(
@@ -336,6 +342,8 @@ async def _handle_message(
     # Handle tool call chain (up to MAX_TOOL_ROUNDS)
     if pending_tools:
         tool_messages = messages
+        tool_acc[0] += len(pending_tools)
+        tool_acc[1] += 1
         for tool_event in pending_tools:
             await _send_event(ws, "tool_use", name=tool_event.name, input=tool_event.tool_input)
             session_service.record_tool_use(session_id, tool_event.name)
@@ -346,7 +354,7 @@ async def _handle_message(
 
         assistant_text += await _stream_follow_up(
             ws, claude, tool_messages, system_prompt, tools,
-            session_id, api_key, usage_acc,
+            session_id, api_key, usage_acc, tool_acc=tool_acc,
         )
 
     if assistant_text:
@@ -369,6 +377,8 @@ async def _handle_message(
                 model=model or "claude-sonnet-4-20250514",
                 provider=provider or "anthropic",
                 context_tokens=prompt_stats.get("context_tokens", 0),
+                tool_calls=tool_acc[0],
+                tool_rounds=tool_acc[1],
             )
         except Exception:
             logger.warning("Failed to log token usage")

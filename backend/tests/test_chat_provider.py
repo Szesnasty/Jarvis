@@ -254,6 +254,8 @@ async def test_ws_provider_model_passed_to_log_usage(mock_no_server_key):
             model="gpt-4o",
             provider="openai",
             context_tokens=mock_log.call_args.kwargs.get("context_tokens", 0),
+            tool_calls=0,
+            tool_rounds=0,
         )
 
 
