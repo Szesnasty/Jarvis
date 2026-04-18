@@ -18,10 +18,7 @@ export function useGraph() {
   const isLoading = ref(false)
 
   const filters = ref<GraphFilters>({
-    showNotes: true,
-    showTags: true,
-    showPeople: true,
-    showAreas: true,
+    hiddenTypes: new Set<string>(),
     timeRange: 'all',
     showOrphans: false,
     searchText: '',
@@ -31,10 +28,9 @@ export function useGraph() {
 
   const filteredNodes = computed(() => {
     let nodes = graph.value.nodes
-    if (!filters.value.showNotes) nodes = nodes.filter(n => n.type !== 'note')
-    if (!filters.value.showTags) nodes = nodes.filter(n => n.type !== 'tag')
-    if (!filters.value.showPeople) nodes = nodes.filter(n => n.type !== 'person')
-    if (!filters.value.showAreas) nodes = nodes.filter(n => n.type !== 'area')
+    if (filters.value.hiddenTypes.size > 0) {
+      nodes = nodes.filter(n => !filters.value.hiddenTypes.has(n.type))
+    }
     // Search text does NOT filter nodes — it highlights them via searchMatchedNodeIds
     return nodes
   })
