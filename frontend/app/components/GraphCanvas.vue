@@ -777,21 +777,21 @@ async function buildGraph() {
   // to the canvas edge. This is the key to balancing center density vs spread.
   graph.d3Force('charge')?.strength((node: any) => {
     const deg = degrees[node.id] || 0
-    if (node.type === 'jira_sprint') return -280 - deg * 4
-    if (node.type === 'area') return -180 - deg * 5
-    if (node.type === 'jira_project' || node.type === 'jira_epic') return -160 - deg * 4
-    if (node.type === 'tag' || node.type === 'jira_label') return -60 - deg * 2
-    return -90 - deg * 3
-  }).distanceMax(350)
+    if (node.type === 'jira_sprint') return -350 - deg * 5
+    if (node.type === 'area') return -220 - deg * 6
+    if (node.type === 'jira_project' || node.type === 'jira_epic') return -200 - deg * 5
+    if (node.type === 'tag' || node.type === 'jira_label') return -80 - deg * 3
+    return -120 - deg * 4
+  }).distanceMax(450)
   graph.d3Force('link')?.distance((link: any) => {
-    if (link._type === 'in_sprint') return 20
-    if (link._type === 'blocks' || link._type === 'depends_on') return 65
-    if (link._type === 'relates_to' || link._type === 'duplicate_of') return 50
-    if (link._type === 'part_of') return 40
-    if (link._type === 'tagged') return 30
-    if (link._type === 'has_label' || link._type === 'has_component') return 36
-    if (link._type === 'assigned_to' || link._type === 'reported_by') return 42
-    return 36
+    if (link._type === 'in_sprint') return 28
+    if (link._type === 'blocks' || link._type === 'depends_on') return 85
+    if (link._type === 'relates_to' || link._type === 'duplicate_of') return 65
+    if (link._type === 'part_of') return 55
+    if (link._type === 'tagged') return 42
+    if (link._type === 'has_label' || link._type === 'has_component') return 48
+    if (link._type === 'assigned_to' || link._type === 'reported_by') return 55
+    return 48
   })
   graph.d3Force('link')?.strength((link: any) => {
     if (link._type === 'in_sprint') return 1.0
@@ -809,7 +809,7 @@ async function buildGraph() {
     graph.d3Force('collide', d3.forceCollide()
       .radius((node: any) => {
         const deg = degrees[node.id] || 0
-        return nodeRadius(node.type, deg) + 12
+        return nodeRadius(node.type, deg) + 18
       })
       .strength(0.6)
       .iterations(1)
