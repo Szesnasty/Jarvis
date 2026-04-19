@@ -52,7 +52,6 @@ jobs:
           pip-audit \
             --requirement requirements.txt \
             --vulnerability-service osv \
-            --disable-pip \
             --desc \
             --strict
 
