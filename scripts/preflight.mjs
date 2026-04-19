@@ -168,3 +168,17 @@ if (pythonFailed) {
 } else {
   console.log(`${GREEN}${BOLD}All checks passed.${RESET} Proceeding…\n`);
 }
+
+// ── Configure git hooks (repo-local, no global side-effects) ──
+{
+  const hooksDir = join(import.meta.dirname, '..', '.githooks');
+  if (existsSync(hooksDir)) {
+    const r = spawnSync('git', ['config', 'core.hooksPath', '.githooks'], {
+      cwd: join(import.meta.dirname, '..'),
+      stdio: 'ignore',
+    });
+    if (r.status === 0) {
+      console.log(`${DIM}Git hooks configured (.githooks/)${RESET}`);
+    }
+  }
+}

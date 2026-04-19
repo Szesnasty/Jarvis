@@ -98,6 +98,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify lockfile integrity
+        run: |
+          # npm ci should not produce any modifications to the lock file.
+          # If it does, the committed lock file is out of sync.
+          npm install --package-lock-only
+          if ! git diff --quiet -- package-lock.json; then
+            echo "::error::package-lock.json is out of sync with package.json — run 'npm install' locally and commit the updated lock file"
+            git diff -- package-lock.json | head -40
+            exit 1
+          fi
+
       - name: Build (nuxt build)
         run: npm run build
 
