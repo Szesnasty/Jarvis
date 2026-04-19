@@ -6,7 +6,7 @@
   "scripts": {
     "preflight": "node scripts/preflight.mjs",
     "install:backend": "node scripts/install-backend.mjs",
-    "install:frontend": "npm --prefix frontend install",
+    "install:frontend": "npm --prefix frontend ci",
     "install:all": "npm run install:backend && npm run install:frontend",
     "build": "node scripts/build-frontend.mjs",
     "serve:backend": "node scripts/serve-backend.mjs",
