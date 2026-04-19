@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.1](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.9.0...jarvis-v0.9.1) (2026-04-19)
+
+
+### 🤖 CI/CD
+
+* add dependency audit workflow (pip-audit + npm audit) ([dfd34d4](https://github.com/Szesnasty/Jarvis/commit/dfd34d42fa388b52a8806a4600ef62122df9b800))
+* drop --disable-pip flag from pip-audit ([e4b54b8](https://github.com/Szesnasty/Jarvis/commit/e4b54b83110bf2baa14e684746152c83d36e957e))
+
 ## [0.9.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.8.1...jarvis-v0.9.0) (2026-04-19)
 
 
