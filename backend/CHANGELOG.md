@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.8.0...backend-v0.9.0) (2026-04-19)
+
+
+### ✨ Features
+
+* **jira:** improve MCP tool descriptions, sprint resolution and status mapping ([fb43915](https://github.com/Szesnasty/Jarvis/commit/fb439156fd8c222a5d671dc475bfc5b0cbde05c1))
+
+
+### 🐛 Bug Fixes
+
+* **tests:** stabilize CI by marking aspirational NER tests as xfail ([89d9ec0](https://github.com/Szesnasty/Jarvis/commit/89d9ec0584d17610030e5b9c2d30a91562ebfc5d))
+
 ## [0.8.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.7.0...backend-v0.8.0) (2026-04-18)
 
 
