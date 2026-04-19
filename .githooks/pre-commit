@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────
+# Pre-commit hook: guard frontend/package-lock.json
+#
+# package-lock.json must only change when package.json changes.
+# Running `npm install` on macOS silently strips optional peer
+# deps (@emnapi/*, commander) that only resolve on Linux,
+# causing `npm ci` in CI (Ubuntu) to fail.
+#
+# This hook blocks accidental lock-file commits.
+# To intentionally update the lock file:
+#   SKIP_LOCKFILE_CHECK=1 git commit ...
+# ─────────────────────────────────────────────────────────────
+set -euo pipefail
+
+if [ "${SKIP_LOCKFILE_CHECK:-}" = "1" ]; then
+  exit 0
+fi
+
+LOCK="frontend/package-lock.json"
+PKG="frontend/package.json"
+
+lock_staged=$(git diff --cached --name-only -- "$LOCK" | wc -l | tr -d ' ')
+pkg_staged=$(git diff --cached --name-only -- "$PKG" | wc -l | tr -d ' ')
+
+if [ "$lock_staged" -gt 0 ] && [ "$pkg_staged" -eq 0 ]; then
+  echo ""
+  echo "╔═══════════════════════════════════════════════════════════╗"
+  echo "║  BLOCKED: frontend/package-lock.json changed without     ║"
+  echo "║  frontend/package.json — this will break CI.             ║"
+  echo "║                                                          ║"
+  echo "║  Unstage it:  git reset HEAD frontend/package-lock.json  ║"
+  echo "║  Or override: SKIP_LOCKFILE_CHECK=1 git commit ...       ║"
+  echo "╚═══════════════════════════════════════════════════════════╝"
+  echo ""
+  exit 1
+fi
