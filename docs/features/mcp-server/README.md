@@ -46,10 +46,13 @@ See [`clients/`](./clients/) for:
 
 ## Tools
 
-22 read-only + 3 opt-in write. Categories: `search`, `memory`, `graph`,
+23 read-only + 3 opt-in write. Categories: `search`, `memory`, `graph`,
 `sessions`, `jira`, `workspace`, `preferences`. Each tool is tagged with a
 cost class (`free` / `cheap` / `standard` / `premium`) for per-session
 budget caps — configurable in Settings → MCP.
+
+**Full reference:** [`tools.md`](./tools.md) — every tool, what it does,
+and what the user gains when Jarvis uses it.
 
 ## Specs
 

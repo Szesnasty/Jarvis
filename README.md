@@ -137,7 +137,9 @@ Your `Jarvis/memory/` folder works as a valid Obsidian vault — plain Markdown,
 
 ### MCP server — Jarvis as local memory for every AI tool
 
-Jarvis includes a built-in **Model Context Protocol (MCP) server** with **25 tools over stdio**, so any MCP-aware client can use your workspace as a shared memory backend — including **Claude Desktop, Cursor, VS Code Copilot, Continue**, and more.
+Jarvis includes a built-in **Model Context Protocol (MCP) server** with **26 tools over stdio** (23 read-only + 3 opt-in writes), so any MCP-aware client can use your workspace as a shared memory backend — including **Claude Desktop, Cursor, VS Code Copilot, Continue**, and more.
+
+See the full tool catalogue — what each tool does and what you gain — in [`docs/features/mcp-server/tools.md`](./docs/features/mcp-server/tools.md).
 
 Why this matters:
 - **Token savings** — retrieval runs locally on your machine first (BM25 + semantic + graph), so cloud models receive only a smaller, higher-signal context.
@@ -187,7 +189,7 @@ The file is open — use it as-is or adapt it to your workflow.
 - Specialist system with full UI wizard
 - Duel Mode — round-based debate with scored verdict
 - Web search via DuckDuckGo (no extra API key)
-- **Built-in MCP server (25 tools over stdio)** — use Jarvis memory from Claude Desktop, Cursor, VS Code Copilot, Continue, and other MCP-aware clients
+- **Built-in MCP server (26 tools over stdio)** \u2014 use Jarvis memory from Claude Desktop, Cursor, VS Code Copilot, Continue, and other MCP-aware clients ([full tool list](./docs/features/mcp-server/tools.md))
 
 **Coming next:** stronger feedback loops, smarter graph enrichment, Council Mode, voice (once quality is reliable).
 
