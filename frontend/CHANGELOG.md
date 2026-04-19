@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.9.0...frontend-v0.10.0) (2026-04-19)
+
+
+### ✨ Features
+
+* add Jarvis favicon (cyan orb) ([d802a8d](https://github.com/Szesnasty/Jarvis/commit/d802a8d7689f38acadcc6b1cd4cf06510d6a1f8d))
+
 ## [0.9.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.8.0...frontend-v0.9.0) (2026-04-19)
 
 
