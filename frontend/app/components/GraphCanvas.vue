@@ -687,10 +687,10 @@ async function buildGraph() {
     // Faster decay + shorter cooldown in perf mode so the physics sim settles
     // and stops burning CPU on graphs with thousands of edges. Smaller
     // warmup also skips a big block of blocking work at render time.
-    .d3AlphaDecay(perfMode ? 0.04 : 0.02)
-    .d3VelocityDecay(perfMode ? 0.45 : 0.3)
-    .warmupTicks(perfMode ? 30 : 80)
-    .cooldownTime(perfMode ? 1800 : 4000)
+    .d3AlphaDecay(perfMode ? 0.05 : 0.035)
+    .d3VelocityDecay(perfMode ? 0.55 : 0.45)
+    .warmupTicks(perfMode ? 40 : 100)
+    .cooldownTime(perfMode ? 1500 : 3000)
     .onNodeClick((node: any) => {
       const orig = nodeIndex.get(node.id)
       if (orig) emit('nodeClick', orig)
@@ -801,8 +801,8 @@ async function buildGraph() {
         const deg = degrees[node.id] || 0
         return nodeRadius(node.type, deg) + 12
       })
-      .strength(0.9)
-      .iterations(3)
+      .strength(0.6)
+      .iterations(1)
     )
   }
 
