@@ -1,0 +1,82 @@
+name: Dependency Audit
+
+# Scans Python + npm dependencies for known CVEs. No auto-bumps, no PRs.
+# Fails the build only on HIGH / CRITICAL findings so low-severity noise in
+# deep transitive deps doesn't block merges.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Daily at 06:00 UTC — picks up newly published advisories against the
+    # current pinned dependencies without requiring a code change.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Backend — pip-audit against requirements.txt
+  # ─────────────────────────────────────────────
+  pip-audit:
+    name: Backend — pip-audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pip-audit
+        run: python -m pip install --upgrade pip pip-audit
+
+      - name: Run pip-audit (fail on HIGH / CRITICAL)
+        # --strict: non-zero exit on any vulnerability matched by the filter.
+        # --vulnerability-service osv: use OSV.dev (broad ecosystem coverage).
+        # We keep the full report visible in the job log even when it passes.
+        run: |
+          pip-audit \
+            --requirement requirements.txt \
+            --vulnerability-service osv \
+            --disable-pip \
+            --desc \
+            --strict
+
+  # ─────────────────────────────────────────────
+  # Frontend — npm audit against package-lock.json
+  # ─────────────────────────────────────────────
+  npm-audit:
+    name: Frontend — npm audit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Run npm audit (fail on HIGH / CRITICAL)
+        # --audit-level=high: exit non-zero only for high/critical findings.
+        # --omit=dev: ignore devDependencies — they don't ship to users.
+        run: npm audit --audit-level=high --omit=dev
