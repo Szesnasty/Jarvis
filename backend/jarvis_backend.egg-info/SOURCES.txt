@@ -55,6 +55,7 @@ services/memory_service.py
 services/ollama_service.py
 services/planning_service.py
 services/preference_service.py
+services/privacy.py
 services/reranker_service.py
 services/session_service.py
 services/specialist_service.py

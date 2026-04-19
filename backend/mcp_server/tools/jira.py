@@ -32,7 +32,15 @@ def register(mcp: FastMCP, *, workspace: Path) -> None:
 
     @mcp.tool(
         name="jarvis_jira_list_issues",
-        description="Filter Jira issues by project, status, assignee, sprint. Returns key + title + status.",
+        description=(
+            "Filter Jira issues by project, status, assignee, or sprint name. "
+            "Returns key + title + status + assignee + risk. "
+            "status values: 'to-do' (includes Ready For Dev, Draft, Backlog), "
+            "'in-progress' (includes In Code Review, In Test, Ready For Test), "
+            "'done' (includes Canceled). "
+            "sprint accepts partial name, e.g. '43' matches 'Sprint 43'. "
+            "Use jarvis_jira_sprint_risk for a full sprint risk overview instead."
+        ),
     )
     @audit("jarvis_jira_list_issues", ws)
     @enforce_budget(max_tokens=2000)
@@ -89,7 +97,15 @@ def register(mcp: FastMCP, *, workspace: Path) -> None:
 
     @mcp.tool(
         name="jarvis_jira_sprint_risk",
-        description="Risk overview for a sprint: ranked at-risk issues with reasons.",
+        description=(
+            "Risk overview for a sprint: all issues with risk level, ambiguity, blocking chains, "
+            "and assignee bottlenecks. "
+            "If sprint name is omitted, uses the current/most active sprint automatically. "
+            "Accepts partial sprint names (e.g. '43' matches 'Sprint 43'). "
+            "Response already includes blocking_chain_length per issue *and* top_risks / top_unclear lists, "
+            "so there is NO need to call jarvis_search_jira separately for blockers. "
+            "Always prefer this tool over jarvis_jira_list_issues for sprint-level questions."
+        ),
     )
     @audit("jarvis_jira_sprint_risk", ws)
     @enforce_budget(max_tokens=3000)
@@ -103,7 +119,11 @@ def register(mcp: FastMCP, *, workspace: Path) -> None:
 
     @mcp.tool(
         name="jarvis_jira_cluster_by_topic",
-        description="Group Jira issues by semantic topic using embeddings. Returns clusters.",
+        description=(
+            "Group Jira issues by business area / topic. "
+            "Accepts optional project and sprint filters. "
+            "Returns clusters with issue_count, avg_risk, and issue_keys."
+        ),
     )
     @audit("jarvis_jira_cluster_by_topic", ws)
     @enforce_budget(max_tokens=3000)
@@ -116,6 +136,8 @@ def register(mcp: FastMCP, *, workspace: Path) -> None:
 
         tool_input: dict = {"top_k": max_clusters}
         if project:
-            tool_input["root_keys"] = []
+            tool_input["project_key"] = project
+        if sprint:
+            tool_input["sprint"] = sprint
         results = await jira_cluster_by_topic(tool_input, workspace_path=workspace)
         return {"results": results}

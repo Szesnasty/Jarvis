@@ -56,20 +56,39 @@ _SPRINT_RE = re.compile(
 )
 
 _STATUS_CATEGORY_MAP = {
+    # --- to-do ---
     "to do": "to-do",
     "open": "to-do",
     "reopened": "to-do",
     "new": "to-do",
     "backlog": "to-do",
+    "ready for dev": "to-do",
+    "ready for development": "to-do",
+    "draft": "to-do",
+    "selected for development": "to-do",
+    # --- in-progress ---
     "in progress": "in-progress",
     "in review": "in-progress",
     "code review": "in-progress",
+    "in code review": "in-progress",
     "qa": "in-progress",
     "testing": "in-progress",
+    "in test": "in-progress",
+    "ready for test": "in-progress",
+    "ready for qa": "in-progress",
+    "in qa": "in-progress",
+    "in development": "in-progress",
+    "in progress (unreviewed)": "in-progress",
+    # --- done ---
     "done": "done",
     "closed": "done",
     "resolved": "done",
     "completed": "done",
+    "canceled": "done",
+    "cancelled": "done",
+    "won't do": "done",
+    "wont do": "done",
+    "rejected": "done",
 }
 
 # Inbound CSV link-type columns Jira emits.

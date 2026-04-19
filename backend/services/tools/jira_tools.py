@@ -48,8 +48,8 @@ async def jira_list_issues(
         if tool_input.get("sprint") or tool_input.get("sprint_state"):
             join_sprint = " JOIN issue_sprints s ON i.issue_key = s.issue_key"
             if tool_input.get("sprint"):
-                clauses.append("s.sprint_name = ?")
-                params.append(tool_input["sprint"])
+                clauses.append("LOWER(s.sprint_name) LIKE LOWER(?)")
+                params.append(f"%{tool_input['sprint']}%")
             if tool_input.get("sprint_state"):
                 clauses.append("s.sprint_state = ?")
                 params.append(tool_input["sprint_state"])
@@ -81,15 +81,17 @@ async def jira_list_issues(
                 "assignee": row["assignee"],
                 "type": row["issue_type"],
             }
-            # Active sprint
+            # Sprint name (prefer ACTIVE, fall back to any sprint assigned)
             sprint_row = conn.execute(
                 "SELECT sprint_name FROM issue_sprints "
-                "WHERE issue_key = ? AND sprint_state = 'ACTIVE' LIMIT 1",
+                "WHERE issue_key = ? "
+                "ORDER BY CASE WHEN sprint_state = 'ACTIVE' THEN 0 ELSE 1 END "
+                "LIMIT 1",
                 (row["issue_key"],),
             ).fetchone()
             item["sprint"] = sprint_row["sprint_name"] if sprint_row else None
 
-            # Enrichment summary
+            # Enrichment (risk + area only — no summary to save tokens)
             enr = conn.execute(
                 "SELECT payload FROM latest_enrichment "
                 "WHERE subject_type = 'jira_issue' AND subject_id = ?",
@@ -99,7 +101,6 @@ async def jira_list_issues(
                 payload = json.loads(enr["payload"])
                 item["risk"] = payload.get("risk_level")
                 item["area"] = payload.get("business_area")
-                item["summary"] = payload.get("summary")
             results.append(item)
 
         # Post-sort by risk if requested
@@ -331,13 +332,37 @@ async def jira_sprint_risk(
     try:
         sprint_name = tool_input.get("sprint_name")
         if not sprint_name:
+            # Try ACTIVE state first
             row = conn.execute(
                 "SELECT sprint_name FROM issue_sprints "
                 "WHERE sprint_state = 'ACTIVE' LIMIT 1"
             ).fetchone()
             if not row:
-                return {"error": "No active sprint found"}
+                # Fallback: sprint with the most issues (most recent active)
+                row = conn.execute(
+                    "SELECT sprint_name, COUNT(*) as cnt FROM issue_sprints "
+                    "GROUP BY sprint_name ORDER BY cnt DESC LIMIT 1"
+                ).fetchone()
+            if not row:
+                return {"error": "No sprint found"}
             sprint_name = row["sprint_name"]
+        else:
+            # Resolve partial name (e.g. "43" → "Sprint 43")
+            exact = conn.execute(
+                "SELECT sprint_name FROM issue_sprints WHERE sprint_name = ? LIMIT 1",
+                (sprint_name,),
+            ).fetchone()
+            if not exact:
+                fuzzy = conn.execute(
+                    "SELECT sprint_name FROM issue_sprints "
+                    "WHERE LOWER(sprint_name) LIKE LOWER(?) "
+                    "GROUP BY sprint_name ORDER BY COUNT(*) DESC LIMIT 1",
+                    (f"%{sprint_name}%",),
+                ).fetchone()
+                if fuzzy:
+                    sprint_name = fuzzy["sprint_name"]
+                else:
+                    return {"error": f"No sprint matching '{sprint_name}'"}
 
         rows = conn.execute(
             "SELECT i.issue_key, i.title, i.status, i.status_category, "
@@ -407,8 +432,22 @@ async def jira_sprint_risk(
             )
         ]
 
+        # Pre-computed status summary so the agent doesn't have to count
+        status_summary: dict[str, int] = defaultdict(int)
+        for row in rows:
+            cat = row["status_category"] or "unknown"
+            status_summary[cat] += 1
+
+        blocked_count = sum(
+            1 for i in issues if i.get("blocking_chain_length", 0) > 0
+        )
+
         return {
             "sprint_name": sprint_name,
+            "total_issues": len(issues),
+            "status_summary": dict(status_summary),
+            "high_risk_count": len(top_risks),
+            "blocked_count": blocked_count,
             "issues": issues,
             "top_risks": top_risks,
             "top_unclear": top_unclear,
@@ -436,8 +475,21 @@ async def jira_cluster_by_topic(
             ).fetchall()
             issue_keys = [r["issue_key"] for r in rows]
         else:
+            clauses: list[str] = []
+            params: list[Any] = []
+            join_sprint = ""
+            if tool_input.get("project_key"):
+                clauses.append("i.project_key = ?")
+                params.append(tool_input["project_key"])
+            if tool_input.get("sprint"):
+                join_sprint = " JOIN issue_sprints s ON i.issue_key = s.issue_key"
+                clauses.append("LOWER(s.sprint_name) LIKE LOWER(?)")
+                params.append(f"%{tool_input['sprint']}%")
+            where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
             rows = conn.execute(
-                "SELECT issue_key FROM issues ORDER BY updated_at DESC LIMIT 200"
+                f"SELECT DISTINCT i.issue_key FROM issues i{join_sprint}{where} "
+                f"ORDER BY i.updated_at DESC LIMIT 200",
+                params,
             ).fetchall()
             issue_keys = [r["issue_key"] for r in rows]
 
@@ -467,6 +519,7 @@ async def jira_cluster_by_topic(
             avg_risk = "high" if avg_risk_val < 1 else ("medium" if avg_risk_val < 2 else "low")
             result.append({
                 "topic_label": area,
+                "issue_count": len(items),
                 "issue_keys": [it["key"] for it in items],
                 "business_area": area,
                 "avg_risk": avg_risk,
