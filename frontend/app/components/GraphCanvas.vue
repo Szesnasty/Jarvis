@@ -695,6 +695,16 @@ async function buildGraph() {
       const orig = nodeIndex.get(node.id)
       if (orig) emit('nodeClick', orig)
     })
+    .onNodeDrag(() => {
+      // During drag, force-graph reheats alpha to 0.3 which makes ALL
+      // forces (charge, collision, cluster) push connected nodes around.
+      // Crank velocity decay to ~0.9 so non-dragged nodes barely move.
+      graph.d3VelocityDecay(0.9)
+    })
+    .onNodeDragEnd(() => {
+      // Restore normal damping
+      graph.d3VelocityDecay(perfMode ? 0.55 : 0.45)
+    })
     .onLinkHover((link: any) => {
       if (link) {
         const srcId = typeof link.source === 'object' ? link.source.id : link.source
