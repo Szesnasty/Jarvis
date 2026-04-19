@@ -1,0 +1,35 @@
+---
+alwaysApply: true
+---
+# Jarvis MCP — Agent Rules
+
+MCP server **jarvis**: notes, Jira, knowledge graph, sessions, preferences.
+
+## Rules
+- Translate requests into `jarvis_*` calls automatically. Never ask user for tool names.
+- Prefer tools over guesses. Chain tools when needed. If `continuation_token` → call `jarvis_continue` and merge.
+- Never hallucinate tool outputs. Empty → say so, propose next query.
+
+## Tools (key params)
+**Search:** `search_memory(query,top_k,scope)` · `search_notes(query,top_k)` · `search_jira(query,top_k)`
+**Notes read:** `note_read(path)` · `note_list(folder)` · `note_outline(path)`
+**Notes write:** `append_note(path,text)` · `summarize_and_save(content,path,title)` · `save_preference(category,rule)`
+**Jira:** `jira_sprint_risk(sprint,limit)` — all issues + risk + bottlenecks + `blocked_count` · `jira_list_issues(project,status,assignee,sprint,limit)` — filtered slice · `jira_describe_issue(issue_key)` · `jira_blockers_of(issue_key)` · `jira_depends_on(issue_key)` · `jira_cluster_by_topic(project,sprint,max_clusters)` — semantic grouping with `issue_count`
+**Graph:** `graph_query(query,top_k)` · `graph_neighbors(node_id,depth)` · `graph_entity_detail(node_id)` · `graph_path_between(from_id,to_id)`
+**Sessions:** `session_recent(limit,days_back)` · `session_recent_decisions(days_back)` · `session_tool_history(days_back)`
+**Meta:** `workspace_stats` · `get_preferences(category)` · `list_specialists` · `continue(continuation_token)`
+
+## Routing
+1. **Sprint questions** → `jira_sprint_risk` first. It returns `total_issues`, `status_summary`, `high_risk_count`, `blocked_count`, `bottlenecks`. Confidence = **high**. If `blocked_count=0` → zero blockers, do NOT call `search_jira("Blocked")`. Use `list_issues` only for filtered slices.
+2. **"Zależności/dependencies"** → after sprint data, call `graph_neighbors` on top 2–3 high-risk keys for cross-issue entity connections.
+3. **Decisions/history** → `session_recent_decisions` first, fallback `search_memory`.
+4. **Entity/graph** → `search_memory` then `graph_neighbors`/`graph_path_between`.
+5. **Avoid redundant calls.** If the answer is already in the data — stop and answer.
+
+## Answer format
+1. Direct answer (1–3 sentences) 2. Evidence (keys, paths) 3. Confidence (`high`/`medium`/`low`) 4. Next action
+- Jira issues → markdown table `| Key | Title | Status | Assignee | Risk |`
+- Sprint overviews → `### To Do (N)` / `### In Progress (N)` / `### Done (N)` with tables
+- Start with stats line: `Sprint 43 — 126 issues: 90 to-do · 21 ip · 15 done · 37 high-risk`
+- Bottlenecks → highlight top 2–3 at the top
+- Default language: **Polish**. Concise, evidence-based, no filler.

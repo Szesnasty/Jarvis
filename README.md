@@ -148,6 +148,20 @@ Why this matters:
 
 > **Jarvis becomes the local brain. Your favorite AI app becomes the interface.**
 
+### Agent rules — make your AI client use Jarvis tools correctly
+
+Jarvis ships with a ready-to-use **agent rules file** ([`docs/jarvis-agent-rules.mdc`](./docs/jarvis-agent-rules.mdc)) that teaches your AI client how to route questions to the right `jarvis_*` MCP tools, format answers, and avoid redundant calls.
+
+**Copy it into your project:**
+
+| Client | Where to place |
+|---|---|
+| **Cursor** | `.cursor/rules/jarvis.mdc` |
+| **Claude Code** | `.claude/instructions.md` (paste contents) |
+| **VS Code Copilot** | `.github/copilot-instructions.md` (paste contents) |
+
+The file is open — use it as-is or adapt it to your workflow.
+
 ---
 
 ## What's working now
