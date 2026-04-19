@@ -284,10 +284,10 @@ function recomputeDerived() {
   })
   sprintInitialPos = {}
   if (sprintNodes.length > 0) {
-    const CLUSTER_GAP = 420
+    const CLUSTER_GAP = 240
     const ringRadius = sprintNodes.length === 1
       ? 0
-      : Math.max(320, (CLUSTER_GAP * sprintNodes.length) / (2 * Math.PI))
+      : Math.max(200, (CLUSTER_GAP * sprintNodes.length) / (2 * Math.PI))
     sprintNodes.forEach((n, i) => {
       const angle = (i / sprintNodes.length) * 2 * Math.PI
       sprintInitialPos[n.id] = {
@@ -423,8 +423,11 @@ async function buildGraph() {
       const glow = props.glowLevel ?? 'normal'
       const lowDetail =
         glow === 'off' ||
-        (glow === 'normal' && perfMode && !isSpecial) ||
         globalScale < 0.45
+      // In normal+perfMode non-special nodes still get the halo gradient
+      // but skip the expensive shadowBlur (the real perf killer).
+      const skipShadow =
+        glow === 'normal' && perfMode && !isSpecial
 
       if (lowDetail) {
         ctx.beginPath()
@@ -455,8 +458,11 @@ async function buildGraph() {
         ctx.fill()
 
         // Node body — shadowBlur ONLY for special nodes (hover / focus /
-        // highlight). Was on every node, every frame.
-        if (isSpecial) {
+        // highlight) or 'high' mode. In normal+perfMode we skip shadow
+        // entirely but still keep the halo gradient above.
+        if (skipShadow) {
+          // no shadowBlur — halo gradient alone provides subtle glow
+        } else if (isSpecial) {
           ctx.shadowColor = color
           ctx.shadowBlur = (isHighlighted ? 50 : 32) * glowMult
         } else if (glow === 'high') {
@@ -609,38 +615,46 @@ async function buildGraph() {
     })
     .linkDirectionalArrowRelPos(0.85)
     .linkDirectionalParticles((link: any) => {
-      // Perf: particles are expensive (each one is a per-frame animated draw).
-      // In perf mode we ONLY animate the edges that touch the focused node —
-      // everything else is static. Below the perf threshold we keep the
-      // "alive" look but with fewer particles than before.
+      // In perf mode: focused edges get 2 particles, and a wider ambient
+      // subset (~15%) gets 1 particle so dots visibly flow across the graph.
       if (perfMode) {
         const srcId = typeof link.source === 'object' ? link.source.id : link.source
         const tgtId = typeof link.target === 'object' ? link.target.id : link.target
         const focusId = hoveredNode.value?.id ?? props.highlightedNode ?? null
-        if (!focusId) return 0
-        return (srcId === focusId || tgtId === focusId) ? 2 : 0
+        if (focusId && (srcId === focusId || tgtId === focusId)) return 2
+        // Ambient: blocks/depends always animate, ~15% of others get 1 particle
+        if (link._type === 'blocks' || link._type === 'depends_on') return 1
+        if (link._type === 'in_sprint') return 1  // sprint membership edges carry dots
+        const h = ((srcId?.charCodeAt?.(srcId.length - 1) ?? 0) + (tgtId?.charCodeAt?.(tgtId.length - 1) ?? 0)) % 7
+        return h === 0 ? 1 : 0
       }
       if (link._type === 'linked') return 2
       if (link._type === 'related') return 1
       if (link._type === 'tagged') return 1
       if (link._type === 'mentions') return 1
+      if (link._type === 'in_sprint') return 1
+      if (link._type === 'blocks' || link._type === 'depends_on') return 1
       return 0
     })
     .linkDirectionalParticleWidth((link: any) => {
+      if (link._type === 'blocks' || link._type === 'depends_on') return 2.5
       if (link._type === 'linked' || link._type === 'related') return 2.2
+      if (link._type === 'in_sprint') return 1.6
       if (link._type === 'tagged') return 1.8
-      return 1.4
+      return 1.5
     })
     .linkDirectionalParticleSpeed((link: any) => {
-      // Varied speeds make the graph feel organic and alive
-      if (link._type === 'linked') return 0.006 + Math.random() * 0.004
-      if (link._type === 'related') return 0.005 + Math.random() * 0.003
-      if (link._type === 'tagged') return 0.003 + Math.random() * 0.002
-      if (link._type === 'mentions') return 0.004 + Math.random() * 0.003
-      if (link._type === 'part_of') return 0.002 + Math.random() * 0.002
+      // Slow, varied speeds — dots drift gently along edges
+      if (link._type === 'linked') return 0.004 + Math.random() * 0.003
+      if (link._type === 'related') return 0.003 + Math.random() * 0.002
+      if (link._type === 'blocks' || link._type === 'depends_on') return 0.003 + Math.random() * 0.002
+      if (link._type === 'in_sprint') return 0.002 + Math.random() * 0.002
+      if (link._type === 'tagged') return 0.002 + Math.random() * 0.0015
+      if (link._type === 'mentions') return 0.003 + Math.random() * 0.002
+      if (link._type === 'part_of') return 0.0015 + Math.random() * 0.0015
       if (link._type === 'similar_to') return 0.001 + Math.random() * 0.001
-      if (link._type === 'temporal') return 0.002 + Math.random() * 0.001
-      return 0.003 + Math.random() * 0.002
+      if (link._type === 'temporal') return 0.0015 + Math.random() * 0.001
+      return 0.002 + Math.random() * 0.0015
     })
     .linkDirectionalParticleColor((link: any) => {
       return EDGE_PARTICLE_COLOR[link._type] ?? 'rgba(100, 180, 255, 0.4)'
@@ -748,37 +762,55 @@ async function buildGraph() {
   // --- Force tuning ---
   // Balanced repulsion: enough to spread nodes out, but not so much that
   // low-degree outliers fly to the edges of the canvas.
+  // distanceMax caps the repulsion range — nodes in the dense center push
+  // each other apart (labels stay readable) but outliers DON'T get flung
+  // to the canvas edge. This is the key to balancing center density vs spread.
   graph.d3Force('charge')?.strength((node: any) => {
     const deg = degrees[node.id] || 0
-    if (node.type === 'jira_sprint') return -400 - deg * 5
-    if (node.type === 'area') return -200 - deg * 8
-    if (node.type === 'jira_project' || node.type === 'jira_epic') return -160 - deg * 6
-    if (node.type === 'tag' || node.type === 'jira_label') return -60 - deg * 3
-    return -100 - deg * 4
-  })
+    if (node.type === 'jira_sprint') return -280 - deg * 4
+    if (node.type === 'area') return -180 - deg * 5
+    if (node.type === 'jira_project' || node.type === 'jira_epic') return -160 - deg * 4
+    if (node.type === 'tag' || node.type === 'jira_label') return -60 - deg * 2
+    return -90 - deg * 3
+  }).distanceMax(350)
   graph.d3Force('link')?.distance((link: any) => {
-    if (link._type === 'in_sprint') return 28
-    if (link._type === 'blocks' || link._type === 'depends_on') return 100
-    if (link._type === 'relates_to' || link._type === 'duplicate_of') return 80
-    if (link._type === 'part_of') return 60
-    if (link._type === 'tagged') return 45
-    if (link._type === 'has_label' || link._type === 'has_component') return 55
-    if (link._type === 'assigned_to' || link._type === 'reported_by') return 60
-    return 55
+    if (link._type === 'in_sprint') return 20
+    if (link._type === 'blocks' || link._type === 'depends_on') return 65
+    if (link._type === 'relates_to' || link._type === 'duplicate_of') return 50
+    if (link._type === 'part_of') return 40
+    if (link._type === 'tagged') return 30
+    if (link._type === 'has_label' || link._type === 'has_component') return 36
+    if (link._type === 'assigned_to' || link._type === 'reported_by') return 42
+    return 36
   })
   graph.d3Force('link')?.strength((link: any) => {
-    if (link._type === 'in_sprint') return 1.1
-    if (link._type === 'blocks' || link._type === 'depends_on') return 0.15
+    if (link._type === 'in_sprint') return 1.0
+    if (link._type === 'blocks' || link._type === 'depends_on') return 0.2
     if (link._type === 'relates_to') return 0.15
     return 0.35
   })
-  graph.d3Force('center')?.strength(0.04)
+  graph.d3Force('center')?.strength(0.08)
+
+  // Collision force — prevents nodes from overlapping in dense clusters.
+  // Uses each node's visual radius + a small padding so labels stay readable.
+  {
+    // @ts-expect-error d3-force-3d has no type declarations
+    const d3 = await import('d3-force-3d')
+    graph.d3Force('collide', d3.forceCollide()
+      .radius((node: any) => {
+        const deg = degrees[node.id] || 0
+        return nodeRadius(node.type, deg) + 12
+      })
+      .strength(0.9)
+      .iterations(3)
+    )
+  }
 
   // Custom cluster force: pull each Jira issue toward its sprint's current
   // position. Combined with strong sprint-vs-sprint repulsion this produces
   // the "pęk / kontynenty" effect the user asked for.
   if (Object.keys(sprintMembership).length > 0) {
-    const clusterStrength = 0.35
+    const clusterStrength = 0.40
     graph.d3Force('sprintCluster', (alpha: number) => {
       const data = graph.graphData()
       const byId: Record<string, any> = {}
