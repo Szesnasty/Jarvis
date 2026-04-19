@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.9.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.8.0...frontend-v0.9.0) (2026-04-19)
+
+
+### ✨ Features
+
+* **jira:** improve MCP tool descriptions, sprint resolution and status mapping ([fb43915](https://github.com/Szesnasty/Jarvis/commit/fb439156fd8c222a5d671dc475bfc5b0cbde05c1))
+
+
+### 🐛 Bug Fixes
+
+* **ci:** restore package-lock.json optional deps removed on macOS ([f10f93f](https://github.com/Szesnasty/Jarvis/commit/f10f93f0afd9ccf6f0555c4449e32c0a7b69e993))
+* **graph+ci:** dampen drag jitter and prevent lock file regeneration ([b3ac657](https://github.com/Szesnasty/Jarvis/commit/b3ac657c688dc748dc0df6545f187ca6c1043b78))
+* **graph:** improve force layout spacing, glow rendering and restore ambient particles ([d946f96](https://github.com/Szesnasty/Jarvis/commit/d946f96320214ef0ae5fb5e4aca60f2898317fd6))
+* **graph:** increase node spacing for label readability ([d8f62aa](https://github.com/Szesnasty/Jarvis/commit/d8f62aabcbe7d6ead95b140ca60b9d65f39c5995))
+* **graph:** reduce node jitter on hover by increasing physics damping ([89e4a9c](https://github.com/Szesnasty/Jarvis/commit/89e4a9c96050b12e6acb0a81c3d5a175dae2d5fa))
+
 ## [0.8.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.7.0...frontend-v0.8.0) (2026-04-18)
 
 
