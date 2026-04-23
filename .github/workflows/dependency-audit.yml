@@ -48,12 +48,21 @@ jobs:
         # --strict: non-zero exit on any vulnerability matched by the filter.
         # --vulnerability-service osv: use OSV.dev (broad ecosystem coverage).
         # We keep the full report visible in the job log even when it passes.
+        #
+        # Ignored advisories (revisit on every dependency bump):
+        #   CVE-2026-28684 — python-dotenv set_key symlink-following file
+        #     overwrite. Fixed in 1.2.2, but litellm==1.83.7 hard-pins
+        #     python-dotenv==1.0.1 so we cannot upgrade without breaking
+        #     resolution. Jarvis does not call set_key() on attacker-controlled
+        #     paths (no untrusted .env writes), so impact is limited. Track
+        #     upstream litellm for a relaxed pin, then drop this ignore.
         run: |
           pip-audit \
             --requirement requirements.txt \
             --vulnerability-service osv \
             --desc \
-            --strict
+            --strict \
+            --ignore-vuln CVE-2026-28684
 
   # ─────────────────────────────────────────────
   # Frontend — npm audit against package-lock.json
