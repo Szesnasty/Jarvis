@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.1](https://github.com/Szesnasty/Jarvis/compare/backend-v0.9.0...backend-v0.9.1) (2026-04-23)
+
+
+### 🐛 Bug Fixes
+
+* **ci:** repair broken test + patch python-dotenv CVE-2026-28684 ([04a2e1e](https://github.com/Szesnasty/Jarvis/commit/04a2e1e6905da1452b2e271473747e167ada1726))
+* **deps:** remove python-dotenv override incompatible with litellm ([4de3760](https://github.com/Szesnasty/Jarvis/commit/4de3760ed5a7cfa18bad345f6d37a9b8a57c198e))
+* **local-models:** sync active model to chat selector + snackbar for pull errors ([6774a37](https://github.com/Szesnasty/Jarvis/commit/6774a3723698110b077a39d3da1a08221962fe87))
+* **security:** override litellm's vulnerable python-dotenv pin ([3efe07f](https://github.com/Szesnasty/Jarvis/commit/3efe07f9e3076a43b1b349f339e4977b8cf60ca1))
+
 ## [0.9.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.8.0...backend-v0.9.0) (2026-04-19)
 
 
