@@ -18,7 +18,9 @@ fastembed==0.8.0  # local embeddings for semantic search
 psutil==7.2.2  # hardware detection for local model recommendations
 spacy==3.8.14  # NER for entity extraction (Polish + English)
 mcp==1.27.0  # Model Context Protocol SDK (FastMCP server, stdio transport)
-python-dotenv==1.2.2  # CVE-2026-28684 — pin safe version (transitive from litellm)
+# python-dotenv is transitively pinned by litellm to ==1.0.1. We cannot override
+# without breaking litellm resolution. Track CVE-2026-28684 upstream in litellm;
+# revisit when litellm relaxes its pin.
 
 # testing
 pytest==9.0.3
