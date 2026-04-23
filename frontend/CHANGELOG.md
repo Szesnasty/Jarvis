@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.10.0...frontend-v0.10.1) (2026-04-23)
+
+
+### 🐛 Bug Fixes
+
+* **local-models:** sync active model to chat selector + snackbar for pull errors ([6774a37](https://github.com/Szesnasty/Jarvis/commit/6774a3723698110b077a39d3da1a08221962fe87))
+
 ## [0.10.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.9.0...frontend-v0.10.0) (2026-04-19)
 
 
