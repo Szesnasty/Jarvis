@@ -436,6 +436,19 @@ async function main() {
   }
   run(venvPythonRel, ['-m', 'pip', 'install', '-r', 'requirements.txt'], { cwd: 'backend' });
 
+  // Apply security overrides AFTER the main install. pip's resolver can't
+  // override transitive pins (uv can, but we use pip locally for portability),
+  // so we force-upgrade vulnerable transitive deps in a second pass.
+  // Currently: python-dotenv 1.0.1 → 1.2.2 (CVE-2026-28684). litellm only
+  // uses load_dotenv() which is API-stable across these versions.
+  // Source of truth: backend/overrides.txt.
+  console.log('[install-backend] applying security overrides (overrides.txt)');
+  run(
+    venvPythonRel,
+    ['-m', 'pip', 'install', '--upgrade', '-r', 'overrides.txt'],
+    { cwd: 'backend' },
+  );
+
   // Install backend as editable so the `jarvis-mcp` console script is generated.
   console.log('[install-backend] installing backend package (registers `jarvis-mcp` CLI)');
   run(venvPythonRel, ['-m', 'pip', 'install', '-e', '.'], { cwd: 'backend' });

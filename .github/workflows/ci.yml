@@ -37,7 +37,9 @@ jobs:
           cache-dependency-glob: backend/requirements.txt
 
       - name: Install dependencies
-        run: uv pip install --system -r requirements.txt
+        # --override forces python-dotenv 1.2.2 over litellm's transitive
+        # ==1.0.1 pin to eliminate CVE-2026-28684. See backend/overrides.txt.
+        run: uv pip install --system --override overrides.txt -r requirements.txt
 
       - name: Download spaCy models
         # Retry 3x with backoff to ride out transient GitHub 5xx errors when

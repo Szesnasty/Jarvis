@@ -1,0 +1,13 @@
+# Dependency overrides — forces specific versions even when a transitive
+# dependency declares a stricter pin. Used with `uv pip install --override`.
+#
+# Why we need this:
+#   litellm==1.83.7 hard-pins python-dotenv==1.0.1, which is vulnerable to
+#   CVE-2026-28684 (set_key symlink-following file overwrite, fixed in 1.2.2).
+#   litellm only uses load_dotenv() (read-only API), which is stable across
+#   the 1.0 → 1.2 range, so forcing 1.2.2 is safe at runtime and eliminates
+#   the CVE from our resolved environment.
+#
+# Revisit: when litellm relaxes its pin, drop this file and let the resolver
+# pick the latest compatible python-dotenv.
+python-dotenv==1.2.2
