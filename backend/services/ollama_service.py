@@ -557,7 +557,7 @@ def score_model(
             recommended=False,
             reason="Not enough disk space (need %.1f GB free)" % required_disk,
             installed=model.ollama_model.lower() in installed_names,
-            active=(model.id == active_model_id),
+            active=(model.id == active_model_id and model.ollama_model.lower() in installed_names),
         )
 
     # RAM check
@@ -645,7 +645,7 @@ def score_model(
         recommended=False,  # Set later by build_catalog
         reason=reason,
         installed=installed,
-        active=(model.id == active_model_id),
+        active=(model.id == active_model_id and installed),
     )
 
 
