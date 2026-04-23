@@ -92,8 +92,18 @@ class TestScoreModel:
 
         hw = self._make_hw(ram=32.0)
         model = get_model_by_id("qwen3-8b")
-        rec = score_model(model, hw, [], active_model_id="qwen3-8b")
+        # active=True only when the model is both selected AND installed
+        rec = score_model(model, hw, ["qwen3:8b"], active_model_id="qwen3-8b")
         assert rec.active is True
+
+    def test_active_false_when_selected_but_not_installed(self):
+        from services.ollama_service import score_model, get_model_by_id
+
+        hw = self._make_hw(ram=32.0)
+        model = get_model_by_id("qwen3-8b")
+        # Selected in config but not installed in Ollama → active must be False
+        rec = score_model(model, hw, [], active_model_id="qwen3-8b")
+        assert rec.active is False
 
     def test_cpu_friendly_bonus(self):
         from services.ollama_service import score_model, get_model_by_id
