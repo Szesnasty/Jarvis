@@ -8,15 +8,20 @@
         <h2 class="note-viewer__title">{{ note.title }}</h2>
         <span class="note-viewer__date">{{ note.updated_at.slice(0, 10) }}</span>
       </header>
-      <div v-if="note.frontmatter && Object.keys(note.frontmatter).length > 0" class="note-viewer__meta">
+      <div v-if="note.frontmatter && Object.keys(filteredFrontmatter).length > 0" class="note-viewer__meta">
         <span
-          v-for="(value, key) in note.frontmatter"
+          v-for="(value, key) in filteredFrontmatter"
           :key="String(key)"
           class="note-viewer__meta-tag"
         >
           {{ key }}: {{ Array.isArray(value) ? value.join(', ') : value }}
         </span>
       </div>
+      <SuggestionsPanel
+        :note="note"
+        @open="(p: string) => $emit('open', p)"
+        @changed="$emit('changed')"
+      />
       <div class="note-viewer__body prose" v-html="renderedHtml"></div>
     </div>
   </div>
@@ -31,6 +36,24 @@ import type { NoteDetail } from '~/types'
 const props = defineProps<{
   note: NoteDetail | null
 }>()
+
+defineEmits<{
+  (e: 'open', path: string): void
+  (e: 'changed'): void
+}>()
+
+// Smart Connect output (suggested_related, aliases_matched) is rendered
+// by SuggestionsPanel, so hide it from the raw frontmatter chip strip.
+const HIDDEN_FRONTMATTER_KEYS = new Set(['suggested_related', 'aliases_matched'])
+
+const filteredFrontmatter = computed(() => {
+  const fm = props.note?.frontmatter ?? {}
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(fm)) {
+    if (!HIDDEN_FRONTMATTER_KEYS.has(k)) out[k] = v
+  }
+  return out
+})
 
 function stripFrontmatter(content: string): string {
   const match = content.match(/^---\s*\n[\s\S]*?\n---\s*\n?/)

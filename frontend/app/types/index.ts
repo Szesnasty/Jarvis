@@ -39,6 +39,29 @@ export interface ReindexResponse {
   indexed: number
 }
 
+// --- Connections (Smart Connect — Step 25) ---
+
+export interface SuggestedLink {
+  path: string
+  confidence: number
+  methods: string[]
+  evidence?: unknown
+}
+
+export interface SemanticOrphan {
+  id: string
+  label: string
+  folder?: string
+}
+
+export interface ConnectionResult {
+  note_path: string
+  suggested: SuggestedLink[]
+  strong_count: number
+  aliases_matched: string[]
+  graph_edges_added: number
+}
+
 // --- Chat ---
 
 export interface ChatMessage {
