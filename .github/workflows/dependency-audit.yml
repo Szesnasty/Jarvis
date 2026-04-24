@@ -64,11 +64,16 @@ jobs:
         run: uv pip install --system pip-audit
 
       - name: Run pip-audit (fail on ANY runtime vulnerability)
-        # Audits the resolved runtime lock file. Strict mode: any known CVE
-        # in the app's runtime dependency tree fails the build. No
-        # --ignore-vuln allowlist — if a finding appears, fix it (bump,
-        # override, or remove the dep).
-        run: pip-audit --requirement /tmp/jarvis-lock.txt --vulnerability-service osv --desc --strict
+        # Audits the resolved runtime lock file. The lock is fully pinned
+        # by uv (with overrides applied), so we pass --no-deps to skip
+        # pip's own resolver — pip doesn't understand uv's overrides and
+        # would reject the lock as conflicting with litellm's transitive
+        # python-dotenv==1.0.1 pin. With --no-deps, pip-audit scans the
+        # exact pinned set as-is.
+        # Strict mode: any known CVE in the app's runtime dependency tree
+        # fails the build. No --ignore-vuln allowlist — if a finding
+        # appears, fix it (bump, override, or remove the dep).
+        run: pip-audit --requirement /tmp/jarvis-lock.txt --no-deps --vulnerability-service osv --desc --strict
 
   # ─────────────────────────────────────────────
   # Frontend — npm audit against package-lock.json
