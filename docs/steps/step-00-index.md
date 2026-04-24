@@ -185,7 +185,9 @@
 | Step | Title | Status | Order |
 |------|-------|--------|-------|
 | [25](step-25-smart-connect.spec.md) | Smart Connect: per-note ingest-time linking, broader entity nodes, alias matcher, semantic orphans | ✅  | → 1st |
-| [26](step-26-smart-connect-quality.spec.md) | Smart Connect quality loop: backfill, stats, score breakdown, alias guardrails, retrieval isolation | ⬜ | → 2nd |
+| [26a](step-26a-backfill.spec.md) | Smart Connect backfill: run on existing notes, versioning, strict dry-run, backfill UI | ⬜ | → 2nd |
+| [26b](step-26b-alias-guardrails.spec.md) | Alias guardrails: min-length, stopwords, frequency cap, weak_aliases, retrieval edge classification | ⬜ | → 3rd |
+| [26c](step-26c-quality-loop.spec.md) | Quality loop: score breakdown, promote/dismiss event log, stats endpoint, "Keep all" UI | ⬜ | → 4th |
 
 ---
 
