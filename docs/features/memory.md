@@ -131,6 +131,21 @@ The Smart Connect `_alias_signal` step calls `scan_body()` against `title + body
 
 `GET /api/connections/orphans` returns the current semantic orphan list. `POST /api/connections/run/{path}?mode=aggressive` re-runs Smart Connect for a given note (lives in [routers/connections.py](backend/routers/connections.py)).
 
+#### Provenance edges
+
+`connect_note()` emits two extra graph edges from a note's frontmatter (handled by `_emit_provenance_edges()`):
+
+- **`derived_from`** (weight 0.45) — when `fm["source"]` is set, a `source:<sha1[:12]>` node is bootstrapped (label `"<kind>:<source[:60]>"` where kind is `url`, `jira`, `file`, or `other`) and the note links to it. Multiple notes derived from the same source converge on the same node, making it easy to find sibling notes.
+- **`same_batch`** (weight 0.55) — when `fm["batch_id"]` is set, a `batch:<id>` node is bootstrapped and the note links to it. Co-imported notes naturally cluster.
+
+Both edges are emitted after the standard graph ingest in `_finalise()` and are idempotent.
+
+#### Dismissed suggestions
+
+`services/dismissed_suggestions.py` maintains a SQLite table `dismissed_suggestions(note_path, target_path, dismissed_at)` (PK on the pair). `connect_note()` calls `_dismissed_targets_for()` right after collecting all signal scores and pops dismissed targets from BM25, note-embedding, chunk-embedding, and alias maps before merging — so dismissed pairs never participate in scoring or capping and therefore never re-surface.
+
+`POST /api/connections/dismiss` records a `(note_path, target_path)` pair. `POST /api/connections/promote` moves a suggestion into the note's `related:` frontmatter list (the only automated writer of `related:`, representing explicit user confirmation) and removes it from `suggested_related`.
+
 ### Frontend
 
 The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/searching, and a main area with `NoteViewer` for reading the selected note.
@@ -148,7 +163,8 @@ The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/se
 - `backend/services/ingest.py` — File ingest pipeline for `.md`, `.txt`, `.pdf`, `.csv`, `.xml`; AI enrichment via `smart_enrich`
 - `backend/services/connection_service.py` — Smart Connect: per-note ingest-time linking; pure scoring + caps; writes `suggested_related` and calls incremental graph update
 - `backend/services/alias_index.py` — Smart Connect alias index: SQLite-backed normalised phrase → note path map; `upsert_note_aliases()` (called from `_index_note`) and `scan_body()` (n-gram lookup, NFKD-normalised, Polish-aware)
-- `backend/routers/connections.py` — Smart Connect HTTP surface: `GET /api/connections/orphans`, `POST /api/connections/run/{path}` (mode=fast|aggressive)
+- `backend/services/dismissed_suggestions.py` — Smart Connect dismissal store: SQLite table `dismissed_suggestions(note_path, target_path, dismissed_at)` with `dismiss()`, `undismiss()`, `list_dismissed_for()`, `list_all()`, `remove_note()`
+- `backend/routers/connections.py` — Smart Connect HTTP surface: `GET /api/connections/orphans`, `POST /api/connections/run/{path}` (mode=fast|aggressive), `POST /api/connections/dismiss`, `POST /api/connections/promote`
 - `backend/services/structured_ingest.py` — CSV/XML ingest with Jira export detection; groups issues by epic/project, creates overview + detail notes with wiki-linked people for graph integration
 - `backend/services/url_ingest.py` — URL ingest for YouTube videos (transcript + oEmbed metadata) and general web articles (trafilatura + markdownify)
 - `backend/services/embedding_service.py` — Local fastembed wrapper: lazy model loading, `embed_note` (with content-hash skip), `search_similar`, `reindex_all`, `delete_embedding`, `is_available`, vector blob packing, and cosine similarity helper
