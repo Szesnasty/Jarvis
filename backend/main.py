@@ -22,6 +22,7 @@ from routers.workspace import router as workspace_router
 from routers.enrichment import router as enrichment_router
 from routers.mcp import router as mcp_router
 from routers.retrieval_search import router as retrieval_router
+from routers.connections import router as connections_router
 from services.enrichment_service import start_workers, stop_workers
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ def create_app() -> FastAPI:
     app.include_router(jira_router)
     app.include_router(enrichment_router)
     app.include_router(retrieval_router)
+    app.include_router(connections_router)
     app.include_router(mcp_router)
 
     @app.exception_handler(Exception)

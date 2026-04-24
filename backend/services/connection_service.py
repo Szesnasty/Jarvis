@@ -250,6 +250,28 @@ async def connect_note(
         mode=mode,
     )
     kept = enforce_caps(merged, _folder_of(note_path))
+
+    # Step 25 PR 4 — semantic orphan repair.
+    #
+    # If a fast-mode pass produced no suggestion at the normal tier and the
+    # note is a semantic orphan in the current graph, retry once in
+    # aggressive mode (which keeps the weak tier 0.45–0.59). This is the
+    # only place that lowers the bar — everywhere else, weak suggestions
+    # are dropped.
+    if (
+        mode == "fast"
+        and not any(item[4] in ("strong", "normal") for item in kept)
+        and _is_semantic_orphan_safe(note_path, ws)
+    ):
+        merged = _merge_candidates(
+            bm25_scores=bm25_scores,
+            note_emb_scores=note_emb_scores,
+            chunk_emb_scores=chunk_emb_scores,
+            alias_scores=alias_scores,
+            mode="aggressive",
+        )
+        kept = enforce_caps(merged, _folder_of(note_path))
+
     suggested = [
         SuggestedLink(
             path=p,
@@ -264,6 +286,16 @@ async def connect_note(
         note_path, ws, fm, body, full_path, suggested,
         aliases_matched=aliases_matched,
     )
+
+
+def _is_semantic_orphan_safe(note_path: str, ws: Path) -> bool:
+    """Best-effort orphan check; never raises into the ingest path."""
+    try:
+        from services.graph_service import is_semantic_orphan
+        return is_semantic_orphan(note_path, workspace_path=ws)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("semantic orphan check failed: %s", exc)
+        return False
 
 
 # ---------------------------------------------------------------------------

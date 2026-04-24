@@ -40,6 +40,8 @@ from services.graph_service.builder import (  # noqa: F401
 from services.graph_service.queries import (  # noqa: F401
     add_conversation_to_graph,
     find_orphans,
+    find_semantic_orphans,
+    is_semantic_orphan,
     get_neighbors,
     get_node_detail,
     ingest_note,
