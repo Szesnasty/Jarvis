@@ -149,6 +149,98 @@ def find_orphans(workspace_path: Optional[Path] = None) -> List[Dict]:
     ]
 
 
+# Step 25 PR 4 — semantic orphan repair.
+#
+# A "semantic orphan" is a note whose only graph connections are
+# structural / low-signal edges (tagging into noisy buckets like `imported`,
+# being part_of a folder, sitting next to other notes on the same day,
+# being derived from a source). Such a note has not yet been linked to any
+# other note in a meaningful way, so Smart Connect re-runs in aggressive
+# mode to surface even weak suggestions.
+DEFAULT_ORPHAN_IGNORE_EDGE_TYPES = frozenset({
+    "tagged",
+    "part_of",
+    "temporal",
+    "derived_from",
+})
+DEFAULT_ORPHAN_IGNORE_TAGS = frozenset({
+    "imported",
+    "data",
+    "xml",
+    "csv",
+})
+
+
+def find_semantic_orphans(
+    workspace_path: Optional[Path] = None,
+    ignore_edge_types: Optional[Set[str]] = None,
+    ignore_tags: Optional[Set[str]] = None,
+) -> List[Dict]:
+    """Find note nodes with no semantically meaningful neighbours.
+
+    A note is a semantic orphan if **every** edge touching it is either:
+
+      * of a type in ``ignore_edge_types`` (default: tagged, part_of,
+        temporal, derived_from), **or**
+      * a ``tagged`` edge whose tag node label is in ``ignore_tags``
+        (default: imported, data, xml, csv).
+
+    The original :func:`find_orphans` is kept for backwards compatibility
+    (it returns degree-0 nodes only).
+    """
+    graph = load_graph(workspace_path)
+    if not graph:
+        return []
+
+    ignore_types = set(ignore_edge_types or DEFAULT_ORPHAN_IGNORE_EDGE_TYPES)
+    ignore_tag_labels = set(ignore_tags or DEFAULT_ORPHAN_IGNORE_TAGS)
+
+    # Collect, per note id, the set of "meaningful" neighbour types it has.
+    note_ids = {n.id for n in graph.nodes.values() if n.type == "note"}
+    has_signal: Set[str] = set()
+
+    for edge in graph.edges:
+        for endpoint in (edge.source, edge.target):
+            if endpoint not in note_ids:
+                continue
+            if edge.type in ignore_types:
+                # Special case: a `tagged` edge into a non-noisy tag still
+                # counts as signal. (Currently `tagged` is in the ignore
+                # list — kept that way per spec — but if a future caller
+                # removes it, the noisy-tag filter still applies.)
+                continue
+            if edge.type == "tagged":
+                # Identify the tag endpoint and check its label.
+                tag_id = edge.target if endpoint == edge.source else edge.source
+                tag_node = graph.nodes.get(tag_id)
+                tag_label = (tag_node.label if tag_node else tag_id.split(":", 1)[-1]).lower()
+                if tag_label in ignore_tag_labels:
+                    continue
+            has_signal.add(endpoint)
+
+    return [
+        {"id": n.id, "label": n.label, "folder": n.folder}
+        for n in graph.nodes.values()
+        if n.type == "note" and n.id not in has_signal
+    ]
+
+
+def is_semantic_orphan(
+    note_path: str,
+    workspace_path: Optional[Path] = None,
+    ignore_edge_types: Optional[Set[str]] = None,
+    ignore_tags: Optional[Set[str]] = None,
+) -> bool:
+    """Convenience predicate — check whether a single note is a semantic orphan."""
+    target = f"note:{note_path}"
+    orphans = find_semantic_orphans(
+        workspace_path=workspace_path,
+        ignore_edge_types=ignore_edge_types,
+        ignore_tags=ignore_tags,
+    )
+    return any(o["id"] == target for o in orphans)
+
+
 def ingest_note(note_path: str, workspace_path: Optional[Path] = None) -> None:
     """Incrementally add/update a single note in the graph without full rebuild."""
     graph = load_graph(workspace_path)

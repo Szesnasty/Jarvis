@@ -38,6 +38,7 @@
       "type": "feature",
       "sources": [
         "backend/routers/memory.py",
+        "backend/routers/connections.py",
         "backend/services/memory_service.py",
         "backend/services/ingest.py",
         "backend/services/connection_service.py",
@@ -54,7 +55,7 @@
         "frontend/app/components/LinkIngestDialog.vue"
       ],
       "depends_on": ["database"],
-      "last_updated": "2026-04-25",
+      "last_updated": "2026-04-26",
       "status": "current"
     },
     "jira-ingest": {

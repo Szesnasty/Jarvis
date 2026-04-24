@@ -123,6 +123,14 @@ The Smart Connect `_alias_signal` step calls `scan_body()` against `title + body
 
 `_slugify()` in `services/ingest.py` was rewritten to use the same NFKD + extra-diacritic strategy so Polish titles like *"Mój dzień"* produce `moj-dzien` instead of collapsing to an empty slug.
 
+#### Semantic orphan repair
+
+`graph_service.find_semantic_orphans()` extends the legacy `find_orphans()` (which only flagged degree-0 notes). A note is a *semantic* orphan if **every** edge touching it is either of a low-signal type — `tagged`, `part_of`, `temporal`, `derived_from` — or a `tagged` edge into a noisy bucket (`imported`, `data`, `xml`, `csv`). Both ignore sets are configurable.
+
+`connect_note()` uses `is_semantic_orphan()` as a trigger for self-repair: when a fast-mode pass produces no suggestion at the `normal` tier (≥ 0.60) **and** the note is currently a semantic orphan in the graph, the pipeline retries once in `mode="aggressive"`. Aggressive mode keeps the `weak` tier (0.45–0.59) so a weakly-related neighbour can still surface for an otherwise isolated note. This is the only place that lowers the bar — every other code path drops weak suggestions.
+
+`GET /api/connections/orphans` returns the current semantic orphan list. `POST /api/connections/run/{path}?mode=aggressive` re-runs Smart Connect for a given note (lives in [routers/connections.py](backend/routers/connections.py)).
+
 ### Frontend
 
 The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/searching, and a main area with `NoteViewer` for reading the selected note.
@@ -140,6 +148,7 @@ The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/se
 - `backend/services/ingest.py` — File ingest pipeline for `.md`, `.txt`, `.pdf`, `.csv`, `.xml`; AI enrichment via `smart_enrich`
 - `backend/services/connection_service.py` — Smart Connect: per-note ingest-time linking; pure scoring + caps; writes `suggested_related` and calls incremental graph update
 - `backend/services/alias_index.py` — Smart Connect alias index: SQLite-backed normalised phrase → note path map; `upsert_note_aliases()` (called from `_index_note`) and `scan_body()` (n-gram lookup, NFKD-normalised, Polish-aware)
+- `backend/routers/connections.py` — Smart Connect HTTP surface: `GET /api/connections/orphans`, `POST /api/connections/run/{path}` (mode=fast|aggressive)
 - `backend/services/structured_ingest.py` — CSV/XML ingest with Jira export detection; groups issues by epic/project, creates overview + detail notes with wiki-linked people for graph integration
 - `backend/services/url_ingest.py` — URL ingest for YouTube videos (transcript + oEmbed metadata) and general web articles (trafilatura + markdownify)
 - `backend/services/embedding_service.py` — Local fastembed wrapper: lazy model loading, `embed_note` (with content-hash skip), `search_similar`, `reindex_all`, `delete_embedding`, `is_available`, vector blob packing, and cosine similarity helper
