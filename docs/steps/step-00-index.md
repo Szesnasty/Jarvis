@@ -185,6 +185,7 @@
 | Step | Title | Status | Order |
 |------|-------|--------|-------|
 | [25](step-25-smart-connect.spec.md) | Smart Connect: per-note ingest-time linking, broader entity nodes, alias matcher, semantic orphans | ✅  | → 1st |
+| [26](step-26-smart-connect-quality.spec.md) | Smart Connect quality loop: backfill, stats, score breakdown, alias guardrails, retrieval isolation | ⬜ | → 2nd |
 
 ---
 
