@@ -110,12 +110,14 @@ flowchart LR
     RANK --> COMP[Context<br/>compression]
     COMP --> MODEL[LLM<br/>local or cloud]
     MODEL --> OUT[Answer +<br/>write-back to memory]
+    OUT -. ingest-time .-> CONNECT[Smart Connect<br/>per-note linking]
+    CONNECT --> GRAPH
 ```
 
-All steps before the model run on your machine. The LLM sees only the distilled context — not your entire workspace.
+All steps before the model run on your machine. The LLM sees only the distilled context — not your entire workspace. New notes are auto-linked at ingest time by Smart Connect, so the graph keeps growing without a global rebuild.
 
 ### A real knowledge graph
-Notes, people, projects, topics, and sources are connected through a graph that is part of retrieval and reasoning — not just a visualization.
+Notes, people, projects, places, and sources are connected through a graph that is part of retrieval and reasoning — not just a visualization. Every new note is linked at ingest time using cheap local signals (BM25, embeddings, alias matches, shared sources/batches), with user review for promote / dismiss in the memory page.
 
 ### Local or cloud — your choice
 Run fully local with Ollama and downloadable models, or connect Anthropic, OpenAI, or Google via API key. Switch between local and cloud per conversation. No vendor lock-in.
