@@ -136,6 +136,10 @@ _EDGE_BASE_WEIGHT: Dict[str, float] = {
     "part_of": 0.3,
     "similar_to": 0.5,
     "temporal": 0.2,
+    # Step 25 PR 2 — broader entity edges
+    "mentions_org": 0.55,
+    "mentions_project": 0.70,
+    "mentions_place": 0.35,
 }
 
 

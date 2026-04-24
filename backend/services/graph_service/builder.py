@@ -76,18 +76,23 @@ def invalidate_cache() -> None:
 
 
 def _enrich_with_entities(graph: Graph, mem: Path) -> None:
-    """Extract entities from note bodies and add person nodes/edges.
+    """Extract entities from note bodies and add nodes/edges.
 
-    Uses entity canonicalization (step 20d) to deduplicate person names.
-    Pre-seeds existing_people from people/*.md note titles for better
-    canonical form matching on the first pass.
-    For conversation notes, cleans markdown artifacts and uses a lower
-    confidence threshold (0.3) since single-word names get ~0.35 from spaCy.
+    Step 25 PR 2 — covers ``person``, ``organization``, ``project`` and
+    ``place`` via the shared :func:`apply_extracted_entities` helper.
+    Person extraction still uses canonicalization (step 20d) when the
+    SQLite alias table is available; conversation notes use a lower
+    confidence threshold and a cleaned body.
     """
-    from services.entity_extraction import extract_entities, clean_conversation_text
+    from services.graph_service.entity_edges import apply_extracted_entities
 
     # Pre-seed known people from people/ folder titles + existing graph nodes
-    existing_people = [n.label for n in graph.nodes.values() if n.type == "person"]
+    existing_by_type: Dict[str, List[str]] = {
+        "person": [n.label for n in graph.nodes.values() if n.type == "person"],
+        "org": [n.label for n in graph.nodes.values() if n.type == "org"],
+        "project": [n.label for n in graph.nodes.values() if n.type == "project"],
+        "place": [n.label for n in graph.nodes.values() if n.type == "place"],
+    }
     people_dir = mem / "people"
     if people_dir.is_dir():
         for md_file in people_dir.glob("*.md"):
@@ -95,20 +100,12 @@ def _enrich_with_entities(graph: Graph, mem: Path) -> None:
                 content = md_file.read_text(encoding="utf-8", errors="replace")
                 fm, _ = parse_frontmatter(content)
                 title = fm.get("title", "")
-                if title and title not in existing_people:
-                    existing_people.append(title)
+                if title and title not in existing_by_type["person"]:
+                    existing_by_type["person"].append(title)
             except Exception:
                 pass
 
-    # Try to use canonicalization; fall back to raw IDs if unavailable
-    canon_available = False
     db_path = mem.parent / "app" / "jarvis.db"
-    try:
-        from services.entity_canonicalization import resolve_entity_sync
-        if db_path.exists():
-            canon_available = True
-    except ImportError:
-        pass
 
     for node in list(graph.nodes.values()):
         if node.type != "note":
@@ -122,39 +119,21 @@ def _enrich_with_entities(graph: Graph, mem: Path) -> None:
         except Exception:
             continue
 
-        # Detect conversation notes: lower threshold + clean body
         rel_path = node.id[5:]  # strip "note:" prefix
         is_conversation = (
             fm.get("type") == "conversation"
             or rel_path.startswith("conversations/")
         )
-        if is_conversation:
-            body = clean_conversation_text(body)
-        min_confidence = 0.3 if is_conversation else 0.5
 
-        fm_people = {str(p).lower() for p in fm.get("people", [])}
-        entities = extract_entities(body, existing_people)
-
-        for ent in entities:
-            if ent.type == "person" and ent.confidence >= min_confidence:
-                if ent.text.lower() not in fm_people:
-                    if canon_available:
-                        try:
-                            person_id = resolve_entity_sync(
-                                ent.text, "person", db_path, existing_people,
-                            )
-                            label = person_id.split(":", 1)[1] if ":" in person_id else ent.text
-                        except Exception:
-                            person_id = f"person:{ent.text}"
-                            label = ent.text
-                    else:
-                        person_id = f"person:{ent.text}"
-                        label = ent.text
-                    graph.add_node(person_id, "person", label)
-                    graph.add_edge(node.id, person_id, "mentions")
-                    # Grow existing_people so later notes can match
-                    if label not in existing_people:
-                        existing_people.append(label)
+        apply_extracted_entities(
+            graph,
+            note_id=node.id,
+            body=body,
+            fm=fm,
+            existing_labels_by_type=existing_by_type,
+            db_path=db_path,
+            is_conversation=is_conversation,
+        )
 
 
 def _resolve_bidirectional_links(graph: Graph) -> None:

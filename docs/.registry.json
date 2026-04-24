@@ -129,6 +129,7 @@
         "backend/services/graph_service/similarity.py",
         "backend/services/graph_service/builder.py",
         "backend/services/graph_service/queries.py",
+        "backend/services/graph_service/entity_edges.py",
         "backend/services/entity_extraction.py",
         "backend/services/entity_canonicalization.py",
         "frontend/app/pages/graph.vue",
@@ -138,7 +139,7 @@
         "frontend/app/composables/useGraph.ts"
       ],
       "depends_on": ["memory"],
-      "last_updated": "2026-04-17",
+      "last_updated": "2026-04-24",
       "status": "current"
     },
     "voice": {
