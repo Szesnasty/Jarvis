@@ -242,6 +242,16 @@ async def connect_note(
 
     alias_scores, aliases_matched = _alias_signal(note_path, fm, body, ws)
 
+    # Step 25 PR 5 — drop dismissed pairs from every signal source so they
+    # never participate in scoring or capping.
+    dismissed = _dismissed_targets_for(note_path, ws)
+    if dismissed:
+        for d in dismissed:
+            bm25_scores.pop(d, None)
+            note_emb_scores.pop(d, None)
+            chunk_emb_scores.pop(d, None)
+            alias_scores.pop(d, None)
+
     merged = _merge_candidates(
         bm25_scores=bm25_scores,
         note_emb_scores=note_emb_scores,
@@ -296,6 +306,17 @@ def _is_semantic_orphan_safe(note_path: str, ws: Path) -> bool:
     except Exception as exc:  # pragma: no cover — defensive
         logger.warning("semantic orphan check failed: %s", exc)
         return False
+
+
+def _dismissed_targets_for(note_path: str, ws: Path) -> set:
+    """Return the set of target paths the user has dismissed for this note."""
+    try:
+        from services.dismissed_suggestions import list_dismissed_for
+        from services.memory_service import _db_path
+        return list_dismissed_for(_db_path(ws), note_path)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("dismissed_suggestions lookup failed: %s", exc)
+        return set()
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +553,12 @@ async def _finalise(
     # Emit alias_match edges for every suggestion whose alias signal fired.
     alias_targets = [s.path for s in suggested if "alias" in s.methods]
     if alias_targets:
-        edges_added += _emit_alias_edges(note_path, alias_targets, ws)
+        edges_added += _emit_note_edges(
+            note_path, [(t, "alias_match", "alias") for t in alias_targets], ws,
+        )
+
+    # Step 25 PR 5 — provenance edges from the note to its source/batch nodes.
+    edges_added += _emit_provenance_edges(note_path, fm, ws)
 
     return ConnectionResult(
         note_path=note_path,
@@ -543,41 +569,117 @@ async def _finalise(
     )
 
 
-def _emit_alias_edges(note_path: str, targets: List[str], ws: Path) -> int:
-    """Add ``alias_match`` edges from this note to each alias-hit target."""
+def _emit_note_edges(
+    note_path: str,
+    edges: List[Tuple[str, str, str]],
+    ws: Path,
+) -> int:
+    """Add edges of arbitrary type/origin from ``note:note_path`` to each target.
+
+    ``edges`` is ``[(target_node_id_without_namespace_or_full_id, edge_type, origin)]``.
+    Targets that look like full node IDs (contain ``:``) are kept as-is;
+    otherwise they are interpreted as note paths (``note:<path>``).
+    """
     try:
         from services.graph_service import load_graph, _save_and_cache
         from services.graph_service.models import _EDGE_BASE_WEIGHT
     except Exception as exc:  # pragma: no cover — defensive
-        logger.warning("alias edge emit import failed: %s", exc)
+        logger.warning("provenance edge import failed: %s", exc)
         return 0
 
     graph = load_graph(workspace_path=ws)
     if graph is None:
         return 0
 
-    weight = _EDGE_BASE_WEIGHT.get("alias_match", 0.75)
     src_id = f"note:{note_path}"
     if src_id not in graph.nodes:
         graph.add_node(src_id, "note", Path(note_path).stem)
 
     added = 0
-    for target in targets:
-        tgt_id = f"note:{target}"
+    for target_ref, edge_type, origin in edges:
+        tgt_id = target_ref if ":" in target_ref else f"note:{target_ref}"
         if tgt_id not in graph.nodes:
-            graph.add_node(tgt_id, "note", Path(target).stem)
+            # Best-effort node bootstrap: derive type from the namespace.
+            ns = tgt_id.split(":", 1)[0]
+            label = tgt_id.split(":", 1)[-1]
+            graph.add_node(tgt_id, ns, label)
         existing = any(
             e for e in graph.edges
-            if e.source == src_id and e.target == tgt_id and e.type == "alias_match"
+            if e.source == src_id and e.target == tgt_id and e.type == edge_type
         )
         if existing:
             continue
-        graph.add_edge(src_id, tgt_id, "alias_match", weight=weight, origin="alias")
+        weight = _EDGE_BASE_WEIGHT.get(edge_type, 0.5)
+        graph.add_edge(src_id, tgt_id, edge_type, weight=weight, origin=origin)
         added += 1
 
     if added:
         try:
             _save_and_cache(graph, workspace_path=ws)
         except Exception as exc:  # pragma: no cover — defensive
-            logger.warning("alias edge save failed: %s", exc)
+            logger.warning("provenance edge save failed: %s", exc)
     return added
+
+
+def _emit_provenance_edges(note_path: str, fm: Dict, ws: Path) -> int:
+    """Emit ``derived_from`` and ``same_batch`` edges from the note's frontmatter.
+
+    Source: ``fm["source"]`` (any non-empty string). Hashed to a 12-char
+    sha1-based id and labelled with a human-readable kind (``url``,
+    ``file``, ``jira``, ``other``).
+
+    Batch: ``fm["batch_id"]`` (set explicitly by structured / Jira ingest
+    flows when they want to group co-imported notes).
+    """
+    import hashlib
+    edges: List[Tuple[str, str, str]] = []
+
+    source = fm.get("source")
+    if isinstance(source, str) and source.strip():
+        kind = _classify_source(source)
+        sid = hashlib.sha1(source.strip().encode("utf-8")).hexdigest()[:12]
+        node_id = f"source:{sid}"
+        # Bootstrap the source node label so it isn't just the hash.
+        try:
+            from services.graph_service import load_graph
+            graph = load_graph(workspace_path=ws)
+            if graph is not None and node_id not in graph.nodes:
+                graph.add_node(node_id, "source", f"{kind}:{source[:60]}")
+                from services.graph_service import _save_and_cache
+                _save_and_cache(graph, workspace_path=ws)
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("source node bootstrap failed: %s", exc)
+        edges.append((node_id, "derived_from", "source"))
+
+    batch_id = fm.get("batch_id")
+    if isinstance(batch_id, str) and batch_id.strip():
+        edges.append((f"batch:{batch_id.strip()}", "same_batch", "batch"))
+
+    if not edges:
+        return 0
+    return _emit_note_edges(note_path, edges, ws)
+
+
+_URL_RE = re.compile(r"^https?://", re.IGNORECASE)
+
+
+def _classify_source(source: str) -> str:
+    s = source.strip().lower()
+    if _URL_RE.match(s):
+        return "url"
+    if s.startswith("jira:"):
+        return "jira"
+    if s.endswith((".pdf", ".csv", ".xml", ".md", ".txt")):
+        return "file"
+    return "other"
+
+
+def _emit_alias_edges(note_path: str, targets: List[str], ws: Path) -> int:
+    """Backwards-compatible alias-edge helper.
+
+    Kept for symmetry with PR 3 callers/tests; delegates to the generic
+    :func:`_emit_note_edges`.
+    """
+    return _emit_note_edges(
+        note_path, [(t, "alias_match", "alias") for t in targets], ws,
+    )

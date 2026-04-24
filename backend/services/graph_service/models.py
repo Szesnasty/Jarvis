@@ -142,6 +142,9 @@ _EDGE_BASE_WEIGHT: Dict[str, float] = {
     "mentions_place": 0.35,
     # Step 25 PR 3 — alias matcher
     "alias_match": 0.75,
+    # Step 25 PR 5 — source / batch provenance
+    "derived_from": 0.45,
+    "same_batch": 0.55,
 }
 
 

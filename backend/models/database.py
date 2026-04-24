@@ -338,4 +338,7 @@ async def init_database(db_path: Path) -> None:
         # Step 25 PR 3: alias index for Smart Connect.
         from services.alias_index import ALIAS_INDEX_SQL
         await db.executescript(ALIAS_INDEX_SQL)
+        # Step 25 PR 5: dismissed suggestions for Smart Connect.
+        from services.dismissed_suggestions import DISMISSED_SUGGESTIONS_SQL
+        await db.executescript(DISMISSED_SUGGESTIONS_SQL)
         await db.commit()
