@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   # ─────────────────────────────────────────────
-  # Backend — OSV Scanner against resolved lock
+  # Backend — pip-audit against installed venv
   # ─────────────────────────────────────────────
   pip-audit:
     name: Backend — pip-audit
@@ -36,6 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
@@ -44,24 +49,27 @@ jobs:
             backend/requirements.txt
             backend/overrides.txt
 
-      - name: Resolve dependency lock (with overrides)
-        # Compile the full runtime dependency closure with the
-        # python-dotenv 1.2.2 override applied (fixes CVE-2026-28684 from
-        # litellm's transitive ==1.0.1 pin). The lock is flat and fully
-        # pinned — pip itself is excluded because it is a build tool, not
-        # a runtime dependency of the app.
-        run: uv pip compile --no-annotate --override overrides.txt requirements.txt -o jarvis-lock.txt
+      - name: Install dependencies into isolated venv (with overrides)
+        # uv venv does NOT include pip as a package (unlike python -m venv).
+        # Override forces python-dotenv 1.2.2, eliminating CVE-2026-28684
+        # from litellm's transitive ==1.0.1 pin. Result: a clean runtime
+        # venv with every app dep installed and pip absent.
+        env:
+          VIRTUAL_ENV: /tmp/jarvis-venv
+        run: |
+          uv venv $VIRTUAL_ENV
+          uv pip install --override overrides.txt -r requirements.txt
 
-      - name: Scan for vulnerabilities (OSV Scanner)
-        # OSV Scanner queries the OSV database directly by package name +
-        # version — it does NOT invoke pip's resolver, so it has no issue
-        # with the uv-overridden lock. This correctly excludes pip (not in
-        # the lock) while scanning every runtime dep for known CVEs.
-        # Any finding causes a non-zero exit → build fails. No allowlists.
-        uses: google/osv-scanner-action@v2.0.2
-        with:
-          scan-args: |-
-            --lockfile=requirements.txt:backend/jarvis-lock.txt
+      - name: Install pip-audit
+        run: uv pip install --system pip-audit
+
+      - name: Run pip-audit (fail on ANY runtime vulnerability)
+        # --path reads installed package metadata via importlib.metadata;
+        # pip's resolver is never invoked. uv venvs exclude pip itself, so
+        # CVE-2026-3219 (pip 26.0.1, no upstream patch) is correctly absent.
+        # Strict mode: any known CVE in the runtime dep tree fails the build.
+        # No --ignore-vuln allowlist — fix the dep if a finding appears.
+        run: pip-audit --path /tmp/jarvis-venv --vulnerability-service osv --desc --strict
 
   # ─────────────────────────────────────────────
   # Frontend — npm audit against package-lock.json
