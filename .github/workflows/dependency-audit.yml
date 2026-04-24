@@ -24,7 +24,7 @@ permissions:
 
 jobs:
   # ─────────────────────────────────────────────
-  # Backend — pip-audit against requirements.txt
+  # Backend — OSV Scanner against resolved lock
   # ─────────────────────────────────────────────
   pip-audit:
     name: Backend — pip-audit
@@ -36,11 +36,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
@@ -50,30 +45,23 @@ jobs:
             backend/overrides.txt
 
       - name: Resolve dependency lock (with overrides)
-        # Compile the *exact* set of runtime deps the app will install,
-        # with the python-dotenv 1.2.2 override applied (eliminates
-        # CVE-2026-28684 from litellm's transitive ==1.0.1 pin). The
-        # resolved lock contains only what the app actually needs at
-        # runtime — `pip` itself is intentionally NOT included, so a CVE
-        # in pip (e.g. CVE-2026-3219, currently unpatched upstream) does
-        # not block the build. Pip is a build-time tool that runs only in
-        # trusted CI/install environments and never in the deployed app.
-        run: uv pip compile --override overrides.txt requirements.txt -o /tmp/jarvis-lock.txt
+        # Compile the full runtime dependency closure with the
+        # python-dotenv 1.2.2 override applied (fixes CVE-2026-28684 from
+        # litellm's transitive ==1.0.1 pin). The lock is flat and fully
+        # pinned — pip itself is excluded because it is a build tool, not
+        # a runtime dependency of the app.
+        run: uv pip compile --no-annotate --override overrides.txt requirements.txt -o jarvis-lock.txt
 
-      - name: Install pip-audit
-        run: uv pip install --system pip-audit
-
-      - name: Run pip-audit (fail on ANY runtime vulnerability)
-        # Audits the resolved runtime lock file. The lock is fully pinned
-        # by uv (with overrides applied), so we pass --no-deps to skip
-        # pip's own resolver — pip doesn't understand uv's overrides and
-        # would reject the lock as conflicting with litellm's transitive
-        # python-dotenv==1.0.1 pin. With --no-deps, pip-audit scans the
-        # exact pinned set as-is.
-        # Strict mode: any known CVE in the app's runtime dependency tree
-        # fails the build. No --ignore-vuln allowlist — if a finding
-        # appears, fix it (bump, override, or remove the dep).
-        run: pip-audit --requirement /tmp/jarvis-lock.txt --no-deps --vulnerability-service osv --desc --strict
+      - name: Scan for vulnerabilities (OSV Scanner)
+        # OSV Scanner queries the OSV database directly by package name +
+        # version — it does NOT invoke pip's resolver, so it has no issue
+        # with the uv-overridden lock. This correctly excludes pip (not in
+        # the lock) while scanning every runtime dep for known CVEs.
+        # Any finding causes a non-zero exit → build fails. No allowlists.
+        uses: google/osv-scanner-action@v2.0.2
+        with:
+          scan-args: |-
+            --lockfile=requirements.txt:backend/jarvis-lock.txt
 
   # ─────────────────────────────────────────────
   # Frontend — npm audit against package-lock.json
