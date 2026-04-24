@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.11.0...frontend-v0.12.0) (2026-04-24)
+
+
+### ✨ Features
+
+* **connect:** smart connect review UI — step 25 PR 6 ([6894d53](https://github.com/Szesnasty/Jarvis/commit/6894d53338c50727756359c0e4eca03fa7d8c971))
+
 ## [0.11.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.10.1...frontend-v0.11.0) (2026-04-24)
 
 
