@@ -1,4 +1,4 @@
-import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, GraphNodeDetail, GraphOrphan, SpecialistSummary, SpecialistDetail, SpecialistFileInfo, UrlIngestResult, JarvisSelfConfig } from '~/types'
+import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, GraphNodeDetail, GraphOrphan, SpecialistSummary, SpecialistDetail, SpecialistFileInfo, UrlIngestResult, JarvisSelfConfig, SemanticOrphan, ConnectionResult } from '~/types'
 import { ApiError } from '~/types'
 
 function _wrapError(error: unknown): never {
@@ -132,5 +132,28 @@ export function useApi() {
   const updateJarvisConfig = (data: Partial<JarvisSelfConfig>) =>
     _api<JarvisSelfConfig>('/api/specialists/jarvis/config', { method: 'PUT', body: data })
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile, fetchJarvisConfig, updateJarvisConfig }
+  // --- Connections (Smart Connect) ---
+
+  const fetchSemanticOrphans = () =>
+    _api<SemanticOrphan[]>('/api/connections/orphans')
+
+  const rerunConnect = (notePath: string, mode: 'fast' | 'aggressive' = 'fast') =>
+    _api<ConnectionResult>(
+      `/api/connections/run/${notePath.split('/').map(encodeURIComponent).join('/')}?mode=${mode}`,
+      { method: 'POST' },
+    )
+
+  const dismissSuggestion = (notePath: string, targetPath: string) =>
+    _api<{ note_path: string; target_path: string; dismissed: boolean }>(
+      '/api/connections/dismiss',
+      { method: 'POST', body: { note_path: notePath, target_path: targetPath } },
+    )
+
+  const promoteSuggestion = (notePath: string, targetPath: string) =>
+    _api<{ note_path: string; target_path: string; related: string[] }>(
+      '/api/connections/promote',
+      { method: 'POST', body: { note_path: notePath, target_path: targetPath } },
+    )
+
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile, fetchJarvisConfig, updateJarvisConfig, fetchSemanticOrphans, rerunConnect, dismissSuggestion, promoteSuggestion }
 }

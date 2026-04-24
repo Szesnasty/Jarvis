@@ -52,6 +52,7 @@
         "frontend/app/pages/memory.vue",
         "frontend/app/components/NoteList.vue",
         "frontend/app/components/NoteViewer.vue",
+        "frontend/app/components/SuggestionsPanel.vue",
         "frontend/app/components/ImportDialog.vue",
         "frontend/app/components/LinkIngestDialog.vue"
       ],

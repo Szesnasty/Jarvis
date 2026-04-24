@@ -42,9 +42,17 @@
         @folder="onFolderChange"
         @search="(q, mode) => onSearch(q, mode)"
       />
+      <div v-if="orphans.length > 0" class="memory-page__orphans">
+        <strong>{{ orphans.length }}</strong> note{{ orphans.length === 1 ? '' : 's' }} need linking.
+        <button class="memory-page__orphans-link" @click="onShowFirstOrphan">Review</button>
+      </div>
     </aside>
     <section class="memory-page__viewer">
-      <NoteViewer :note="selectedNote" />
+      <NoteViewer
+        :note="selectedNote"
+        @open="onSelectNote"
+        @changed="onSuggestionChanged"
+      />
     </section>
     <ImportDialog
       :visible="showImport"
@@ -59,13 +67,14 @@
 </template>
 
 <script setup lang="ts">
-import type { NoteMetadata, NoteDetail } from '~/types'
+import type { NoteMetadata, NoteDetail, SemanticOrphan } from '~/types'
 
 type SearchMode = 'keyword' | 'semantic' | 'hybrid'
 
-const { fetchNotes, semanticSearchNotes, fetchNote, deleteNote } = useApi()
+const { fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSemanticOrphans } = useApi()
 
 const notes = ref<NoteMetadata[]>([])
+const orphans = ref<SemanticOrphan[]>([])
 const selectedPath = ref<string | null>(null)
 const selectedNote = ref<NoteDetail | null>(null)
 const activeFolder = ref<string | null>(null)
@@ -156,6 +165,33 @@ async function onUrlImported() {
   await loadNotes()
 }
 
+async function onSuggestionChanged() {
+  // Reload the open note so the suggestions panel reflects the new
+  // frontmatter (promoted item moved to `related`, dismissed item gone,
+  // re-run produced fresh `suggested_related`).
+  if (selectedPath.value) {
+    selectedNote.value = await fetchNote(selectedPath.value)
+  }
+  // Orphan count may shift after promote / dismiss / re-run.
+  void loadOrphans()
+}
+
+async function loadOrphans() {
+  try {
+    orphans.value = await fetchSemanticOrphans()
+  } catch {
+    orphans.value = []
+  }
+}
+
+async function onShowFirstOrphan() {
+  const first = orphans.value[0]
+  if (!first) return
+  // SemanticOrphan ids are `note:<path>`; strip the prefix.
+  const path = first.id.startsWith('note:') ? first.id.slice('note:'.length) : first.id
+  await onSelectNote(path)
+}
+
 async function onDeleteNote(path: string) {
   await deleteNote(path)
   notes.value = notes.value.filter(n => n.path !== path)
@@ -165,10 +201,11 @@ async function onDeleteNote(path: string) {
   }
 }
 
-const _onMemoryChanged = () => loadNotes()
+const _onMemoryChanged = () => { loadNotes(); loadOrphans() }
 
 onMounted(() => {
   loadNotes()
+  loadOrphans()
   window.addEventListener('jarvis:memory-changed', _onMemoryChanged)
 })
 
@@ -204,6 +241,33 @@ onUnmounted(() => {
 .memory-page__toolbar-actions {
   display: flex;
   gap: 0.5rem;
+}
+
+.memory-page__orphans {
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: var(--neon-cyan-04, rgba(0, 200, 255, 0.04));
+}
+
+.memory-page__orphans-link {
+  background: none;
+  border: 1px solid var(--border-default);
+  color: var(--neon-cyan, #00c8ff);
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.memory-page__orphans-link:hover {
+  border-color: var(--neon-cyan, #00c8ff);
+  background: var(--neon-cyan-08, rgba(0, 200, 255, 0.08));
 }
 
 .memory-page__title {
