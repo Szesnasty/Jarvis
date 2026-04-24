@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.11.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.10.1...frontend-v0.11.0) (2026-04-24)
+
+
+### ✨ Features
+
+* **specialists:** add JARVIS-self for system prompt override + extension ([f5abe1a](https://github.com/Szesnasty/Jarvis/commit/f5abe1aeab58ffca4adc80067fe99cb93843d184))
+
+
+### 📝 Documentation
+
+* docs/features/jarvis-self-specialist.md + registry entry. ([f5abe1a](https://github.com/Szesnasty/Jarvis/commit/f5abe1aeab58ffca4adc80067fe99cb93843d184))
+
+
+### 🧪 Tests
+
+* **jarvis-self:** cover uncheck-override edge case + 7 more frontend tests ([0d48958](https://github.com/Szesnasty/Jarvis/commit/0d48958e103cd9001f56225bdd9e18c375bcbbcb))
+
 ## [0.10.1](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.10.0...frontend-v0.10.1) (2026-04-23)
 
 

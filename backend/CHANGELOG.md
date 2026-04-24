@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.9.1...backend-v0.10.0) (2026-04-24)
+
+
+### ✨ Features
+
+* **specialists:** add JARVIS-self for system prompt override + extension ([f5abe1a](https://github.com/Szesnasty/Jarvis/commit/f5abe1aeab58ffca4adc80067fe99cb93843d184))
+
+
+### 📝 Documentation
+
+* docs/features/jarvis-self-specialist.md + registry entry. ([f5abe1a](https://github.com/Szesnasty/Jarvis/commit/f5abe1aeab58ffca4adc80067fe99cb93843d184))
+
 ## [0.9.1](https://github.com/Szesnasty/Jarvis/compare/backend-v0.9.0...backend-v0.9.1) (2026-04-23)
 
 
