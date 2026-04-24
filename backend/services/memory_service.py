@@ -276,6 +276,7 @@ async def delete_note(
             await db.execute("DELETE FROM note_embeddings WHERE path = ?", (note_path,))
             await db.execute("DELETE FROM chunk_embeddings WHERE path = ?", (note_path,))
             await db.execute("DELETE FROM note_chunks WHERE path = ?", (note_path,))
+            await db.execute("DELETE FROM alias_index WHERE note_path = ?", (note_path,))
             await db.commit()
 
     # Invalidate graph cache so it rebuilds without the deleted note
@@ -391,6 +392,26 @@ async def _index_note(
             ),
         )
         await db.commit()
+
+    # Step 25 PR 3: maintain alias_index for Smart Connect.
+    try:
+        from services.alias_index import upsert_note_aliases
+        import re as _re
+        title = fm.get("title") or Path(note_path).stem
+        aliases = fm.get("aliases") or []
+        if not isinstance(aliases, list):
+            aliases = []
+        headings = _re.findall(r"^#{1,6}\s+(.+?)\s*$", body, flags=_re.MULTILINE)
+        upsert_note_aliases(
+            db_path,
+            note_path,
+            title=title,
+            aliases=aliases,
+            headings=headings,
+        )
+    except Exception as exc:
+        logger.warning("alias_index upsert failed for %s: %s",
+                       _sanitize_for_log(note_path), exc)
 
     # Auto-embed for semantic search (skip if fastembed missing or disabled)
     import os

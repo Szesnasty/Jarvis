@@ -103,9 +103,25 @@ Note that `smart_enrich` rebuilds the frontmatter block manually using an f-stri
 - Note-level cosine similarity (via `embedding_service.search_similar`)
 - Chunk-level cosine similarity (via `embedding_service.search_similar_chunks`)
 
-Candidates are merged with weighted scoring (BM25 0.30, note embedding 0.30, chunk embedding 0.20). When a signal is unavailable (e.g. embeddings disabled, no chunks yet) the score is divided by the sum of weights of *active* signals so a single strong signal can still cross the floor — graceful degradation, not weight inflation. Tiers: `strong` ≥ 0.80, `normal` ≥ 0.60, `weak` ≥ 0.45 (kept only in `mode="aggressive"`). Caps: max 5 suggestions per note, max 2 from the same folder, max 1 near-duplicate (combined confidence ≥ 0.92).
+Candidates are merged with weighted scoring (BM25 0.30, note embedding 0.30, chunk embedding 0.20, alias 0.07). When a signal is unavailable (e.g. embeddings disabled, no chunks yet, no alias hits) the score is divided by the sum of weights of *active* signals so a single strong signal can still cross the floor — graceful degradation, not weight inflation. Tiers: `strong` ≥ 0.80, `normal` ≥ 0.60, `weak` ≥ 0.45 (kept only in `mode="aggressive"`). Caps: max 5 suggestions per note, max 2 from the same folder, max 1 near-duplicate (combined confidence ≥ 0.92).
 
-Results are persisted to the note's frontmatter as a `suggested_related` block (path, confidence, methods, optional `evidence`). The authoritative `related:` field is **never** auto-written; promoting a suggestion is a user action (UI follow-up). The graph is then updated incrementally via `graph_service.ingest_note()`.
+Results are persisted to the note's frontmatter as a `suggested_related` block (path, confidence, methods, optional `evidence`). The authoritative `related:` field is **never** auto-written; promoting a suggestion is a user action (UI follow-up). The graph is then updated incrementally via `graph_service.ingest_note()`, after which any candidate carrying an `alias` method is also persisted as an `alias_match` edge (weight 0.75) on the graph.
+
+#### Alias index
+
+`services/alias_index.py` maintains a SQLite table `alias_index(phrase_norm, note_path, kind)` that maps **normalised** phrases (lowercase, NFKD-stripped, plus an explicit map for ł/Ł/đ/Đ/ø/Ø/ß which NFKD does not decompose) to the notes that own them. Each note contributes:
+
+- its `title` (kind = `title`)
+- every entry in its frontmatter `aliases:` list (kind = `alias`)
+- every Markdown heading in its body (kind = `heading`)
+
+Phrases shorter than 4 normalised characters are dropped to keep the index small and to avoid noise. The index is rebuildable from Markdown — it is purely an acceleration layer (per the source-of-truth doctrine).
+
+`upsert_note_aliases()` is called inside `_index_note()` after every FTS write, so the index stays consistent with the canonical store. `scan_body()` tokenises a body, generates n-grams up to length 4, normalises each, and looks them up in a single SQL `IN` query (chunked at 800 to stay below SQLite's parameter limit). Self-matches are excluded via `exclude_path`.
+
+The Smart Connect `_alias_signal` step calls `scan_body()` against `title + body[:800]`, treats every distinct hit as a binary 1.0 alias score for that target note, records the longest matched phrase as `evidence`, and surfaces the matched phrase list in `ConnectionResult.aliases_matched`.
+
+`_slugify()` in `services/ingest.py` was rewritten to use the same NFKD + extra-diacritic strategy so Polish titles like *"Mój dzień"* produce `moj-dzien` instead of collapsing to an empty slug.
 
 ### Frontend
 
@@ -123,6 +139,7 @@ The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/se
 - `backend/services/memory_service.py` — Core note operations: create, read, list, append, delete, reindex; manages Markdown files and SQLite index together; triggers on-write embedding
 - `backend/services/ingest.py` — File ingest pipeline for `.md`, `.txt`, `.pdf`, `.csv`, `.xml`; AI enrichment via `smart_enrich`
 - `backend/services/connection_service.py` — Smart Connect: per-note ingest-time linking; pure scoring + caps; writes `suggested_related` and calls incremental graph update
+- `backend/services/alias_index.py` — Smart Connect alias index: SQLite-backed normalised phrase → note path map; `upsert_note_aliases()` (called from `_index_note`) and `scan_body()` (n-gram lookup, NFKD-normalised, Polish-aware)
 - `backend/services/structured_ingest.py` — CSV/XML ingest with Jira export detection; groups issues by epic/project, creates overview + detail notes with wiki-linked people for graph integration
 - `backend/services/url_ingest.py` — URL ingest for YouTube videos (transcript + oEmbed metadata) and general web articles (trafilatura + markdownify)
 - `backend/services/embedding_service.py` — Local fastembed wrapper: lazy model loading, `embed_note` (with content-hash skip), `search_similar`, `reindex_all`, `delete_embedding`, `is_available`, vector blob packing, and cosine similarity helper

@@ -140,6 +140,8 @@ _EDGE_BASE_WEIGHT: Dict[str, float] = {
     "mentions_org": 0.55,
     "mentions_project": 0.70,
     "mentions_place": 0.35,
+    # Step 25 PR 3 — alias matcher
+    "alias_match": 0.75,
 }
 
 

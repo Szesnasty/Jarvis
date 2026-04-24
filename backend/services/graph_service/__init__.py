@@ -33,6 +33,7 @@ from services.graph_service.builder import (  # noqa: F401
     load_graph,
     rebuild_graph,
     _graph_cache,
+    _save_and_cache,
 )
 
 # --- Queries ---

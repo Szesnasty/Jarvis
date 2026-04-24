@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
@@ -21,7 +22,24 @@ def _memory_dir(workspace_path: Optional[Path] = None) -> Path:
 
 
 def _slugify(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    """NFKD-normalise then strip non-ASCII so Polish titles survive.
+
+    'Mój dzień' → 'moj-dzien' instead of collapsing to ''.
+    """
+    if not text:
+        return ""
+    nfkd = unicodedata.normalize("NFKD", text)
+    ascii_only = "".join(ch for ch in nfkd if not unicodedata.combining(ch))
+    # NFKD does not decompose ł/Ł, ø, đ, ß — map them explicitly so Polish
+    # and other European stems collapse to ASCII rather than being stripped.
+    extras = str.maketrans({
+        "ł": "l", "Ł": "l",
+        "đ": "d", "Đ": "d",
+        "ø": "o", "Ø": "o",
+        "ß": "ss",
+    })
+    ascii_only = ascii_only.translate(extras)
+    return re.sub(r"[^a-z0-9]+", "-", ascii_only.lower()).strip("-")
 
 
 def _unique_path(target: Path) -> Path:

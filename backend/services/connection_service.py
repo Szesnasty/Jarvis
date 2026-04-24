@@ -231,7 +231,7 @@ async def connect_note(
 
     if not query:
         # Empty notes get an empty suggestion block but still update the graph.
-        return await _finalise(note_path, ws, fm, body, full_path, [])
+        return await _finalise(note_path, ws, fm, body, full_path, [], aliases_matched=[])
 
     bm25_scores = await _bm25_signal(query, note_path, ws, list_notes)
     note_emb_scores: Dict[str, float] = {}
@@ -240,10 +240,13 @@ async def connect_note(
     if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") != "1":
         note_emb_scores, chunk_emb_scores = await _embedding_signals(query, note_path, ws)
 
+    alias_scores, aliases_matched = _alias_signal(note_path, fm, body, ws)
+
     merged = _merge_candidates(
         bm25_scores=bm25_scores,
         note_emb_scores=note_emb_scores,
         chunk_emb_scores=chunk_emb_scores,
+        alias_scores=alias_scores,
         mode=mode,
     )
     kept = enforce_caps(merged, _folder_of(note_path))
@@ -257,7 +260,10 @@ async def connect_note(
         )
         for (p, score, methods, evidence, tier) in kept
     ]
-    return await _finalise(note_path, ws, fm, body, full_path, suggested)
+    return await _finalise(
+        note_path, ws, fm, body, full_path, suggested,
+        aliases_matched=aliases_matched,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +355,8 @@ def _merge_candidates(
     bm25_scores: Dict[str, float],
     note_emb_scores: Dict[str, float],
     chunk_emb_scores: Dict[str, Tuple[float, Optional[str]]],
-    mode: str,
+    alias_scores: Optional[Dict[str, Tuple[float, str]]] = None,
+    mode: str = "fast",
 ) -> List[Tuple[str, float, List[str], Optional[str], str]]:
     """Combine signals into per-candidate scores.
 
@@ -360,6 +367,7 @@ def _merge_candidates(
     floor. This is graceful degradation, not weight inflation: a perfect
     BM25 hit with nothing else still maxes at 1.0 of the BM25-only space.
     """
+    alias_scores = alias_scores or {}
     active_weight_sum = 0.0
     if bm25_scores:
         active_weight_sum += W_BM25
@@ -367,18 +375,28 @@ def _merge_candidates(
         active_weight_sum += W_NOTE_EMB
     if chunk_emb_scores:
         active_weight_sum += W_CHUNK_EMB
+    if alias_scores:
+        active_weight_sum += W_ALIAS
     if active_weight_sum <= 0.0:
         return []
 
-    paths = set(bm25_scores) | set(note_emb_scores) | set(chunk_emb_scores)
+    paths = (
+        set(bm25_scores)
+        | set(note_emb_scores)
+        | set(chunk_emb_scores)
+        | set(alias_scores)
+    )
     out: List[Tuple[str, float, List[str], Optional[str], str]] = []
 
     for path in paths:
         b = bm25_scores.get(path, 0.0)
         ne = note_emb_scores.get(path, 0.0)
         ce_score, ce_section = chunk_emb_scores.get(path, (0.0, None))
+        al_score, al_phrase = alias_scores.get(path, (0.0, ""))
 
-        raw = score_candidate(bm25=b, note_emb=ne, chunk_emb=ce_score)
+        raw = score_candidate(
+            bm25=b, note_emb=ne, chunk_emb=ce_score, alias=al_score,
+        )
         score = raw / active_weight_sum
         tier = tier_for(score)
         if tier == "drop":
@@ -393,12 +411,62 @@ def _merge_candidates(
             methods.append("note_embedding")
         if ce_score > 0:
             methods.append("chunk_embedding")
+        if al_score > 0:
+            methods.append("alias")
 
-        evidence = f"Matched section: {ce_section}" if ce_section else None
+        evidence: Optional[str] = None
+        if al_phrase:
+            evidence = f"Alias hit: {al_phrase}"
+        elif ce_section:
+            evidence = f"Matched section: {ce_section}"
         out.append((path, round(score, 3), methods, evidence, tier))
 
     out.sort(key=lambda item: item[1], reverse=True)
     return out
+
+
+def _alias_signal(
+    note_path: str,
+    fm: Dict,
+    body: str,
+    ws: Path,
+) -> Tuple[Dict[str, Tuple[float, str]], List[str]]:
+    """Look up alias_index hits for ``body`` and return normalised scores.
+
+    Returns ``({path: (alias_score, phrase)}, aliases_matched)``.
+    Score is binary 1.0 — exact alias matches don't have a meaningful
+    intensity; the W_ALIAS weight controls their contribution.
+    """
+    try:
+        from services.alias_index import scan_body
+        from services.memory_service import _db_path
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("connect_note alias import failed: %s", exc)
+        return {}, []
+
+    db_p = _db_path(ws)
+    try:
+        # Search title + headings + first 800 chars (same as connection query
+        # body, but we include only the body — title/headings of the new note
+        # itself are already in fm).
+        title_text = str(fm.get("title", "") or "")
+        scan_text = "\n".join(filter(None, [title_text, body[:CONNECTION_QUERY_MAX_CHARS]]))
+        hits = scan_body(db_p, scan_text, exclude_path=note_path)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("connect_note alias scan failed: %s", exc)
+        return {}, []
+
+    by_path: Dict[str, Tuple[float, str]] = {}
+    matched: List[str] = []
+    for hit in hits:
+        path = hit["path"]
+        phrase = str(hit.get("phrase", ""))
+        prev = by_path.get(path)
+        if prev is None or len(phrase) > len(prev[1]):
+            by_path[path] = (1.0, phrase)
+        if phrase and phrase not in matched:
+            matched.append(phrase)
+    return by_path, matched
 
 
 async def _finalise(
@@ -408,6 +476,7 @@ async def _finalise(
     body: str,
     full_path: Path,
     suggested: List[SuggestedLink],
+    aliases_matched: Optional[List[str]] = None,
 ) -> ConnectionResult:
     fm["suggested_related"] = [
         {
@@ -420,6 +489,7 @@ async def _finalise(
     ]
     full_path.write_text(add_frontmatter(body, fm), encoding="utf-8")
 
+    edges_added = 0
     try:
         from services.graph_service import ingest_note as graph_ingest_note
 
@@ -427,8 +497,55 @@ async def _finalise(
     except Exception as exc:  # pragma: no cover — defensive
         logger.warning("connect_note graph ingest failed: %s", exc)
 
+    # Emit alias_match edges for every suggestion whose alias signal fired.
+    alias_targets = [s.path for s in suggested if "alias" in s.methods]
+    if alias_targets:
+        edges_added += _emit_alias_edges(note_path, alias_targets, ws)
+
     return ConnectionResult(
         note_path=note_path,
         suggested=suggested,
         strong_count=sum(1 for s in suggested if s.tier == "strong"),
+        aliases_matched=aliases_matched or [],
+        graph_edges_added=edges_added,
     )
+
+
+def _emit_alias_edges(note_path: str, targets: List[str], ws: Path) -> int:
+    """Add ``alias_match`` edges from this note to each alias-hit target."""
+    try:
+        from services.graph_service import load_graph, _save_and_cache
+        from services.graph_service.models import _EDGE_BASE_WEIGHT
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("alias edge emit import failed: %s", exc)
+        return 0
+
+    graph = load_graph(workspace_path=ws)
+    if graph is None:
+        return 0
+
+    weight = _EDGE_BASE_WEIGHT.get("alias_match", 0.75)
+    src_id = f"note:{note_path}"
+    if src_id not in graph.nodes:
+        graph.add_node(src_id, "note", Path(note_path).stem)
+
+    added = 0
+    for target in targets:
+        tgt_id = f"note:{target}"
+        if tgt_id not in graph.nodes:
+            graph.add_node(tgt_id, "note", Path(target).stem)
+        existing = any(
+            e for e in graph.edges
+            if e.source == src_id and e.target == tgt_id and e.type == "alias_match"
+        )
+        if existing:
+            continue
+        graph.add_edge(src_id, tgt_id, "alias_match", weight=weight, origin="alias")
+        added += 1
+
+    if added:
+        try:
+            _save_and_cache(graph, workspace_path=ws)
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("alias edge save failed: %s", exc)
+    return added
