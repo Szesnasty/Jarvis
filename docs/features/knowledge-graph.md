@@ -38,7 +38,16 @@ For each file, the service:
 4. Creates edges between the note and whatever it references, typed by relationship (`tagged`, `linked`, `mentions`, `related`, `part_of`).
 
 **Pass 2 — Entity extraction.**
-`_enrich_with_entities()` reads each note's body text and runs spaCy-based entity extraction (`entity_extraction.py`) to discover person names not listed in frontmatter. For regular notes, extracted person names with confidence ≥ 0.5 are added as `person:` nodes with `mentions` edges. For conversation notes (type `"conversation"` or path under `conversations/`), the body is first cleaned via `clean_conversation_text()` to strip chat artifacts (`**User**:`, `**Jarvis**:`, markdown headings, wiki-links), and the confidence threshold is lowered to 0.3 since single-word names (e.g. "Paulina") receive ~0.35 confidence from spaCy. Confidence is boosted for names that already exist in the graph.
+`_enrich_with_entities()` reads each note's body text and runs spaCy-based entity extraction (`entity_extraction.py`) to discover entities not listed in frontmatter. The shared helper `entity_edges.apply_extracted_entities()` dispatches per entity type via `ENTITY_EDGE_MAP`:
+
+| Entity type    | Node namespace | Edge type           | Min. confidence |
+|----------------|----------------|---------------------|-----------------|
+| `person`       | `person:`      | `mentions`          | 0.5 (0.3 for conversations) |
+| `organization` | `org:`         | `mentions_org`      | 0.5             |
+| `project`      | `project:`     | `mentions_project`  | 0.5             |
+| `place`        | `place:`       | `mentions_place`    | 0.5             |
+
+Person names are canonicalized via `entity_canonicalization.resolve_entity_sync()` when a database is available. For conversation notes (type `"conversation"` or path under `conversations/`), the body is first cleaned via `clean_conversation_text()` to strip chat artifacts (`**User**:`, `**Jarvis**:`, markdown headings, wiki-links), and the person confidence threshold is lowered to 0.3 since single-word names (e.g. "Paulina") receive ~0.35 confidence from spaCy. Confidence is boosted for names that already exist in the graph. Frontmatter `people` and `organizations` lists suppress duplicate edges from NER extraction. Dates are intentionally excluded from the graph (handled by separate temporal indexing). The same helper is reused by both the full graph rebuild ([builder.py](backend/services/graph_service/builder.py)) and incremental ingest ([queries.py](backend/services/graph_service/queries.py#L_ingest_note)) so org/project/place edges appear consistently regardless of write path.
 
 **Pass 3 — Bidirectional wiki-link resolution.**
 `_resolve_bidirectional_links()` ensures that for every `linked` edge A→B, a reverse edge B→A is also present (with reduced weight 0.6).
