@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.10.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.9.2...jarvis-v0.10.0) (2026-04-24)
+
+
+### ✨ Features
+
+* **specialists:** add JARVIS-self for system prompt override + extension ([f5abe1a](https://github.com/Szesnasty/Jarvis/commit/f5abe1aeab58ffca4adc80067fe99cb93843d184))
+
+
+### 📝 Documentation
+
+* docs/features/jarvis-self-specialist.md + registry entry. ([f5abe1a](https://github.com/Szesnasty/Jarvis/commit/f5abe1aeab58ffca4adc80067fe99cb93843d184))
+
+
+### 🧪 Tests
+
+* **jarvis-self:** cover uncheck-override edge case + 7 more frontend tests ([0d48958](https://github.com/Szesnasty/Jarvis/commit/0d48958e103cd9001f56225bdd9e18c375bcbbcb))
+
+
+### 🤖 CI/CD
+
+* **audit:** pass --no-deps to pip-audit so pip doesn't re-resolve ([98768cc](https://github.com/Szesnasty/Jarvis/commit/98768ccd45f75922679864b916190852c46d4735))
+* **audit:** replace pip-audit with osv-scanner-action ([8bbf644](https://github.com/Szesnasty/Jarvis/commit/8bbf644296688416ceec8799d3b769df3a344bb3))
+* **audit:** scan resolved lock file instead of installed env ([4ba7a00](https://github.com/Szesnasty/Jarvis/commit/4ba7a00cf445c83bba76426f8ac90f51e98249fd))
+* **audit:** use pip-audit --path on uv venv instead of resolver-based scan ([e424fbc](https://github.com/Szesnasty/Jarvis/commit/e424fbc64adc5d2081598d4bb4063b27d78095ef))
+
 ## [0.9.2](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.9.1...jarvis-v0.9.2) (2026-04-23)
 
 
