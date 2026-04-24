@@ -171,7 +171,25 @@
         "frontend/app/components/SpecialistKnowledgePanel.vue"
       ],
       "depends_on": ["memory"],
-      "last_updated": "2026-04-17",
+      "last_updated": "2026-04-24",
+      "status": "current"
+    },
+    "jarvis-self-specialist": {
+      "doc": "docs/features/jarvis-self-specialist.md",
+      "type": "feature",
+      "sources": [
+        "backend/routers/specialists.py",
+        "backend/services/specialist_service.py",
+        "backend/services/claude.py",
+        "backend/models/schemas.py",
+        "backend/tests/test_jarvis_self.py",
+        "frontend/app/components/JarvisSelfCard.vue",
+        "frontend/app/composables/useApi.ts",
+        "frontend/app/pages/specialists.vue",
+        "frontend/app/types/index.ts"
+      ],
+      "depends_on": ["specialists", "chat"],
+      "last_updated": "2026-04-24",
       "status": "current"
     },
     "sessions": {

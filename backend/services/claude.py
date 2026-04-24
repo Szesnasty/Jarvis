@@ -305,10 +305,32 @@ async def build_system_prompt_with_stats(
     from services import specialist_service
     from services.context_builder import build_graph_scoped_context
 
-    base = SYSTEM_PROMPT
-    active_specs = specialist_service.get_active_specialists()
+    # JARVIS-self override: if the user has set a non-empty `system_prompt`
+    # on the JARVIS specialist, it REPLACES the default Jarvis system prompt.
+    # If they set `behavior_extension`, it's appended after the assembled base
+    # (and after any other active specialists' directives) so it wins on
+    # recency. Both fields default to "" — meaning "use the default".
+    jarvis_self = specialist_service.get_jarvis_self(workspace_path)
+    jarvis_override = (jarvis_self or {}).get("system_prompt", "").strip()
+    jarvis_extension = (jarvis_self or {}).get("behavior_extension", "").strip()
+
+    base = jarvis_override if jarvis_override else SYSTEM_PROMPT
+
+    # JARVIS is implicitly always-applied via the override/extension wiring
+    # above; do not also process it as a regular active specialist.
+    active_specs = [
+        s for s in specialist_service.get_active_specialists()
+        if s.get("id") != specialist_service.JARVIS_SELF_ID
+    ]
     if active_specs:
         base = specialist_service.build_multi_specialist_prompt(active_specs, base)
+
+    if jarvis_extension:
+        base = (
+            base
+            + "\n\n## JARVIS — user-defined behavior extensions\n"
+            + jarvis_extension
+        )
 
     if graph_scope:
         context = await build_graph_scoped_context(

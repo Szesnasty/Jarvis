@@ -133,6 +133,7 @@ class SpecialistDefaultModel(BaseModel):
 class SpecialistCreateRequest(BaseModel):
     name: str
     role: str = ""
+    system_prompt: str = ""
     sources: list[str] = []
     style: dict[str, str] = {}
     rules: list[str] = []
@@ -140,6 +141,34 @@ class SpecialistCreateRequest(BaseModel):
     examples: list[dict[str, str]] = []
     icon: str = "\U0001f916"
     default_model: Optional[SpecialistDefaultModel] = None
+
+
+# JARVIS self-config: only two user-editable fields. Length caps prevent
+# accidental prompt-bombing of the model context window. The default Jarvis
+# system prompt is intentionally NOT exposed to the client — users see only
+# their own override (or empty) in `system_prompt`.
+JARVIS_PROMPT_MAX_CHARS = 16000
+
+
+class JarvisSelfConfigRequest(BaseModel):
+    system_prompt: Optional[str] = None
+    behavior_extension: Optional[str] = None
+
+    @field_validator("system_prompt", "behavior_extension")
+    @classmethod
+    def _cap_length(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if len(value) > JARVIS_PROMPT_MAX_CHARS:
+            raise ValueError(
+                f"Field exceeds {JARVIS_PROMPT_MAX_CHARS} characters",
+            )
+        return value
+
+
+class JarvisSelfConfigResponse(BaseModel):
+    system_prompt: str = ""
+    behavior_extension: str = ""
 
 
 # --- URL Ingest ---
@@ -170,6 +199,8 @@ class SpecialistDetailResponse(BaseModel):
     id: str
     name: str
     role: str = ""
+    system_prompt: str = ""
+    behavior_extension: str = ""
     sources: list[str] = []
     style: dict[str, str] = {}
     rules: list[str] = []
@@ -177,6 +208,7 @@ class SpecialistDetailResponse(BaseModel):
     examples: list[dict[str, str]] = []
     icon: str = "\U0001f916"
     default_model: Optional[dict] = None
+    builtin: bool = False
     created_at: str = ""
     updated_at: str = ""
 

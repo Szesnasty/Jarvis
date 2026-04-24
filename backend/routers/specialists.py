@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 
+from models.schemas import JarvisSelfConfigRequest, JarvisSelfConfigResponse
 from services import specialist_service
 
 router = APIRouter(prefix="/api/specialists", tags=["specialists"])
@@ -16,6 +17,45 @@ async def list_specialists():
 @router.get("/active")
 async def get_active():
     return specialist_service.get_active_specialists()
+
+
+# --- JARVIS self-config ---
+# Routes for the built-in JARVIS specialist must be declared BEFORE the generic
+# `/{spec_id}` routes, otherwise FastAPI's path matcher would route
+# `/jarvis/config` into the dynamic spec_id handlers.
+
+@router.get("/jarvis/config", response_model=JarvisSelfConfigResponse)
+async def get_jarvis_config():
+    """Return only the user-editable JARVIS fields.
+
+    The default Jarvis system prompt is intentionally NOT returned — the user
+    sees only their own override (or an empty string). This preserves the
+    abstraction that Jarvis has its own private base persona.
+    """
+    spec = specialist_service.get_jarvis_self()
+    if spec is None:
+        # Fresh workspace where seed has not run yet — return empty defaults.
+        return JarvisSelfConfigResponse()
+    return JarvisSelfConfigResponse(
+        system_prompt=spec.get("system_prompt", "") or "",
+        behavior_extension=spec.get("behavior_extension", "") or "",
+    )
+
+
+@router.put("/jarvis/config", response_model=JarvisSelfConfigResponse)
+async def update_jarvis_config(payload: JarvisSelfConfigRequest):
+    data = payload.model_dump(exclude_unset=True)
+    try:
+        spec = specialist_service.update_jarvis_self(data)
+    except specialist_service.SpecialistNotFoundError:
+        raise HTTPException(
+            status_code=503,
+            detail="JARVIS specialist not initialised — workspace seed has not run",
+        )
+    return JarvisSelfConfigResponse(
+        system_prompt=spec.get("system_prompt", "") or "",
+        behavior_extension=spec.get("behavior_extension", "") or "",
+    )
 
 
 @router.get("/suggest")
@@ -50,6 +90,9 @@ async def update_specialist(spec_id: str, data: dict):
         return specialist_service.update_specialist(spec_id, data)
     except specialist_service.SpecialistNotFoundError:
         raise HTTPException(status_code=404, detail="Specialist not found")
+    except ValueError as exc:
+        # Raised when caller tries to edit a protected built-in (e.g. JARVIS).
+        raise HTTPException(status_code=403, detail=str(exc))
 
 
 @router.delete("/{spec_id}")
@@ -59,6 +102,9 @@ async def delete_specialist(spec_id: str):
         return {"status": "deleted"}
     except specialist_service.SpecialistNotFoundError:
         raise HTTPException(status_code=404, detail="Specialist not found")
+    except ValueError as exc:
+        # JARVIS and other protected built-ins reject deletion.
+        raise HTTPException(status_code=403, detail=str(exc))
 
 
 @router.post("/activate/{spec_id}")
@@ -69,6 +115,9 @@ async def activate_specialist(spec_id: str):
         return {"status": "activated" if is_active else "deactivated", "specialist": spec, "active": specialist_service.get_active_specialists()}
     except specialist_service.SpecialistNotFoundError:
         raise HTTPException(status_code=404, detail="Specialist not found")
+    except ValueError as exc:
+        # JARVIS rejects toggle — it is implicitly always active.
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 @router.post("/deactivate")
