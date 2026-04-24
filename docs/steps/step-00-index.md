@@ -173,6 +173,21 @@
 
 ---
 
+## Phase 18 — Smart Connect (Cheap Per-Note Linking)
+
+> **Execution order**: 25 (single spec for now; 25b frontend review UI is a follow-up).
+>
+> **Core rule**: Use the cheap signals already produced at ingest
+> (BM25 + note/chunk embeddings + entities + aliases) to suggest
+> connections per-note. No global rebuild on every upload, no AI by
+> default, no auto-writes to `related:`.
+
+| Step | Title | Status | Order |
+|------|-------|--------|-------|
+| [25](step-25-smart-connect.spec.md) | Smart Connect: per-note ingest-time linking, broader entity nodes, alias matcher, semantic orphans | ⬜ | → 1st |
+
+---
+
 ## Execution Rule
 
 Complete each step fully before moving to the next.
