@@ -335,4 +335,7 @@ async def init_database(db_path: Path) -> None:
         await db.executescript(ENTITY_ALIASES_SQL)
         await db.executescript(JIRA_SQL)
         await db.executescript(ENRICHMENT_SQL)
+        # Step 25 PR 3: alias index for Smart Connect.
+        from services.alias_index import ALIAS_INDEX_SQL
+        await db.executescript(ALIAS_INDEX_SQL)
         await db.commit()
