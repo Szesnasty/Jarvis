@@ -2,7 +2,23 @@
   <section class="jarvis-card" aria-labelledby="jarvis-card-title">
     <header class="jarvis-card__header">
       <div class="jarvis-card__title-row">
-        <span class="jarvis-card__icon">🧠</span>
+        <!-- Mini Jarvis orb: concentric cyan rings + glowing core. Mirrors the
+             main Orb.vue aesthetic at icon scale (no animation overhead). -->
+        <span class="jarvis-card__icon" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="32" height="32">
+            <defs>
+              <radialGradient id="jarvis-orb-core" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="var(--neon-cyan, #5ee7ff)" stop-opacity="0.95" />
+                <stop offset="55%" stop-color="var(--neon-cyan, #5ee7ff)" stop-opacity="0.35" />
+                <stop offset="100%" stop-color="var(--neon-cyan, #5ee7ff)" stop-opacity="0" />
+              </radialGradient>
+            </defs>
+            <circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="0.6" opacity="0.35" />
+            <circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="0.8" opacity="0.6" />
+            <circle cx="16" cy="16" r="8" fill="none" stroke="currentColor" stroke-width="1" opacity="0.85" />
+            <circle cx="16" cy="16" r="6" fill="url(#jarvis-orb-core)" />
+          </svg>
+        </span>
         <div>
           <h2 id="jarvis-card-title" class="jarvis-card__title">JARVIS</h2>
           <p class="jarvis-card__subtitle">Your assistant's core configuration</p>
@@ -191,8 +207,18 @@ onMounted(load)
 }
 
 .jarvis-card__icon {
-  font-size: 1.55rem;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  color: var(--neon-cyan, #5ee7ff);
+  filter: drop-shadow(0 0 6px var(--neon-cyan-30));
+  flex-shrink: 0;
+}
+
+.jarvis-card__icon svg {
+  display: block;
 }
 
 .jarvis-card__title {

@@ -671,7 +671,7 @@ _BUILTIN_SPECIALISTS: List[Dict] = [
         "id": JARVIS_SELF_ID,
         "name": "JARVIS",
         "role": "Jarvis itself — your assistant's core configuration.",
-        "icon": "🧠",
+        "icon": "🔵",
         "system_prompt": "",
         "behavior_extension": "",
         "sources": [],

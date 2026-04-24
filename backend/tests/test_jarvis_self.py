@@ -116,7 +116,7 @@ class TestJarvisUpdate:
         assert spec["behavior_extension"] == "Sign every reply with —J."
         # name/icon untouched
         assert spec["name"] == "JARVIS"
-        assert spec["icon"] == "🧠"
+        assert spec["icon"] == "🔵"
 
     def test_clearing_fields_persists_empty(self, workspace):
         with patch("services.specialist_service.get_settings") as m:
