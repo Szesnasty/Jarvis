@@ -401,7 +401,7 @@ async def _index_note(
         aliases = fm.get("aliases") or []
         if not isinstance(aliases, list):
             aliases = []
-        headings = _re.findall(r"^#{1,6}\s+(.+?)\s*$", body, flags=_re.MULTILINE)
+        headings = [h.rstrip() for h in _re.findall(r"^#{1,6}\s+(.+)", body, flags=_re.MULTILINE)]
         upsert_note_aliases(
             db_path,
             note_path,
