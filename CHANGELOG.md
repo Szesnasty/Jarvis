@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.11.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.10.0...jarvis-v0.11.0) (2026-04-24)
+
+
+### ✨ Features
+
+* **connect:** add alias matcher + NFKD slug fix — step 25 PR 3 ([7d4e888](https://github.com/Szesnasty/Jarvis/commit/7d4e888c947ac0a5423e31fde912d0d0c3b26a7b))
+* **connection-service:** smart connect for per-note ingest-time linking ([75efbdb](https://github.com/Szesnasty/Jarvis/commit/75efbdb7ec30f8985f09aa1893f2986a10be9a9e))
+* **connect:** semantic orphan repair + connections router — step 25 PR 4 ([c5bba8d](https://github.com/Szesnasty/Jarvis/commit/c5bba8de04bc79907070e6a14b81a6952f361361))
+* **connect:** smart connect review UI — step 25 PR 6 ([6894d53](https://github.com/Szesnasty/Jarvis/commit/6894d53338c50727756359c0e4eca03fa7d8c971))
+* **connect:** source/batch provenance + dismissals — step 25 PR 5 ([324a727](https://github.com/Szesnasty/Jarvis/commit/324a7276f2c83532a21a155bc9e9851b817285dd))
+* **graph:** expand entity nodes to org/project/place — step 25 PR 2 ([759a6bc](https://github.com/Szesnasty/Jarvis/commit/759a6bc208ebcc9ebcda8a1db6993870ee0df4af))
+
+
+### 🐛 Bug Fixes
+
+* **security:** fix ReDoS in heading regex — replace (.+?)\s*$ with (.+) + rstrip() to eliminate polynomial backtracking (CodeQL high) ([a0f9cbb](https://github.com/Szesnasty/Jarvis/commit/a0f9cbbe1a1bbf74f0637fb9dd1619589d9c82e4))
+
+
+### 📝 Documentation
+
+* **step-25:** note shipped/deferred status; surface smart connect in README ([3ae6b34](https://github.com/Szesnasty/Jarvis/commit/3ae6b346b299f643dfbf9b72f2663f3a84435c2d))
+* **step-25:** smart connect spec — per-note ingest-time linking ([f50b787](https://github.com/Szesnasty/Jarvis/commit/f50b787101de01da989f83033d1ab597944b89c3))
+* **step-26:** incorporate review — versioning, connection_events, strict dry-run, alias allowlist, fetch streaming, breakdown semantics ([0dda928](https://github.com/Szesnasty/Jarvis/commit/0dda92841bd5e4f3a711e6504fe43b4ed8f4a47b))
+* **step-26:** smart connect quality loop spec — backfill, stats, score breakdown, alias guardrails, retrieval isolation ([c716c39](https://github.com/Szesnasty/Jarvis/commit/c716c39abb94df3c7c94b0a1d5833f74ab32b712))
+* **step-26:** split monolithic spec into 26a backfill, 26b alias guardrails, 26c quality loop ([40295d1](https://github.com/Szesnasty/Jarvis/commit/40295d124a12a6fb9dcecc5a4d983575933daba9))
+
 ## [0.10.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.9.2...jarvis-v0.10.0) (2026-04-24)
 
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.10.0...backend-v0.11.0) (2026-04-24)
+
+
+### ✨ Features
+
+* **connect:** add alias matcher + NFKD slug fix — step 25 PR 3 ([7d4e888](https://github.com/Szesnasty/Jarvis/commit/7d4e888c947ac0a5423e31fde912d0d0c3b26a7b))
+* **connection-service:** smart connect for per-note ingest-time linking ([75efbdb](https://github.com/Szesnasty/Jarvis/commit/75efbdb7ec30f8985f09aa1893f2986a10be9a9e))
+* **connect:** semantic orphan repair + connections router — step 25 PR 4 ([c5bba8d](https://github.com/Szesnasty/Jarvis/commit/c5bba8de04bc79907070e6a14b81a6952f361361))
+* **connect:** source/batch provenance + dismissals — step 25 PR 5 ([324a727](https://github.com/Szesnasty/Jarvis/commit/324a7276f2c83532a21a155bc9e9851b817285dd))
+* **graph:** expand entity nodes to org/project/place — step 25 PR 2 ([759a6bc](https://github.com/Szesnasty/Jarvis/commit/759a6bc208ebcc9ebcda8a1db6993870ee0df4af))
+
+
+### 🐛 Bug Fixes
+
+* **security:** fix ReDoS in heading regex — replace (.+?)\s*$ with (.+) + rstrip() to eliminate polynomial backtracking (CodeQL high) ([a0f9cbb](https://github.com/Szesnasty/Jarvis/commit/a0f9cbbe1a1bbf74f0637fb9dd1619589d9c82e4))
+
 ## [0.10.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.9.1...backend-v0.10.0) (2026-04-24)
 
 
