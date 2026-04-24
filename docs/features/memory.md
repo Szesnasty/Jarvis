@@ -66,7 +66,7 @@ Every note carries a YAML frontmatter block with `title`, `created_at`, `updated
 1. Text extraction: `.md` files are used as-is (frontmatter added if missing); `.txt` files are wrapped in generated frontmatter and saved as `.md`; `.pdf` files are parsed by `pdfplumber` and also wrapped before saving.
 2. The resulting `.md` file is written to `memory/{target_folder}/` using a slug-based filename.
 3. If a filename already exists at the target path a numeric suffix (`-1`, `-2`, ...) is appended rather than overwriting.
-4. The new note is indexed in SQLite, then a graph rebuild is attempted. A failed graph rebuild logs a warning but does not roll back the ingest.
+4. The new note is indexed in SQLite (which also auto-embeds it). The ingest then calls `connection_service.connect_note()` which writes a `suggested_related` block to the note's frontmatter and updates the graph incrementally via `graph_service.ingest_note()`. **Per-note ingest no longer triggers a full `rebuild_graph()`** — that remains for batch imports and the manual "Reindex all" / "Repair graph" actions. A failed Smart Connect step logs a warning but does not roll back the ingest.
 
 For `.csv` and `.xml` files, `fast_ingest` delegates to `structured_ingest.ingest_structured_file` which handles both Jira exports and generic structured data:
 
@@ -95,6 +95,18 @@ An optional `summarize` flag triggers `smart_enrich` after ingest, which calls C
 
 Note that `smart_enrich` rebuilds the frontmatter block manually using an f-string loop rather than going through `utils/markdown.py`'s `add_frontmatter` (which uses `yaml.dump`). Similarly, `url_ingest._build_frontmatter` constructs YAML with f-strings. `add_frontmatter` is only used by `memory_service` for standard note CRUD. This means title or author strings containing YAML special characters (colons, quotes, newlines) can produce malformed frontmatter in ingested notes.
 
+### Smart Connect (per-note linking)
+
+`connection_service.connect_note()` runs after every single-file ingest. It builds a connection query from the note's title, headings, tags and first 800 characters, and gathers candidate links from three deterministic signals already produced by indexing:
+
+- BM25 over `notes_fts` (via `memory_service.list_notes(search=...)`)
+- Note-level cosine similarity (via `embedding_service.search_similar`)
+- Chunk-level cosine similarity (via `embedding_service.search_similar_chunks`)
+
+Candidates are merged with weighted scoring (BM25 0.30, note embedding 0.30, chunk embedding 0.20). When a signal is unavailable (e.g. embeddings disabled, no chunks yet) the score is divided by the sum of weights of *active* signals so a single strong signal can still cross the floor — graceful degradation, not weight inflation. Tiers: `strong` ≥ 0.80, `normal` ≥ 0.60, `weak` ≥ 0.45 (kept only in `mode="aggressive"`). Caps: max 5 suggestions per note, max 2 from the same folder, max 1 near-duplicate (combined confidence ≥ 0.92).
+
+Results are persisted to the note's frontmatter as a `suggested_related` block (path, confidence, methods, optional `evidence`). The authoritative `related:` field is **never** auto-written; promoting a suggestion is a user action (UI follow-up). The graph is then updated incrementally via `graph_service.ingest_note()`.
+
 ### Frontend
 
 The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/searching, and a main area with `NoteViewer` for reading the selected note.
@@ -110,6 +122,7 @@ The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/se
 - `backend/routers/memory.py` — HTTP endpoints for note CRUD, file ingest, URL ingest, reindex, AI enrichment, embedding reindex, and semantic search
 - `backend/services/memory_service.py` — Core note operations: create, read, list, append, delete, reindex; manages Markdown files and SQLite index together; triggers on-write embedding
 - `backend/services/ingest.py` — File ingest pipeline for `.md`, `.txt`, `.pdf`, `.csv`, `.xml`; AI enrichment via `smart_enrich`
+- `backend/services/connection_service.py` — Smart Connect: per-note ingest-time linking; pure scoring + caps; writes `suggested_related` and calls incremental graph update
 - `backend/services/structured_ingest.py` — CSV/XML ingest with Jira export detection; groups issues by epic/project, creates overview + detail notes with wiki-linked people for graph integration
 - `backend/services/url_ingest.py` — URL ingest for YouTube videos (transcript + oEmbed metadata) and general web articles (trafilatura + markdownify)
 - `backend/services/embedding_service.py` — Local fastembed wrapper: lazy model loading, `embed_note` (with content-hash skip), `search_similar`, `reindex_all`, `delete_embedding`, `is_available`, vector blob packing, and cosine similarity helper

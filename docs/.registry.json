@@ -40,6 +40,7 @@
         "backend/routers/memory.py",
         "backend/services/memory_service.py",
         "backend/services/ingest.py",
+        "backend/services/connection_service.py",
         "backend/services/url_ingest.py",
         "backend/services/structured_ingest.py",
         "backend/services/embedding_service.py",
@@ -52,7 +53,7 @@
         "frontend/app/components/LinkIngestDialog.vue"
       ],
       "depends_on": ["database"],
-      "last_updated": "2026-04-17",
+      "last_updated": "2026-04-24",
       "status": "current"
     },
     "jira-ingest": {
