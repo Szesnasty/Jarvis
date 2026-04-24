@@ -215,7 +215,13 @@ Caps per note:
 
 - max **5** `suggested_related` total
 - max **2** from the same folder
-- max **1** near-duplicate (cosine ≥ 0.92) unless score ≥ 0.85
+- max **1** near-duplicate (combined confidence ≥ 0.92)
+
+When only a subset of signals is available (e.g. embeddings disabled or
+chunks missing for a short note) the score is divided by the sum of the
+weights of the active signals — graceful degradation, not weight
+inflation. A perfect single-signal hit can therefore still cross the
+floor without inventing data.
 
 ### 7. Alias matcher
 

@@ -125,11 +125,17 @@ async def fast_ingest(
         target.unlink(missing_ok=True)
         raise IngestError(f"Failed to index note: {exc}") from exc
 
+    # Step 25 — Smart Connect: per-note linking + incremental graph update.
+    # Replaces the previous full ``rebuild_graph()`` call which scaled poorly.
+    # Full rebuilds remain available for batch imports and the manual
+    # "Reindex all" / "Repair graph" actions.
+    connections_payload = None
     try:
-        from services.graph_service import rebuild_graph
-        rebuild_graph(workspace_path=workspace_path)
+        from services.connection_service import connect_note
+        connections = await connect_note(rel_path, workspace_path=workspace_path)
+        connections_payload = connections.model_dump()
     except Exception as exc:
-        logger.warning("Graph rebuild after ingest failed: %s", exc)
+        logger.warning("Smart Connect after ingest failed: %s", exc)
 
     return {
         "path": rel_path,
@@ -137,6 +143,7 @@ async def fast_ingest(
         "folder": target_folder,
         "source": str(file_path),
         "size": target.stat().st_size,
+        "connections": connections_payload,
     }
 
 
