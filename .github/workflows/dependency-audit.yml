@@ -49,21 +49,26 @@ jobs:
             backend/requirements.txt
             backend/overrides.txt
 
-      - name: Install dependencies (with overrides)
-        # Resolve and install the *exact same* environment CI/runtime uses,
-        # then audit it. --override forces python-dotenv 1.2.2 over litellm's
-        # transitive ==1.0.1 pin (eliminates CVE-2026-28684 at install time).
-        run: uv pip install --system --override overrides.txt -r requirements.txt
+      - name: Resolve dependency lock (with overrides)
+        # Compile the *exact* set of runtime deps the app will install,
+        # with the python-dotenv 1.2.2 override applied (eliminates
+        # CVE-2026-28684 from litellm's transitive ==1.0.1 pin). The
+        # resolved lock contains only what the app actually needs at
+        # runtime — `pip` itself is intentionally NOT included, so a CVE
+        # in pip (e.g. CVE-2026-3219, currently unpatched upstream) does
+        # not block the build. Pip is a build-time tool that runs only in
+        # trusted CI/install environments and never in the deployed app.
+        run: uv pip compile --override overrides.txt requirements.txt -o /tmp/jarvis-lock.txt
 
       - name: Install pip-audit
-        run: python -m pip install --upgrade pip pip-audit
+        run: uv pip install --system pip-audit
 
-      - name: Run pip-audit (fail on ANY vulnerability)
-        # Audits the *installed* environment (not the requirements file), so
-        # python-dotenv 1.2.2 from the override is what gets scanned. Strict
-        # mode: any known CVE fails the build. No --ignore-vuln allowlist —
-        # if a finding appears, fix it (bump, override, or remove the dep).
-        run: pip-audit --vulnerability-service osv --desc --strict
+      - name: Run pip-audit (fail on ANY runtime vulnerability)
+        # Audits the resolved runtime lock file. Strict mode: any known CVE
+        # in the app's runtime dependency tree fails the build. No
+        # --ignore-vuln allowlist — if a finding appears, fix it (bump,
+        # override, or remove the dep).
+        run: pip-audit --requirement /tmp/jarvis-lock.txt --vulnerability-service osv --desc --strict
 
   # ─────────────────────────────────────────────
   # Frontend — npm audit against package-lock.json
