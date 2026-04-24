@@ -5,7 +5,7 @@
       <div class="spec-page__header-top">
         <div class="spec-page__title-group">
           <h1 class="spec-page__title">Specialists</h1>
-          <span v-if="specialists.length" class="spec-page__count">{{ specialists.length }}</span>
+          <span v-if="userSpecialists.length" class="spec-page__count">{{ userSpecialists.length }}</span>
         </div>
         <button
           v-if="!showWizard"
@@ -25,8 +25,12 @@
       <div class="spec-page__divider" />
     </header>
 
+    <!-- JARVIS-self card: always rendered first, hidden only while the wizard
+         is open so the user has full focus on creating/editing a specialist. -->
+    <JarvisSelfCard v-if="!showWizard" />
+
     <!-- Empty state -->
-    <div v-if="specialists.length === 0 && !showWizard" class="spec-page__empty">
+    <div v-if="userSpecialists.length === 0 && !showWizard" class="spec-page__empty">
       <div class="spec-page__empty-graphic">
         <div class="spec-page__empty-ring" />
         <div class="spec-page__empty-ring spec-page__empty-ring--outer" />
@@ -49,9 +53,9 @@
     </div>
 
     <!-- Card grid -->
-    <TransitionGroup v-if="!showWizard && specialists.length" name="card-list" tag="div" class="spec-page__grid">
+    <TransitionGroup v-if="!showWizard && userSpecialists.length" name="card-list" tag="div" class="spec-page__grid">
       <SpecialistCard
-        v-for="spec in specialists"
+        v-for="spec in userSpecialists"
         :key="spec.id"
         :specialist="spec"
         :active="activeSpecialists.some(a => a.id === spec.id)"
@@ -92,12 +96,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { SpecialistSummary, SpecialistDetail } from '~/types'
 import { useSpecialists } from '~/composables/useSpecialists'
 import { useApi } from '~/composables/useApi'
 import { ApiError } from '~/types'
 import SpecialistWizard from '~/components/SpecialistWizard.vue'
+import JarvisSelfCard from '~/components/JarvisSelfCard.vue'
 
 const {
   specialists,
@@ -111,6 +116,12 @@ const {
   toggleExpand,
   uploadFile,
 } = useSpecialists()
+
+// JARVIS-self is rendered separately (always at top) by <JarvisSelfCard>.
+// Filter it out of the regular grid and count.
+const userSpecialists = computed(() =>
+  specialists.value.filter(s => s.id !== 'jarvis'),
+)
 
 const api = useApi()
 const showWizard = ref(false)

@@ -1,4 +1,4 @@
-import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, GraphNodeDetail, GraphOrphan, SpecialistSummary, SpecialistDetail, SpecialistFileInfo, UrlIngestResult } from '~/types'
+import type { HealthResponse, WorkspaceStatusResponse, WorkspaceInitResponse, NoteMetadata, NoteDetail, ReindexResponse, SessionMetadata, SessionDetail, GraphData, GraphStats, GraphNode, GraphNodeDetail, GraphOrphan, SpecialistSummary, SpecialistDetail, SpecialistFileInfo, UrlIngestResult, JarvisSelfConfig } from '~/types'
 import { ApiError } from '~/types'
 
 function _wrapError(error: unknown): never {
@@ -124,5 +124,13 @@ export function useApi() {
   const deleteSpecialistFile = (id: string, filename: string) =>
     _api<void>(`/api/specialists/${id}/files/${encodeURIComponent(filename)}`, { method: 'DELETE' })
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile }
+  // --- JARVIS self-config ---
+
+  const fetchJarvisConfig = () =>
+    _api<JarvisSelfConfig>('/api/specialists/jarvis/config')
+
+  const updateJarvisConfig = (data: Partial<JarvisSelfConfig>) =>
+    _api<JarvisSelfConfig>('/api/specialists/jarvis/config', { method: 'PUT', body: data })
+
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile, fetchJarvisConfig, updateJarvisConfig }
 }

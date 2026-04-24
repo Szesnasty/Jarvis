@@ -12,6 +12,14 @@ class SpecialistNotFoundError(Exception):
     pass
 
 
+# JARVIS is the user-facing handle on Jarvis's own system prompt. It is a
+# built-in specialist with two user-editable fields (`system_prompt`,
+# `behavior_extension`) and is wired specially in
+# `services.claude.build_system_prompt_with_stats`. It is NEVER exposed via
+# the activate/deactivate flow and cannot be deleted or generic-updated.
+JARVIS_SELF_ID = "jarvis"
+
+
 _active_specialists: List[Dict] = []
 
 
@@ -95,13 +103,19 @@ def list_specialists(workspace_path: Optional[Path] = None) -> List[Dict]:
             "rule_count": len(data.get("rules", [])),
             "file_count": count_specialist_files(data["id"], workspace_path),
             "default_model": data.get("default_model"),
+            "builtin": bool(data.get("builtin", False)),
         })
     return result
 
 
 def update_specialist(spec_id: str, data: Dict, workspace_path: Optional[Path] = None) -> Dict:
+    if spec_id == JARVIS_SELF_ID:
+        raise ValueError(
+            "JARVIS specialist cannot be edited via the generic update endpoint. "
+            "Use PUT /api/specialists/jarvis/config instead.",
+        )
     existing = get_specialist(spec_id, workspace_path)
-    for key in ("name", "role", "system_prompt", "sources", "style", "rules", "tools", "examples", "icon", "default_model"):
+    for key in ("name", "role", "system_prompt", "behavior_extension", "sources", "style", "rules", "tools", "examples", "icon", "default_model"):
         if key in data:
             existing[key] = data[key]
     existing["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -111,8 +125,42 @@ def update_specialist(spec_id: str, data: Dict, workspace_path: Optional[Path] =
     return existing
 
 
+def update_jarvis_self(data: Dict, workspace_path: Optional[Path] = None) -> Dict:
+    """Update only the JARVIS-self editable fields.
+
+    Whitelisted fields: `system_prompt`, `behavior_extension`. Any other key in
+    `data` is silently ignored. The on-disk file retains all other built-in
+    metadata (name, role, icon, builtin flag).
+    """
+    existing = get_specialist(JARVIS_SELF_ID, workspace_path)
+    for key in ("system_prompt", "behavior_extension"):
+        if key in data:
+            value = data[key]
+            existing[key] = "" if value is None else str(value)
+    existing["updated_at"] = datetime.now(timezone.utc).isoformat()
+    existing.setdefault("builtin", True)
+
+    filepath = _agents_dir(workspace_path) / f"{JARVIS_SELF_ID}.json"
+    filepath.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    return existing
+
+
+def get_jarvis_self(workspace_path: Optional[Path] = None) -> Optional[Dict]:
+    """Return the JARVIS-self specialist if it exists on disk, else None.
+
+    Used by the system-prompt builder to apply user override / extension
+    without raising on a fresh workspace where seed has not run yet.
+    """
+    try:
+        return get_specialist(JARVIS_SELF_ID, workspace_path)
+    except SpecialistNotFoundError:
+        return None
+
+
 def delete_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> None:
     global _active_specialists
+    if spec_id == JARVIS_SELF_ID:
+        raise ValueError("JARVIS specialist cannot be deleted")
     filepath = _agents_dir(workspace_path) / f"{spec_id}.json"
     if not filepath.exists():
         raise SpecialistNotFoundError(f"Specialist not found: {spec_id}")
@@ -132,6 +180,10 @@ def delete_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> No
 
 def activate_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> Dict:
     global _active_specialists
+    if spec_id == JARVIS_SELF_ID:
+        # JARVIS is implicitly always-on via the system-prompt builder. Toggling
+        # it through the activate flow would double-apply or hide its config.
+        raise ValueError("JARVIS specialist is always active and cannot be toggled")
     specialist = get_specialist(spec_id, workspace_path)
     # Toggle: if already active, deactivate it
     if any(s["id"] == spec_id for s in _active_specialists):
@@ -610,6 +662,25 @@ Prioritize in this order:
 
 _BUILTIN_SPECIALISTS: List[Dict] = [
     {
+        # JARVIS-self: handle on Jarvis's own system prompt. Both editable
+        # fields default to "" — empty `system_prompt` means "use the built-in
+        # default" (defined in services/claude.py SYSTEM_PROMPT, never exposed
+        # to the user). Empty `behavior_extension` means "no extra rules".
+        # This entry is wired specially in build_system_prompt_with_stats and
+        # is excluded from the normal activate/deactivate flow.
+        "id": JARVIS_SELF_ID,
+        "name": "JARVIS",
+        "role": "Jarvis itself — your assistant's core configuration.",
+        "icon": "🧠",
+        "system_prompt": "",
+        "behavior_extension": "",
+        "sources": [],
+        "style": {},
+        "rules": [],
+        "tools": [],
+        "examples": [],
+    },
+    {
         "id": "jira-strategist",
         "name": "Jira Strategist",
         "role": (
@@ -688,6 +759,8 @@ def seed_builtin_specialists(workspace_path: Optional[Path] = None) -> List[str]
 
         changed = False
         for key, value in spec.items():
+            if key in existing and existing.get(key) == value:
+                continue  # already matches built-in default — no-op
             if key not in existing or existing.get(key) in ("", None, [], {}):
                 existing[key] = value
                 changed = True

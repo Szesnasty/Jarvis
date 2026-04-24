@@ -183,6 +183,7 @@ export interface SpecialistSummary {
   rule_count: number
   file_count: number
   default_model?: { provider: string; model: string } | null
+  builtin?: boolean
 }
 
 export interface SpecialistDetail {
@@ -207,6 +208,14 @@ export interface SpecialistFileInfo {
   title: string
   size: number
   created_at: string
+}
+
+// JARVIS-self: only two user-editable fields. The default Jarvis system
+// prompt is intentionally NOT exposed by the backend — `system_prompt` here
+// is the user's override (or "" to use the built-in default).
+export interface JarvisSelfConfig {
+  system_prompt: string
+  behavior_extension: string
 }
 
 // --- URL Ingest ---
