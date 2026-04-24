@@ -416,3 +416,31 @@ Backend (in [backend/tests/](backend/tests/)):
 - Cross-workspace suggestions.
 - Date entities as graph nodes (use temporal edges instead).
 - Anything covered by step 22d (global derived edges) — do not duplicate.
+
+---
+
+## Status — what shipped vs what was skipped
+
+**Shipped (PRs 1–6 on `feat/step-25-smart-connect`):**
+
+- `connect_note()` orchestrator + per-note ingest flow ([backend/services/connection_service.py](backend/services/connection_service.py))
+- All 7 new edge types and weights from §3
+- Broader entity expansion (`org`, `project`, `place`) via shared `entity_edges.py`
+- Alias matcher with NFKD normalisation + explicit ł/Ł/đ/Đ/ø/Ø/ß map ([backend/services/alias_index.py](backend/services/alias_index.py))
+- Polish-aware `_slugify()` (uses the same diacritic map)
+- Semantic-orphan detection + aggressive-mode self-repair ([find_semantic_orphans](backend/services/graph_service/queries.py))
+- Source / batch first-class nodes via `_emit_provenance_edges()`
+- Dismissed suggestions store ([backend/services/dismissed_suggestions.py](backend/services/dismissed_suggestions.py))
+- API: `GET /orphans`, `POST /run/{path}`, `POST /dismiss`, `POST /promote`
+- Frontend: `SuggestionsPanel.vue` in `NoteViewer`, semantic-orphan banner in memory sidebar
+- Backend tests: 954 passed (+18 new in PR 5, +6 in PR 4, +9 in PR 3, +4 in PR 2, +14 in PR 1)
+- Frontend tests: 268 passed (+9 new in PR 6)
+
+**Deferred (not in MVP, tracked here):**
+
+- §6 `entity_overlap` (0.10) and `same_source` (0.03) scoring signals — graceful degradation handles their absence; can be added without changing the merger contract.
+- §6 `EntityCounts` field on `ConnectionResult` — entities are extracted into the graph but not surfaced in the response payload.
+- `GET /api/connections/suggestions/{path}` — frontend reads `suggested_related` directly from `NoteDetail.frontmatter`, so this read endpoint was redundant. Add if a non-Jarvis client needs to query suggestions.
+- `scripts/backfill_connections.py` — no migration script yet. Existing notes only get `suggested_related` on next edit/touch. A "Reindex all" trigger that loops every note through `connect_note()` is the planned hook.
+- `test_connection_service_perf.py` — perf budget (≤300 ms) not enforced by CI; informally verified on the dev fixture.
+- §11 `smart_connect_rerank()` — opt-in AI re-rank still off; `mode` is currently `fast` / `aggressive` only. The pure-heuristic pipeline already lands strong/normal hits without it.
