@@ -580,6 +580,22 @@ async def _emit_document_sections(
         for sf in section_files:
             sf_rel = sf.relative_to(mem).as_posix()
             await index_note_file(sf_rel, workspace_path=workspace_path)
+        # Step 28b — register section notes in the graph at ingest time so
+        # their tags, wiki-links and entities become reachable by retrieval
+        # expansion immediately. ingest_note() is local-only (no LLM, no
+        # embeddings); cross-document Smart Connect suggestions still run
+        # only on the index above and remain user-triggered for sections.
+        from services import graph_service
+        for sf in section_files:
+            sf_rel = sf.relative_to(mem).as_posix()
+            try:
+                await asyncio.to_thread(
+                    graph_service.ingest_note, sf_rel, workspace_path
+                )
+            except Exception as exc:
+                logger.warning(
+                    "graph ingest of section %s failed: %s", sf_rel, exc
+                )
     except Exception as exc:
         # Best-effort cleanup of the whole document directory.
         try:
