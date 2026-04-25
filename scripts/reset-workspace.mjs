@@ -35,7 +35,11 @@ const workspace = process.env.JARVIS_WORKSPACE_PATH || DEFAULT_WORKSPACE;
 
 const TARGETS = {
   db: {
-    paths:       [join(workspace, 'app', 'jarvis.db')],
+    paths:       [
+      join(workspace, 'app', 'jarvis.db'),
+      join(workspace, 'app', 'jarvis.db-shm'),
+      join(workspace, 'app', 'jarvis.db-wal'),
+    ],
     label:       'Database',
     description: 'SQLite index — will be rebuilt on next ingest',
     isFile:      true,
