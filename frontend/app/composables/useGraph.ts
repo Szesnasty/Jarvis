@@ -18,12 +18,15 @@ export function useGraph() {
   const isLoading = ref(false)
 
   const filters = ref<GraphFilters>({
-    hiddenTypes: new Set<string>(),
+    // Folder `area` nodes are pure structural noise — hide by default; user can re-enable in the legend.
+    hiddenTypes: new Set<string>(['area']),
     timeRange: 'all',
     showOrphans: false,
     searchText: '',
     selectedSprints: new Set<string>(),
     glowLevel: 'normal',
+    hideHubs: true,
+    hubThreshold: 50,
   })
 
   const { fetchGraph, fetchGraphStats, fetchGraphNeighbors, fetchOrphans, rebuildGraph: apiRebuild } = useApi()
@@ -56,6 +59,16 @@ export function useGraph() {
     return keep
   })
 
+  // Per-node edge degree across the full graph — used for hub suppression.
+  const nodeDegree = computed(() => {
+    const deg = new Map<string, number>()
+    for (const e of graph.value.edges) {
+      deg.set(e.source, (deg.get(e.source) ?? 0) + 1)
+      deg.set(e.target, (deg.get(e.target) ?? 0) + 1)
+    }
+    return deg
+  })
+
   const filteredNodes = computed(() => {
     let nodes = graph.value.nodes
     const sprintKeep = sprintSubgraphIds.value
@@ -68,6 +81,11 @@ export function useGraph() {
     }
     if (filters.value.hiddenTypes.size > 0) {
       nodes = nodes.filter(n => !filters.value.hiddenTypes.has(n.type))
+    }
+    if (filters.value.hideHubs) {
+      const threshold = filters.value.hubThreshold
+      const deg = nodeDegree.value
+      nodes = nodes.filter(n => (deg.get(n.id) ?? 0) <= threshold)
     }
     // Search text does NOT filter nodes — it highlights them via searchMatchedNodeIds
     return nodes
