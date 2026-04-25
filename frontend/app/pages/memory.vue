@@ -4,12 +4,7 @@
       <div class="memory-page__toolbar">
         <h2 class="memory-page__title">
           Memory
-          <HelpIcon
-            inline
-            aria-label="About document sections and Smart Connect"
-            action-label="Open Settings → Smart Connect"
-            text="Imported documents (PDFs, large Markdown/JSON) are split into sections grouped under an index note. Sections are searchable immediately, but cross-document connections appear only after Smart Connect runs on them."
-          />
+          <SmartConnectStatus aria-label="Smart Connect coverage for this workspace" />
         </h2>
         <div class="memory-page__toolbar-actions">
           <div class="memory-page__import-group" :class="{ open: showImportMenu }">

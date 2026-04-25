@@ -268,11 +268,7 @@ watch(
         @input="autoResize"
       />
       <ModelSelector />
-      <HelpIcon
-        aria-label="About retrieval and Smart Connect"
-        action-label="Open Settings → Smart Connect"
-        text="Jarvis answers from your local notes. After importing big documents (PDFs, large Markdown), their sections are searchable right away — but cross-document connections only show up after Smart Connect runs on them."
-      />
+      <SmartConnectStatus compact aria-label="Smart Connect coverage" />
       <!-- Voice button hidden for now -->
       <button
         class="chat-panel__icon-btn chat-panel__icon-btn--duel"
