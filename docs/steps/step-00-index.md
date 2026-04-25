@@ -185,9 +185,9 @@
 | Step | Title | Status | Order |
 |------|-------|--------|-------|
 | [25](step-25-smart-connect.spec.md) | Smart Connect: per-note ingest-time linking, broader entity nodes, alias matcher, semantic orphans | ✅  | → 1st |
-| [26a](step-26a-backfill.spec.md) | Smart Connect backfill: run on existing notes, versioning, strict dry-run, backfill UI | ⬜ | → 2nd |
-| [26b](step-26b-alias-guardrails.spec.md) | Alias guardrails: min-length, stopwords, frequency cap, weak_aliases, retrieval edge classification | ⬜ | → 3rd |
-| [26c](step-26c-quality-loop.spec.md) | Quality loop: score breakdown, promote/dismiss event log, stats endpoint, "Keep all" UI | ⬜ | → 4th |
+| [26a](step-26a-backfill.spec.md) | Smart Connect backfill: run on existing notes, versioning, strict dry-run, backfill UI | ✅ | → 2nd |
+| [26b](step-26b-alias-guardrails.spec.md) | Alias guardrails: min-length, stopwords, frequency cap, weak_aliases, retrieval edge classification | ✅ | → 3rd |
+| [26c](step-26c-quality-loop.spec.md) | Quality loop: score breakdown, promote/dismiss event log, stats endpoint, "Keep all" UI | ✅ | → 4th |
 
 ---
 
@@ -206,28 +206,6 @@
 | [27a](step-27a-pdf-section-split.spec.md) | Split large PDFs into section notes at ingest | ⬜ | → 1st |
 | [27b](step-27b-scaled-entity-limits.spec.md) | Length-scaled entity + co-mention caps | ⬜ | → 2nd |
 | [27c](step-27c-concept-pass-improvements.spec.md) | Concept pass improvements for mixed PL/EN PDFs | ⬜ | → 3rd |
-
----
-
-## Phase 20 — Document Intelligence & Retrieval Trust
-
-> **Execution order**: 28a → 28b → 28c → 28d → 28e.
-> Trace UI first (so every later change is visible), then Memory
-> grouping (independent UX win), then eval baseline (frozen *before*
-> retrieval-affecting changes), then section classification, then the
-> Client Estimate specialist as the first business workflow on top.
->
-> **Core rule**: Every retrieval-affecting change after 28c must move
-> the eval baseline. No more eyeballing.
-
-| Step | Title | Status | Order |
-|------|-------|--------|-------|
-| [28](step-28-document-intelligence.md) | Document intelligence & retrieval trust — overview | ⬜ | — |
-| [28a](step-28a-retrieval-trace-ui.spec.md) | Retrieval Trace UI — surface `_signals` and graph-expansion provenance per chat answer | ⬜ | → 1st |
-| [28b](step-28b-memory-document-grouping.spec.md) | Memory document grouping — collapsible parent + sections in the sidebar | ⬜ | → 2nd |
-| [28c](step-28c-eval-baseline.spec.md) | Eval baseline against the four reference PDFs (frozen query set + diff runner) | ⬜ | → 3rd |
-| [28d](step-28d-section-classification.spec.md) | Section type classification (heuristic + LLM fallback) + retrieval prefilter | ⬜ | → 4th |
-| [28e](step-28e-client-estimate-specialist.spec.md) | Client Estimate specialist — first business workflow on top of typed sections | ⬜ | → 5th |
 
 ---
 

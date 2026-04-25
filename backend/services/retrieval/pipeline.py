@@ -882,9 +882,9 @@ async def retrieve_with_intent(
 
     result = _cluster_dedup(scored, limit)
 
-    # Clean internal fields but KEEP _best_chunk and _best_section for context_builder
+    # Clean internal fields but KEEP _best_chunk, _best_section, _score and
+    # _signals for context_builder (the trace UI in step 28a reports both).
     for r in result:
-        r.pop("_score", None)
         r.pop("_bm25", None)
         r.pop("_cosine", None)
         r.pop("_graph", None)

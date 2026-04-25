@@ -349,11 +349,13 @@ async def build_system_prompt_with_stats(
         )
 
     if graph_scope:
-        context = await build_graph_scoped_context(
+        context, trace = await build_graph_scoped_context(
             graph_scope, user_message, workspace_path=workspace_path,
         )
     else:
-        context, _ctx_tokens = await build_context(user_message, workspace_path=workspace_path)
+        context, _ctx_tokens, trace = await build_context(
+            user_message, workspace_path=workspace_path,
+        )
 
     # Detect user message language and append a final reminder AFTER any retrieved
     # context. Small models have recency bias — the last instruction before the
@@ -376,6 +378,8 @@ async def build_system_prompt_with_stats(
         "context_tokens": (len(context) // 4) if context else 0,
         "lang_tokens": len(lang_reminder) // 4,
         "total_tokens": len(prompt) // 4,
+        # Step 28a — per-note retrieval trace surfaced over the chat WS.
+        "trace": trace,
     }
     return prompt, stats
 

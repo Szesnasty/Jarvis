@@ -74,8 +74,9 @@ async def test_expansion_empty_when_no_graph(ws, monkeypatch):
     """No graph → no expansion notes."""
     from services.context_builder import _build_expansion_context
     # No graph.json created
-    result = await _build_expansion_context("test query", [{"path": "a.md"}], workspace_path=ws)
-    assert result == []
+    parts, trace = await _build_expansion_context("test query", [{"path": "a.md"}], workspace_path=ws)
+    assert parts == []
+    assert trace == []
 
 
 @pytest.mark.anyio
@@ -91,10 +92,13 @@ async def test_expansion_includes_related_notes(ws, monkeypatch):
     _make_test_graph(ws, ["linked.md"], hub="core.md")
 
     core_results = [{"path": "core.md", "title": "Core"}]
-    parts = await _build_expansion_context("query", core_results, workspace_path=ws)
+    parts, trace = await _build_expansion_context("query", core_results, workspace_path=ws)
     # Should include the linked note
     combined = "\n".join(parts)
     assert "linked.md" in combined or "linked" in combined.lower()
+    # Step 28a — expansion entries carry their edge type for the trace UI.
+    if trace:
+        assert any(t["reason"] == "expansion" and t["edge_type"] for t in trace)
     invalidate_cache()
 
 
@@ -115,7 +119,7 @@ async def test_expansion_capped_at_max_notes(ws, monkeypatch):
     _make_test_graph(ws, note_paths, hub="hub.md")
 
     core_results = [{"path": "hub.md"}]
-    parts = await _build_expansion_context("query", core_results, workspace_path=ws)
+    parts, _trace = await _build_expansion_context("query", core_results, workspace_path=ws)
     assert len(parts) <= _MAX_EXPANSION_NOTES
     invalidate_cache()
 
@@ -140,7 +144,7 @@ async def test_expansion_capped_at_token_budget(ws, monkeypatch):
     _make_test_graph(ws, note_paths, hub="hub.md")
 
     core_results = [{"path": "hub.md"}]
-    parts = await _build_expansion_context("query", core_results, workspace_path=ws)
+    parts, _trace = await _build_expansion_context("query", core_results, workspace_path=ws)
     # Token budget of 500 chars means < 5 notes can be included
     assert len(parts) < 5
     invalidate_cache()
@@ -159,7 +163,7 @@ async def test_core_results_not_included_in_expansion(ws, monkeypatch):
     _make_test_graph(ws, ["core.md"], hub="core.md")
 
     core_results = [{"path": "core.md"}]
-    parts = await _build_expansion_context("query", core_results, workspace_path=ws)
+    parts, _trace = await _build_expansion_context("query", core_results, workspace_path=ws)
     # core.md should not appear as an expansion note
     assert all("core.md" not in p for p in parts)
     invalidate_cache()

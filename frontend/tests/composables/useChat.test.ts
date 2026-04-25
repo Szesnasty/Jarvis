@@ -106,6 +106,44 @@ describe('useChat', () => {
     expect(toolActivity.value).toBe('')
   })
 
+  it('trace event before done attaches trace to the assistant message', () => {
+    const { init, sendMessage, messages } = useChat()
+    init()
+    sendMessage('hi')
+
+    simulateEvent({ type: 'text_delta', content: 'ok' })
+    simulateEvent({ type: 'trace', items: [
+      { path: 'inbox/a.md', title: 'A', score: 0.81, reason: 'primary', via: 'cosine', signals: { cosine: 0.81 } },
+    ] })
+    simulateEvent({ type: 'done', session_id: 'abc' })
+
+    const assistantMsg = messages.value.find(m => m.role === 'assistant')
+    expect(assistantMsg?.trace).toHaveLength(1)
+    expect(assistantMsg?.trace?.[0]?.path).toBe('inbox/a.md')
+  })
+
+  it('trace from one message does not leak into the next', () => {
+    const { init, sendMessage, messages } = useChat()
+    init()
+
+    sendMessage('first')
+    simulateEvent({ type: 'text_delta', content: 'reply 1' })
+    simulateEvent({ type: 'trace', items: [
+      { path: 'inbox/a.md', title: 'A', score: 0.5, reason: 'primary', via: 'bm25' },
+    ] })
+    simulateEvent({ type: 'done', session_id: 'abc' })
+
+    sendMessage('second')
+    simulateEvent({ type: 'text_delta', content: 'reply 2' })
+    // No trace event this time.
+    simulateEvent({ type: 'done', session_id: 'abc' })
+
+    const assistantMsgs = messages.value.filter(m => m.role === 'assistant')
+    expect(assistantMsgs).toHaveLength(2)
+    expect(assistantMsgs[0]?.trace).toHaveLength(1)
+    expect(assistantMsgs[1]?.trace).toBeUndefined()
+  })
+
   it('session messages array grows after each exchange', () => {
     const { init, sendMessage, messages } = useChat()
     init()

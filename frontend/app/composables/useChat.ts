@@ -1,4 +1,4 @@
-import type { ChatMessage, WsEvent } from '~/types'
+import type { ChatMessage, TraceItem, WsEvent } from '~/types'
 import { useDuel } from '~/composables/useDuel'
 import { useLocalModels } from '~/composables/useLocalModels'
 import { useWebSocket } from '~/composables/useWebSocket'
@@ -12,6 +12,9 @@ export function useChat() {
   const sessionId = ref('')
   const canRetry = ref(false)
   let _lastContent = ''
+  // Step 28a — trace event arrives between text_delta and done; held here
+  // until `done` flushes the assistant message into the history.
+  let _pendingTrace: TraceItem[] | null = null
   let _errorClearTimer: ReturnType<typeof setTimeout> | null = null
   let _slowTimer10: ReturnType<typeof setTimeout> | null = null
   let _slowTimer30: ReturnType<typeof setTimeout> | null = null
@@ -97,17 +100,27 @@ export function useChat() {
       return
     }
 
+    if (event.type === 'trace') {
+      _pendingTrace = Array.isArray(event.items) ? event.items : null
+      return
+    }
+
     if (event.type === 'done') {
       if (currentResponse.value) {
-        messages.value.push({
+        const msg: ChatMessage = {
           role: 'assistant',
           content: currentResponse.value,
           model: event.model,
           provider: event.provider,
           timestamp: new Date().toISOString(),
-        })
+        }
+        if (_pendingTrace && _pendingTrace.length > 0) {
+          msg.trace = _pendingTrace
+        }
+        messages.value.push(msg)
         currentResponse.value = ''
       }
+      _pendingTrace = null
       isLoading.value = false
       toolActivity.value = ''
       _clearSlowTimer()
@@ -118,6 +131,7 @@ export function useChat() {
       const content = event.content || 'Something went wrong.'
       const retryable = /try again|overloaded|rate limit|reconnect/i.test(content)
       _setError(content, retryable)
+      _pendingTrace = null
       isLoading.value = false
       toolActivity.value = ''
       _clearSlowTimer()
@@ -131,6 +145,7 @@ export function useChat() {
           messages.value.push({ role: 'assistant', content: currentResponse.value + ' *(connection lost)*' })
           currentResponse.value = ''
         }
+        _pendingTrace = null
         isLoading.value = false
         toolActivity.value = ''
         _setError('Connection lost — reconnecting...', true)

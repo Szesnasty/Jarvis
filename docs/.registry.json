@@ -9,7 +9,11 @@
         "backend/models/schemas.py",
         "frontend/app/pages/onboarding.vue"
       ],
-      "depends_on": ["database", "settings-config", "api-key-management"],
+      "depends_on": [
+        "database",
+        "settings-config",
+        "api-key-management"
+      ],
       "last_updated": "2026-04-14",
       "status": "current"
     },
@@ -27,10 +31,17 @@
         "frontend/app/composables/useWebSocket.ts",
         "frontend/app/composables/useApiKeys.ts",
         "frontend/app/components/ChatPanel.vue",
-        "frontend/app/components/ModelSelector.vue"
+        "frontend/app/components/ModelSelector.vue",
+        "frontend/app/components/TraceList.vue"
       ],
-      "depends_on": ["retrieval", "sessions", "specialists", "api-key-management", "local-models"],
-      "last_updated": "2026-04-16",
+      "depends_on": [
+        "retrieval",
+        "sessions",
+        "specialists",
+        "api-key-management",
+        "local-models"
+      ],
+      "last_updated": "2026-04-25",
       "status": "current"
     },
     "memory": {
@@ -56,7 +67,9 @@
         "frontend/app/components/ImportDialog.vue",
         "frontend/app/components/LinkIngestDialog.vue"
       ],
-      "depends_on": ["database"],
+      "depends_on": [
+        "database"
+      ],
       "last_updated": "2026-04-27",
       "status": "current"
     },
@@ -68,7 +81,11 @@
         "backend/services/jira_ingest.py",
         "backend/models/database.py"
       ],
-      "depends_on": ["memory", "database", "enrichment-pipeline"],
+      "depends_on": [
+        "memory",
+        "database",
+        "enrichment-pipeline"
+      ],
       "last_updated": "2026-04-17",
       "status": "current"
     },
@@ -91,7 +108,11 @@
         "frontend/app/pages/settings.vue",
         "backend/tests/test_enrichment_pipeline.py"
       ],
-      "depends_on": ["jira-ingest", "local-models", "database"],
+      "depends_on": [
+        "jira-ingest",
+        "local-models",
+        "database"
+      ],
       "last_updated": "2026-04-17",
       "status": "current"
     },
@@ -105,7 +126,10 @@
         "backend/services/graph_service/__init__.py",
         "backend/services/jira_ingest.py"
       ],
-      "depends_on": ["jira-ingest", "knowledge-graph"],
+      "depends_on": [
+        "jira-ingest",
+        "knowledge-graph"
+      ],
       "last_updated": "2026-04-17",
       "status": "current"
     },
@@ -119,7 +143,11 @@
         "backend/routers/graph.py",
         "backend/tests/test_soft_edges.py"
       ],
-      "depends_on": ["knowledge-graph", "enrichment-pipeline", "jira-graph"],
+      "depends_on": [
+        "knowledge-graph",
+        "enrichment-pipeline",
+        "jira-graph"
+      ],
       "last_updated": "2026-04-17",
       "status": "current"
     },
@@ -143,7 +171,9 @@
         "frontend/app/components/GraphFilterBar.vue",
         "frontend/app/composables/useGraph.ts"
       ],
-      "depends_on": ["memory"],
+      "depends_on": [
+        "memory"
+      ],
       "last_updated": "2026-04-24",
       "status": "current"
     },
@@ -159,7 +189,9 @@
         "frontend/app/components/VoiceButton.vue",
         "frontend/app/components/TranscriptBar.vue"
       ],
-      "depends_on": ["chat"],
+      "depends_on": [
+        "chat"
+      ],
       "last_updated": "2026-04-14",
       "status": "current"
     },
@@ -177,7 +209,9 @@
         "frontend/app/components/SpecialistBadge.vue",
         "frontend/app/components/SpecialistKnowledgePanel.vue"
       ],
-      "depends_on": ["memory"],
+      "depends_on": [
+        "memory"
+      ],
       "last_updated": "2026-04-24",
       "status": "current"
     },
@@ -195,7 +229,10 @@
         "frontend/app/pages/specialists.vue",
         "frontend/app/types/index.ts"
       ],
-      "depends_on": ["specialists", "chat"],
+      "depends_on": [
+        "specialists",
+        "chat"
+      ],
       "last_updated": "2026-04-24",
       "status": "current"
     },
@@ -208,7 +245,11 @@
         "frontend/app/composables/useSessions.ts",
         "frontend/app/components/SessionHistory.vue"
       ],
-      "depends_on": ["database", "memory", "knowledge-graph"],
+      "depends_on": [
+        "database",
+        "memory",
+        "knowledge-graph"
+      ],
       "last_updated": "2026-04-14",
       "status": "current"
     },
@@ -221,8 +262,11 @@
         "backend/services/context_builder.py",
         "backend/services/chunking.py"
       ],
-      "depends_on": ["memory", "knowledge-graph"],
-      "last_updated": "2025-07-27",
+      "depends_on": [
+        "memory",
+        "knowledge-graph"
+      ],
+      "last_updated": "2026-04-25",
       "status": "current"
     },
     "jira-retrieval": {
@@ -233,7 +277,11 @@
         "backend/services/retrieval/intent_parser.py",
         "backend/routers/retrieval_search.py"
       ],
-      "depends_on": ["retrieval", "enrichment", "knowledge-graph"],
+      "depends_on": [
+        "retrieval",
+        "enrichment",
+        "knowledge-graph"
+      ],
       "last_updated": "2025-07-27",
       "status": "current"
     },
@@ -243,7 +291,10 @@
       "sources": [
         "backend/services/planning_service.py"
       ],
-      "depends_on": ["retrieval", "chat"],
+      "depends_on": [
+        "retrieval",
+        "chat"
+      ],
       "last_updated": "2026-04-14",
       "status": "current"
     },
@@ -259,7 +310,10 @@
         "frontend/app/pages/settings.vue",
         "frontend/app/composables/usePreferences.ts"
       ],
-      "depends_on": ["workspace-onboarding", "api-key-management"],
+      "depends_on": [
+        "workspace-onboarding",
+        "api-key-management"
+      ],
       "last_updated": "2026-04-16",
       "status": "current"
     },
@@ -308,7 +362,11 @@
         "frontend/app/components/DuelDebateView.vue",
         "frontend/app/components/DuelScoreBar.vue"
       ],
-      "depends_on": ["chat", "specialists", "knowledge-graph"],
+      "depends_on": [
+        "chat",
+        "specialists",
+        "knowledge-graph"
+      ],
       "last_updated": "2025-07-27",
       "status": "stale"
     },
@@ -322,7 +380,10 @@
         "frontend/app/components/KeyProtectionInfo.vue",
         "frontend/app/types/index.ts"
       ],
-      "depends_on": ["preferences-settings", "chat"],
+      "depends_on": [
+        "preferences-settings",
+        "chat"
+      ],
       "last_updated": "2026-04-16",
       "status": "current"
     },
@@ -349,7 +410,11 @@
         "frontend/app/types/index.ts",
         "frontend/tests/composables/useLocalModelsIntegration.test.ts"
       ],
-      "depends_on": ["chat", "api-key-management", "workspace-onboarding"],
+      "depends_on": [
+        "chat",
+        "api-key-management",
+        "workspace-onboarding"
+      ],
       "last_updated": "2026-04-17",
       "status": "current"
     },
@@ -366,7 +431,13 @@
         "backend/routers/graph.py",
         "backend/tests/test_cross_source.py"
       ],
-      "depends_on": ["knowledge-graph", "soft-edges", "jira-graph", "enrichment-pipeline", "memory"],
+      "depends_on": [
+        "knowledge-graph",
+        "soft-edges",
+        "jira-graph",
+        "enrichment-pipeline",
+        "memory"
+      ],
       "last_updated": "2026-04-17",
       "status": "current"
     },
@@ -384,7 +455,13 @@
         "backend/routers/chat.py",
         "backend/tests/test_jira_strategist.py"
       ],
-      "depends_on": ["specialists", "jira-ingest", "duel", "knowledge-graph", "enrichment-pipeline"],
+      "depends_on": [
+        "specialists",
+        "jira-ingest",
+        "duel",
+        "knowledge-graph",
+        "enrichment-pipeline"
+      ],
       "last_updated": "2025-07-27",
       "status": "current"
     }
