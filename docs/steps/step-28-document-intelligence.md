@@ -8,7 +8,7 @@
 > intelligence (section typing) and a real business workflow (client
 > estimate) become defensible additions instead of guesswork.
 
-**Status**: ⬜ Planned
+**Status**: ✅ Done
 **Depends on**: Step 27 (PDF/text section split — landed in Phase 19)
 **Effort**: ~4–5 days backend + frontend, no schema migration
 
@@ -52,7 +52,7 @@ exploits per-section retrieval).
 
 | Sub-step | Title | Status |
 |----------|-------|--------|
-| [28a](step-28a-retrieval-trace-ui.spec.md) | Retrieval Trace UI — surface `_signals` and graph-expansion provenance per chat answer | ⬜ |
+| [28a](step-28a-retrieval-trace-ui.spec.md) | Retrieval Trace UI — surface `_signals` and graph-expansion provenance per chat answer | ✅ |
 | [28b](step-28b-memory-document-grouping.spec.md) | Memory document grouping — collapse split documents into one expandable parent in the sidebar | ✅ |
 | [28c](step-28c-eval-baseline.spec.md) | Eval baseline against the four reference PDFs — frozen query set + reproducible run script | ✅ |
 | [28d](step-28d-section-classification.spec.md) | Section type classification (heuristic + LLM fallback) and a retrieval filter that exploits it | ✅ |

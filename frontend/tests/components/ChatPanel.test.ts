@@ -102,4 +102,65 @@ describe('ChatPanel', () => {
     await wrapper.find('textarea.chat-panel__input').setValue('hello world only')
     expect(wrapper.find('.chat-panel__url-bar').exists()).toBe(false)
   })
+
+  // Step 28a — Retrieval Trace UI
+  it('trace toggle is collapsed by default when message has trace items', async () => {
+    const wrapper = await mountSuspended(ChatPanel, {
+      props: {
+        ...baseProps,
+        messages: [{
+          role: 'assistant' as const,
+          content: 'Answer',
+          trace: [
+            { path: 'knowledge/foo.md', title: 'Foo', score: 0.81, reason: 'primary' as const, via: 'cosine', signals: { cosine: 0.81 } },
+            { path: 'knowledge/bar.md', title: 'Bar', score: 0.55, reason: 'primary' as const, via: 'bm25', signals: { bm25: 0.55 } },
+            { path: 'inbox/baz.md', title: 'Baz', score: 0.30, reason: 'expansion' as const, via: 'graph', edge_type: 'related', tier: 'strong' },
+          ],
+        }],
+      },
+    })
+    // Toggle button shows count, list is hidden
+    expect(wrapper.find('.trace-list__toggle').text()).toContain('Used context (3)')
+    expect(wrapper.find('.trace-list__items').exists()).toBe(false)
+  })
+
+  it('trace list expands on click and shows all items', async () => {
+    const wrapper = await mountSuspended(ChatPanel, {
+      props: {
+        ...baseProps,
+        messages: [{
+          role: 'assistant' as const,
+          content: 'Answer',
+          trace: [
+            { path: 'knowledge/foo.md', title: 'Foo', score: 0.81, reason: 'primary' as const, via: 'cosine', signals: { cosine: 0.81 } },
+            { path: 'knowledge/bar.md', title: 'Bar', score: 0.55, reason: 'primary' as const, via: 'bm25', signals: { bm25: 0.55 } },
+          ],
+        }],
+      },
+    })
+    await wrapper.find('.trace-list__toggle').trigger('click')
+    const items = wrapper.findAll('.trace-list__item')
+    expect(items).toHaveLength(2)
+  })
+
+  it('expansion trace items get hollow dot and navigation link', async () => {
+    const wrapper = await mountSuspended(ChatPanel, {
+      props: {
+        ...baseProps,
+        messages: [{
+          role: 'assistant' as const,
+          content: 'Answer',
+          trace: [
+            { path: 'inbox/baz.md', title: 'Baz', score: 0.30, reason: 'expansion' as const, via: 'graph', edge_type: 'related', tier: 'strong' },
+          ],
+        }],
+      },
+    })
+    await wrapper.find('.trace-list__toggle').trigger('click')
+    const item = wrapper.find('.trace-list__item--expansion')
+    expect(item.exists()).toBe(true)
+    expect(item.find('.trace-list__dot--expansion').exists()).toBe(true)
+    const link = item.find('a.trace-list__path')
+    expect(link.attributes('href')).toContain(encodeURIComponent('inbox/baz.md'))
+  })
 })
