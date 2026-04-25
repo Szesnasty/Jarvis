@@ -608,11 +608,28 @@ async def _emit_document_sections(
         raise IngestError(f"Failed to index sections: {exc}") from exc
 
     connections_payload = None
+    section_connect_job_id: Optional[str] = None
     try:
         _stage("linking")
-        from services.connection_service import connect_note
+        from services.connection_service import (
+            connect_note,
+            schedule_section_connect,
+        )
         connections = await connect_note(index_rel_path, workspace_path=workspace_path)
         connections_payload = connections.model_dump()
+
+        # Step 28b plan B — sections also need cross-document Smart Connect
+        # to be reachable by retrieval expansion. Fire it as a background
+        # job so the ingest response stays fast; the UI badge tracks
+        # progress and shows a "Connecting N sections…" indicator.
+        section_rel_paths = [
+            sf.relative_to(mem).as_posix() for sf in section_files
+        ]
+        section_connect_job_id = schedule_section_connect(
+            section_rel_paths,
+            workspace_path=workspace_path,
+            doc_title=title,
+        )
     except Exception as exc:
         logger.warning("Smart Connect after section split failed: %s", exc)
 
@@ -624,6 +641,7 @@ async def _emit_document_sections(
         "size": total_size,
         "sections": len(sections),
         "connections": connections_payload,
+        "section_connect_job_id": section_connect_job_id,
     }
 
 
