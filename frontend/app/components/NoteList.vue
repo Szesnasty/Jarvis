@@ -83,18 +83,26 @@
           <li
             class="note-list__item note-list__item--document"
             :class="{ 'note-list__item--active': selectedPath === node.index.path }"
-            @click="$emit('select', node.index.path)"
+            @click="toggleDoc(node.index.path)"
           >
             <div class="note-list__item-row">
-              <button
-                class="note-list__chevron-btn"
-                :title="isExpanded(node.index.path) ? 'Collapse' : 'Expand'"
-                @click.stop="toggleDoc(node.index.path)"
-              >
-                <span class="note-list__chevron" :class="{ 'note-list__chevron--open': isExpanded(node.index.path) }">▸</span>
-              </button>
+              <span
+                class="note-list__chevron"
+                :class="{ 'note-list__chevron--open': isExpanded(node.index.path) }"
+                aria-hidden="true"
+              >▸</span>
               <span class="note-list__item-title">{{ node.index.title || node.index.path }}</span>
               <span class="note-list__section-count">{{ node.sections.length }} {{ node.sections.length === 1 ? 'section' : 'sections' }}</span>
+              <button
+                class="note-list__open-index"
+                title="Open document index"
+                @click.stop="$emit('select', node.index.path)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                </svg>
+              </button>
               <button
                 class="note-list__delete"
                 title="Delete document and all sections"
@@ -464,36 +472,46 @@ function onClearSearch() {
 }
 
 /* Step 28b — document grouping styles. */
-.note-list__chevron-btn {
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  padding: 0;
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
+.note-list__item--document {
   cursor: pointer;
-  border-radius: 3px;
-  transition: color 0.15s, background 0.15s;
-}
-
-.note-list__chevron-btn:hover {
-  color: var(--neon-cyan);
-  background: var(--bg-elevated);
 }
 
 .note-list__chevron {
   display: inline-block;
+  flex-shrink: 0;
+  width: 14px;
   font-size: 0.7rem;
+  color: var(--text-muted);
   transition: transform 0.15s ease;
   line-height: 1;
 }
 
 .note-list__chevron--open {
   transform: rotate(90deg);
+}
+
+.note-list__open-index {
+  flex-shrink: 0;
+  opacity: 0;
+  background: none;
+  border: none;
+  padding: 0.2rem;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.note-list__item:hover .note-list__open-index {
+  opacity: 0.6;
+}
+
+.note-list__open-index:hover {
+  opacity: 1 !important;
+  color: var(--neon-cyan);
+  background: var(--bg-elevated);
 }
 
 .note-list__section-count {
