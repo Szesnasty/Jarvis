@@ -26,6 +26,15 @@ describe('components/ImportDialog.vue', () => {
     expect(input.attributes('accept')).toBe('.md,.txt,.pdf,.csv,.xml,.json')
   })
 
+  it('file input allows multiple in generic mode', async () => {
+    const wrapper = await mountSuspended(ImportDialog, {
+      props: { visible: true },
+    })
+    const input = wrapper.find('.import-dialog__file-input')
+    // Generic mode is default; multiple bound to (mode === 'generic').
+    expect(input.attributes('multiple')).toBeDefined()
+  })
+
   it('dropzone is visible', async () => {
     const wrapper = await mountSuspended(ImportDialog, {
       props: { visible: true },
