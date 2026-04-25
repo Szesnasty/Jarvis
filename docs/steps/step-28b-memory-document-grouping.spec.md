@@ -6,7 +6,7 @@
 > PDFs the sidebar shows 4 rows by default, not 50.
 
 **Parent**: [step-28-document-intelligence.md](step-28-document-intelligence.md)
-**Status**: ⬜ Planned
+**Status**: ✅ Done
 
 ---
 
