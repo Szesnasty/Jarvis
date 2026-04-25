@@ -23,7 +23,7 @@ from typing import Dict, List, Optional
 class IngestJob:
     id: str
     name: str
-    kind: str  # "file" | "url" | "youtube"
+    kind: str  # "file" | "url" | "youtube" | "graph_rebuild"
     started_at: float
     size_bytes: Optional[int] = None
     status: str = "running"  # "running" | "done" | "failed"
@@ -36,6 +36,45 @@ _lock = threading.Lock()
 _jobs: Dict[str, IngestJob] = {}
 # Recently finished jobs are kept briefly so the UI can show "✓ done" before fading.
 _FINISHED_TTL_S = 8.0
+
+# Separate flag for the background graph rebuild so we only run one at a time
+# and can report its progress as a dedicated job in the status snapshot.
+_rebuild_job_id: Optional[str] = None
+
+
+def schedule_graph_rebuild(workspace_path=None) -> None:
+    """Fire a background rebuild_graph() if none is already running.
+
+    Called automatically after each file ingest.  The rebuild is tracked as a
+    special ``kind="graph_rebuild"`` job so the frontend can show a
+    "Building graph…" indicator without blocking the ingest response.
+    """
+    global _rebuild_job_id
+    with _lock:
+        # Skip if a rebuild job is already running.
+        if _rebuild_job_id is not None:
+            existing = _jobs.get(_rebuild_job_id)
+            if existing is not None and existing.status == "running":
+                return
+
+    job_id = start_job("Graph rebuild", kind="graph_rebuild")
+    with _lock:
+        _rebuild_job_id = job_id
+
+    def _run():
+        import logging
+        log = logging.getLogger(__name__)
+        try:
+            update_stage(job_id, "rebuilding")
+            from services.graph_service import rebuild_graph
+            rebuild_graph(workspace_path=workspace_path)
+            finish_job(job_id)
+        except Exception as exc:
+            log.warning("Background graph rebuild failed: %s", exc)
+            finish_job(job_id, error=str(exc))
+
+    t = threading.Thread(target=_run, daemon=True, name="graph-rebuild")
+    t.start()
 
 
 def _prune_finished_locked() -> None:
