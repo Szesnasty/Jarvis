@@ -52,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 const props = defineProps<{
   pendingStrong: number
@@ -70,11 +70,21 @@ const { show: showSnackbar } = useSnackbar()
 const confirming = ref(false)
 const busy = ref(false)
 const threshold = ref(0.8)
+// Optimistically hide the banner as soon as the user confirms, so it
+// doesn't re-appear from coverage polling while the promote is in flight.
+const dismissed = ref(false)
 
-const visible = computed(() => props.pendingStrong > 0)
+const visible = computed(() => !dismissed.value && props.pendingStrong > 0)
+
+// When the parent reports zero pending (coverage refreshed after promote),
+// re-arm so the banner can appear again if new suggestions arrive later.
+watch(() => props.pendingStrong, (n) => {
+  if (n === 0) dismissed.value = false
+})
 
 async function onConfirm() {
   busy.value = true
+  dismissed.value = true  // hide immediately — don't wait for poll
   try {
     const res = await promoteBulk(threshold.value, 'all', false)
     if (res.promoted === 0) {
@@ -87,8 +97,10 @@ async function onConfirm() {
     }
     emit('promoted', { promoted: res.promoted, notes_changed: res.notes_changed })
     confirming.value = false
+    // dismissed stays true until parent refreshes coverage and passes 0
   } catch (e: unknown) {
     showSnackbar(`Could not promote: ${(e as Error).message}`, { type: 'error' })
+    dismissed.value = false  // restore banner so user can retry
   } finally {
     busy.value = false
   }

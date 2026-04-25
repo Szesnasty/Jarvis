@@ -94,6 +94,9 @@ function capitalize(s: string): string {
   return s ? s[0]!.toUpperCase() + s.slice(1) : s
 }
 
+/** Background infrastructure jobs with dedicated UI elsewhere (SmartConnectStatus, Graph page). */
+const BACKGROUND_KINDS = new Set(['section_connect', 'graph_rebuild'])
+
 export function useIngestStatus() {
   const activeUploads = computed(() =>
     uploads.value.filter((u) => u.state === 'uploading' || u.state === 'processing'),
@@ -101,9 +104,14 @@ export function useIngestStatus() {
 
   // Combined active count: client uploads in flight + server jobs not started here
   // (e.g. ingest started in another tab, URL import).
+  // Background infrastructure jobs (section_connect, graph_rebuild) are excluded —
+  // they have dedicated indicators (SmartConnectStatus badge, Graph page) and should
+  // not inflate the "N files" counter in the StatusBar.
   const activeCount = computed(() => {
     const localNames = new Set(activeUploads.value.map((u) => u.name))
-    const extraServer = serverActive.value.filter((j) => !localNames.has(j.name)).length
+    const extraServer = serverActive.value.filter(
+      (j) => !localNames.has(j.name) && !BACKGROUND_KINDS.has(j.kind),
+    ).length
     return activeUploads.value.length + extraServer
   })
 
@@ -121,7 +129,10 @@ export function useIngestStatus() {
         finished_at: Date.now() / 1000,
         error: u.error || 'failed',
       }))
-    return [...localFailed, ...serverRecent.value]
+    // Filter out background infrastructure jobs — they have dedicated UI,
+    // their "done" state shouldn't linger as a "Done" badge in the StatusBar.
+    const serverRecentFiltered = serverRecent.value.filter((j) => !BACKGROUND_KINDS.has(j.kind))
+    return [...localFailed, ...serverRecentFiltered]
   })
 
   const hasActivity = computed(() => activeCount.value > 0 || recent.value.length > 0)

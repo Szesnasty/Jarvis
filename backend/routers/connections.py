@@ -656,7 +656,6 @@ async def promote_bulk(payload: BulkPromoteRequest) -> BulkPromoteResponse:
     dismissed) and emits one ``promote`` event per promoted pair so the
     Smart Connect quality stats stay accurate.
     """
-    from services.connection_events import write_event
     from services.connection_service import CURRENT_SMART_CONNECT_VERSION
     from services.dismissed_suggestions import list_dismissed_for
     from services.memory_service import _db_path
@@ -689,6 +688,7 @@ async def promote_bulk(payload: BulkPromoteRequest) -> BulkPromoteResponse:
     notes_changed = 0
     skipped = 0
     scanned = 0
+    pending_events: list[tuple[str, list]] = []
 
     for note_path in _iter_note_paths(db_p, mem):
         full_path = mem / note_path
@@ -746,20 +746,26 @@ async def promote_bulk(payload: BulkPromoteRequest) -> BulkPromoteResponse:
             fm["related"] = related
             fm["suggested_related"] = kept_suggestions
             full_path.write_text(add_frontmatter(body, fm), encoding="utf-8")
-            for target, conf, methods, tier in promoted_here:
-                write_event(
-                    db_p,
-                    event_type="promote",
-                    note_path=note_path,
-                    target_path=target,
-                    confidence=conf,
-                    methods=methods,
-                    tier=tier,
-                    smart_connect_version=CURRENT_SMART_CONNECT_VERSION,
-                )
+            pending_events.append((note_path, promoted_here))
 
         promoted += len(promoted_here)
         notes_changed += 1
+
+    # Write all analytics events in one transaction to avoid SQLite lock
+    # contention that occurs when N individual write_event() calls race.
+    if not payload.dry_run and pending_events:
+        from services.connection_events import write_events_batch
+        batch_rows = [
+            (note_path, target, conf, methods, tier)
+            for note_path, ph in pending_events
+            for target, conf, methods, tier in ph
+        ]
+        write_events_batch(
+            db_p,
+            event_type="promote",
+            rows=batch_rows,
+            smart_connect_version=CURRENT_SMART_CONNECT_VERSION,
+        )
 
     return BulkPromoteResponse(
         promoted=promoted,
