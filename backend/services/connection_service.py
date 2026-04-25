@@ -95,6 +95,11 @@ class ConnectionResult(BaseModel):
     aliases_matched: List[str] = Field(default_factory=list)
     entities: EntityCounts = Field(default_factory=EntityCounts)
     graph_edges_added: int = 0
+    # True when _finalise detected that suggestions were byte-equivalent to
+    # what's already on disk and skipped the rewrite. Used by callers
+    # (backfill, badge counters) to distinguish "ran but nothing changed"
+    # from "ran and updated the file".
+    unchanged: bool = False
 
 
 @dataclass
@@ -373,11 +378,17 @@ async def generate_suggestions(
 async def apply_suggestions(
     ctx: "_SuggestContext",
     min_confidence: Optional[float] = None,
+    *,
+    force: bool = False,
 ) -> ConnectionResult:
     """Write suggestions to frontmatter, update graph, emit edges.
 
     Filters by ``min_confidence`` when provided: only suggestions at or above
     the threshold are written to the note. Useful for conservative bulk runs.
+
+    When ``force=True``, the on-disk idempotency check in :func:`_finalise`
+    is bypassed and the frontmatter is rewritten even if suggestions are
+    byte-equivalent to the existing file. Used by backfill --force.
     """
     to_write = ctx.suggestions
     if min_confidence is not None:
@@ -386,6 +397,7 @@ async def apply_suggestions(
         ctx.note_path, ctx.ws, ctx.fm, ctx.body, ctx.full_path, to_write,
         aliases_matched=ctx.aliases_matched,
         mode=ctx.mode,
+        force=force,
     )
 
 
@@ -396,11 +408,15 @@ async def connect_note(
     *,
     dry_run: bool = False,
     min_confidence: Optional[float] = None,
+    force: bool = False,
 ) -> ConnectionResult:
     """Run the per-note Smart Connect pipeline.
 
     When ``dry_run=True``, returns suggestions but does NOT write frontmatter,
     graph JSON, alias_index, dismissed_suggestions, or connection_events.
+
+    When ``force=True``, the per-note on-disk idempotency check is bypassed
+    and the frontmatter is rewritten even when suggestions are unchanged.
     """
     ctx = await generate_suggestions(note_path, workspace_path=workspace_path, mode=mode)
     if dry_run:
@@ -411,7 +427,73 @@ async def connect_note(
             aliases_matched=ctx.aliases_matched,
             graph_edges_added=0,
         )
-    return await apply_suggestions(ctx, min_confidence=min_confidence)
+    return await apply_suggestions(ctx, min_confidence=min_confidence, force=force)
+
+
+def schedule_section_connect(
+    section_paths: List[str],
+    *,
+    workspace_path: Optional[Path] = None,
+    doc_title: str = "",
+) -> Optional[str]:
+    """Run Smart Connect on every section of a freshly-split document.
+
+    Step 28b plan B — after :func:`_emit_document_sections` writes the
+    section files and calls ``connect_note`` on the index, this helper
+    fires a background task that runs ``connect_note`` on each section
+    sequentially. Sequential processing keeps embedding-service load
+    bounded; the per-note pipeline is already cheap.
+
+    Tracked as an ingest job (``kind="section_connect"``) so the UI badge
+    can show "Connecting 12/30 sections…" while the ingest response has
+    already returned. Returns the job id, or ``None`` if no sections
+    were queued or the runtime has no event loop yet.
+    """
+    if not section_paths:
+        return None
+
+    try:
+        from services.ingest_jobs import start_job, finish_job, update_stage
+    except Exception:  # pragma: no cover — tracker should always be importable
+        return None
+
+    name = f"Smart Connect: {doc_title or 'sections'}"
+    job_id = start_job(name, kind="section_connect")
+
+    async def _run() -> None:
+        done = 0
+        try:
+            for sf_rel in section_paths:
+                update_stage(job_id, f"linking {done + 1}/{len(section_paths)}")
+                try:
+                    await connect_note(sf_rel, workspace_path=workspace_path, mode="fast")
+                except Exception as exc:
+                    logger.warning(
+                        "auto section connect failed for %s: %s", sf_rel, exc
+                    )
+                done += 1
+            finish_job(job_id)
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("section_connect job %s failed: %s", job_id, exc)
+            finish_job(job_id, error=str(exc))
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop — caller is sync. Fall back to a thread that
+        # spins up its own loop, so this stays safe to call from anywhere.
+        import threading
+
+        def _thread_target() -> None:
+            asyncio.run(_run())
+
+        threading.Thread(
+            target=_thread_target, daemon=True, name="section-connect"
+        ).start()
+        return job_id
+
+    loop.create_task(_run())
+    return job_id
 
 
 def _is_semantic_orphan_safe(note_path: str, ws: Path) -> bool:
@@ -661,6 +743,33 @@ def _alias_signal(
     return by_path, matched
 
 
+def _suggestions_fingerprint(items) -> list:
+    """Canonical, comparison-friendly view of a suggestion list.
+
+    Drops volatile fields (``suggested_at``, ``score_breakdown``) and rounds
+    floats so two runs that produce semantically identical suggestions can
+    be detected as equal. Used to make _finalise idempotent on disk: if the
+    fingerprint matches what's already in the frontmatter we skip the write
+    entirely, eliminating Obsidian/git noise from "Run on all notes".
+    """
+    out: list = []
+    for s in items or []:
+        if hasattr(s, "path"):
+            path = s.path
+            conf = float(s.confidence)
+            methods = list(s.methods or [])
+            evidence = s.evidence or ""
+        elif isinstance(s, dict):
+            path = s.get("path", "")
+            conf = float(s.get("confidence", 0.0))
+            methods = list(s.get("methods") or [])
+            evidence = s.get("evidence") or ""
+        else:
+            continue
+        out.append((path, round(conf, 3), tuple(sorted(methods)), evidence))
+    return out
+
+
 async def _finalise(
     note_path: str,
     ws: Path,
@@ -670,7 +779,34 @@ async def _finalise(
     suggested: List[SuggestedLink],
     aliases_matched: Optional[List[str]] = None,
     mode: str = "fast",
+    *,
+    force: bool = False,
 ) -> ConnectionResult:
+    # ── Idempotency check ──────────────────────────────────────────────
+    # If suggestions are byte-for-byte equivalent to what's already on disk
+    # and we're at the current Smart Connect version, do NOT touch the
+    # file, the graph, or the provenance edges. This is what prevents
+    # "Run on all notes" from rewriting every frontmatter on every run.
+    # ``force=True`` (used by backfill --force) bypasses the check and
+    # always rewrites, so version-bump migrations stay possible.
+    existing_sc = fm.get("smart_connect") if isinstance(fm.get("smart_connect"), dict) else {}
+    existing_version = int(existing_sc.get("version", 0)) if existing_sc else 0
+    existing_fp = _suggestions_fingerprint(fm.get("suggested_related"))
+    new_fp = _suggestions_fingerprint(suggested)
+    if (
+        not force
+        and existing_version >= CURRENT_SMART_CONNECT_VERSION
+        and existing_fp == new_fp
+    ):
+        return ConnectionResult(
+            note_path=note_path,
+            suggested=suggested,
+            strong_count=sum(1 for s in suggested if s.tier == "strong"),
+            aliases_matched=aliases_matched or [],
+            graph_edges_added=0,
+            unchanged=True,
+        )
+
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     fm["smart_connect"] = {
         "version": CURRENT_SMART_CONNECT_VERSION,

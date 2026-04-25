@@ -268,6 +268,7 @@ async def backfill_connections(payload: BackfillRequest) -> StreamingResponse:
                         mode=payload.mode,
                         dry_run=payload.dry_run,
                         min_confidence=payload.min_confidence,
+                        force=payload.force,
                     )
                     added = len(result.suggested)
                     suggestions_added += added
@@ -535,3 +536,76 @@ def _iter_note_paths(db_p: Path, mem: Path):
     # Fallback: walk filesystem
     for f in sorted(mem.rglob("*.md")):
         yield str(f.relative_to(mem))
+
+
+# ---------------------------------------------------------------------------
+# Coverage endpoint (Step 28b plan B)
+# ---------------------------------------------------------------------------
+
+@router.get("/coverage")
+async def connection_coverage() -> dict:
+    """Smart Connect coverage snapshot for the current workspace.
+
+    Lightweight counts the UI uses to drive the HelpIcon tooltip and the
+    per-document badge: how many notes already have suggestions vs how many
+    are still pending. Split-document sections are surfaced separately so
+    the UI can say "8 sections pending in 2 documents".
+    """
+    from utils.markdown import parse_frontmatter
+    from services.memory_service import _db_path
+    from services.ingest_jobs import snapshot as jobs_snapshot
+
+    ws = _workspace()
+    db_p = _db_path(ws)
+    mem = ws / "memory"
+
+    notes_total = 0
+    notes_with_suggestions = 0
+    sections_total = 0
+    sections_with_suggestions = 0
+    sections_pending_by_parent: dict[str, int] = {}
+
+    if mem.exists():
+        for note_path in _iter_note_paths(db_p, mem):
+            full_path = mem / note_path
+            if not full_path.exists():
+                continue
+            notes_total += 1
+            try:
+                fm, _ = parse_frontmatter(full_path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            has_suggestions = bool(fm.get("suggested_related"))
+            if has_suggestions:
+                notes_with_suggestions += 1
+
+            parent = fm.get("parent")
+            if parent:
+                sections_total += 1
+                if has_suggestions:
+                    sections_with_suggestions += 1
+                else:
+                    sections_pending_by_parent[parent] = (
+                        sections_pending_by_parent.get(parent, 0) + 1
+                    )
+
+    sections_pending = sections_total - sections_with_suggestions
+    documents_pending = len(sections_pending_by_parent)
+
+    # Surface any in-flight section_connect job so the UI can show progress
+    # right after a fresh ingest instead of a stale "X pending" number.
+    active_section_jobs = [
+        j for j in jobs_snapshot().get("active", [])
+        if j.get("kind") == "section_connect"
+    ]
+
+    return {
+        "notes_total": notes_total,
+        "notes_with_suggestions": notes_with_suggestions,
+        "notes_pending": notes_total - notes_with_suggestions,
+        "sections_total": sections_total,
+        "sections_with_suggestions": sections_with_suggestions,
+        "sections_pending": sections_pending,
+        "documents_pending": documents_pending,
+        "active_section_jobs": active_section_jobs,
+    }
