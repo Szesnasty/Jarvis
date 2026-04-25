@@ -122,6 +122,35 @@ async def test_import_pdf_indexed(ws_db, tmp_path):
 
 
 @pytest.mark.anyio
+async def test_import_json_pretty_prints(ws_db, tmp_path):
+    src = tmp_path / "source" / "config.json"
+    src.parent.mkdir(exist_ok=True)
+    src.write_text('{"name":"jarvis","items":[1,2,3],"meta":{"k":"\u00f3"}}', encoding="utf-8")
+
+    result = await fast_ingest(src, "knowledge", workspace_path=ws_db)
+    assert result["path"].endswith(".md")
+    target = ws_db / "memory" / result["path"]
+    content = target.read_text(encoding="utf-8")
+    assert "```json" in content
+    # Pretty-printed (indented) and unicode preserved
+    assert '"name": "jarvis"' in content
+    assert "\u00f3" in content
+
+
+@pytest.mark.anyio
+async def test_import_invalid_json_keeps_raw_text(ws_db, tmp_path):
+    src = tmp_path / "source" / "broken.json"
+    src.parent.mkdir(exist_ok=True)
+    src.write_text("{ not valid json", encoding="utf-8")
+
+    result = await fast_ingest(src, "knowledge", workspace_path=ws_db)
+    target = ws_db / "memory" / result["path"]
+    content = target.read_text(encoding="utf-8")
+    assert "```json" in content
+    assert "not valid json" in content
+
+
+@pytest.mark.anyio
 async def test_import_duplicate_path_renames(ws_db, md_file):
     await fast_ingest(md_file, "knowledge", workspace_path=ws_db)
     result2 = await fast_ingest(md_file, "knowledge", workspace_path=ws_db)

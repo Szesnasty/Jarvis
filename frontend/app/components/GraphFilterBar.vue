@@ -106,8 +106,8 @@ export interface GraphFilters {
   searchText: string
   /** Selected sprint node ids (e.g. "sprint:sprint-42"). Empty set = show all sprints. */
   selectedSprints: Set<string>
-  /** Node glow intensity: off (pure perf), normal (current), high (full bloom). */
-  glowLevel: 'off' | 'normal' | 'high'
+  /** Node glow intensity: off (pure perf), normal (current), high (full bloom), mono (elegant b/w). */
+  glowLevel: 'off' | 'normal' | 'high' | 'mono'
 }
 
 // Canonical display names and colors for known node types.
@@ -207,7 +207,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocClick))
 
 // --- Glow cycle ------------------------------------------------------------
 function cycleGlow() {
-  const order: GraphFilters['glowLevel'][] = ['off', 'normal', 'high']
+  const order: GraphFilters['glowLevel'][] = ['off', 'normal', 'high', 'mono']
   const i = order.indexOf(props.filters.glowLevel)
   const next = order[(i + 1) % order.length]
   emit('update:filters', { ...props.filters, glowLevel: next })
@@ -384,6 +384,11 @@ const nodeTypes = computed(() => {
 .filter-bar__glow-dot--high {
   background: #22d3ee;
   box-shadow: 0 0 10px rgba(34, 211, 238, 1), 0 0 16px rgba(34, 211, 238, 0.6);
+}
+.filter-bar__glow-dot--mono {
+  background: #f5f5f5;
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* --- Sprint multi-select --- */

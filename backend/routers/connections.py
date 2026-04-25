@@ -206,12 +206,16 @@ async def backfill_connections(payload: BackfillRequest) -> StreamingResponse:
                     cursor = await db.execute("SELECT path FROM notes ORDER BY path")
                     rows = await cursor.fetchall()
                     paths = [row[0] for row in rows]
-        except Exception as exc:
-            logger.warning("backfill path collection failed: %s", exc)
+        except Exception:
+            # Log full traceback locally, but only return a generic message to the
+            # client — exception text may include filesystem paths or query
+            # fragments and the SSE stream is exposed to the browser (CodeQL).
+            logger.exception("backfill path collection failed")
             yield json.dumps({
                 "done": 0, "total": 0, "suggestions_added": 0,
                 "notes_changed": 0, "skipped": 0, "orphans_found": 0,
-                "dry_run": payload.dry_run, "error": str(exc),
+                "dry_run": payload.dry_run,
+                "error": "Internal error during path collection.",
             }) + "\n"
             return
 

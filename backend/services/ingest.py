@@ -10,7 +10,7 @@ from config import get_settings
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".csv", ".xml"}
+SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".csv", ".xml", ".json"}
 
 
 class IngestError(Exception):
@@ -119,6 +119,23 @@ async def fast_ingest(
         fm = _make_frontmatter(title, str(file_path))
         target = _unique_path(folder / md_name)
         target.write_text(fm + text, encoding="utf-8")
+
+    elif ext == ".json":
+        # Pretty-print JSON inside a fenced code block so it stays readable
+        # in the markdown viewer and remains greppable. Invalid JSON is
+        # preserved verbatim so the user doesn't lose data.
+        raw = file_path.read_text(encoding="utf-8")
+        try:
+            parsed = json.loads(raw)
+            body = json.dumps(parsed, indent=2, ensure_ascii=False)
+        except json.JSONDecodeError as exc:
+            logger.warning("JSON ingest: invalid JSON in %s (%s) — keeping raw text", file_path.name, exc)
+            body = raw
+        md_name = f"{_slugify(title)}.md"
+        fm = _make_frontmatter(title, str(file_path), tags=["imported", "json"])
+        content = f"{fm}```json\n{body}\n```\n"
+        target = _unique_path(folder / md_name)
+        target.write_text(content, encoding="utf-8")
 
     elif ext in (".csv", ".xml"):
         from services.structured_ingest import ingest_structured_file
