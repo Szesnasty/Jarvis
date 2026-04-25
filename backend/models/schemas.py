@@ -41,6 +41,11 @@ class NoteMetadataResponse(BaseModel):
     tags: list[str]
     updated_at: str
     word_count: int
+    # Step 28b — document grouping fields from frontmatter
+    document_type: Optional[str] = None
+    parent: Optional[str] = None
+    section_index: Optional[int] = None
+    section_type: Optional[str] = None
 
 
 class NoteDetailResponse(BaseModel):
