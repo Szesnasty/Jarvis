@@ -6,8 +6,10 @@
     :default-open="false"
   >
     <p class="smart-connect-section__lead">
-      Analyse every note in your vault and suggest related links based on BM25,
-      semantic similarity and aliases. Run a dry-run first to preview the impact.
+      Smart Connect runs automatically when you add new notes.
+      Use <strong>Backfill</strong> to process notes that existed before Smart Connect was enabled.
+      All analysis is <strong>100% local</strong> — BM25, semantic similarity, and alias matching.
+      No API key or AI model required.
     </p>
 
     <div class="smart-connect-section__warning" role="alert">
