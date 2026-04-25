@@ -138,45 +138,59 @@ async def ingest_file(
     folder: str = Form("knowledge"),
 ):
     from services.ingest import IngestError, fast_ingest
+    from services import ingest_jobs
 
     # Validate folder against path traversal
     if not _FOLDER_RE.match(folder):
         raise HTTPException(status_code=400, detail="Invalid folder name")
 
-    # Stream the upload to a temp file in chunks so we never hold the
-    # full payload in memory (large Jira exports can be hundreds of MB).
-    written = 0
-    with tempfile.NamedTemporaryFile(
-        delete=False,
-        suffix=Path(file.filename or "upload").suffix,
-    ) as tmp:
-        while True:
-            chunk = await file.read(_UPLOAD_CHUNK)
-            if not chunk:
-                break
-            written += len(chunk)
-            if written > MAX_UPLOAD_BYTES:
-                tmp.close()
-                Path(tmp.name).unlink(missing_ok=True)
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)",
-                )
-            tmp.write(chunk)
-        tmp_path = Path(tmp.name)
-
+    job_id = ingest_jobs.start_job(file.filename or "upload", kind="file")
+    error_for_job: Optional[str] = None
     try:
-        result = await fast_ingest(
-            tmp_path,
-            target_folder=folder,
-            original_name=file.filename,
-        )
-    except IngestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    finally:
-        tmp_path.unlink(missing_ok=True)
+        # Stream the upload to a temp file in chunks so we never hold the
+        # full payload in memory (large Jira exports can be hundreds of MB).
+        ingest_jobs.update_stage(job_id, "uploading")
+        written = 0
+        with tempfile.NamedTemporaryFile(
+            delete=False,
+            suffix=Path(file.filename or "upload").suffix,
+        ) as tmp:
+            while True:
+                chunk = await file.read(_UPLOAD_CHUNK)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > MAX_UPLOAD_BYTES:
+                    tmp.close()
+                    Path(tmp.name).unlink(missing_ok=True)
+                    error_for_job = f"File too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)"
+                    raise HTTPException(status_code=413, detail=error_for_job)
+                tmp.write(chunk)
+            tmp_path = Path(tmp.name)
 
-    return result
+        try:
+            result = await fast_ingest(
+                tmp_path,
+                target_folder=folder,
+                original_name=file.filename,
+                job_id=job_id,
+            )
+        except IngestError as exc:
+            error_for_job = str(exc)
+            raise HTTPException(status_code=400, detail=error_for_job)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        return result
+    finally:
+        ingest_jobs.finish_job(job_id, error=error_for_job)
+
+
+@router.get("/ingest/status")
+async def ingest_status():
+    """Snapshot of currently running and recently finished ingest jobs."""
+    from services import ingest_jobs
+    return ingest_jobs.snapshot()
 
 
 @router.post("/ingest-url")
@@ -185,22 +199,30 @@ async def ingest_url_endpoint(body: UrlIngestRequest):
     from services.ingest import IngestError
     from services.url_ingest import ingest_url
     from services.workspace_service import get_api_key
+    from services import ingest_jobs
 
     api_key = get_api_key() if body.summarize else None
     if body.summarize and not api_key:
         raise HTTPException(status_code=400, detail="API key not configured")
 
+    kind = "youtube" if "youtube.com" in body.url or "youtu.be" in body.url else "url"
+    job_id = ingest_jobs.start_job(body.url, kind=kind)
+    error_for_job: Optional[str] = None
     try:
-        result = await ingest_url(
-            url=body.url,
-            folder=body.folder,
-            summarize=body.summarize,
-            api_key=api_key,
-        )
-    except IngestError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        try:
+            result = await ingest_url(
+                url=body.url,
+                folder=body.folder,
+                summarize=body.summarize,
+                api_key=api_key,
+            )
+        except IngestError as exc:
+            error_for_job = str(exc)
+            raise HTTPException(status_code=400, detail=error_for_job)
 
-    return result
+        return result
+    finally:
+        ingest_jobs.finish_job(job_id, error=error_for_job)
 
 
 @router.post("/enrich/{note_path:path}")

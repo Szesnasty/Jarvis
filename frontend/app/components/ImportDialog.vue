@@ -183,6 +183,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useIngestStatus } from '~/composables/useIngestStatus'
+
+const ingest = useIngestStatus()
 
 defineProps<{
   visible: boolean
@@ -323,16 +326,21 @@ async function importGenericBatch() {
   let failCount = 0
   const lastErrors: string[] = []
 
-  // Sequential upload: each ingest triggers Smart Connect + indexing
-  // server-side; running them in parallel would race on SQLite writes.
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i]!
+  // Bounded parallel upload. The backend is now non-blocking (pdfplumber
+  // runs in a threadpool, SQLite has a 30 s busy_timeout) so we can run a
+  // few uploads at once and the user gets per-file XHR progress in the
+  // StatusBar.
+  const CONCURRENCY = 3
+  let nextIndex = 0
+  let doneSoFar = 0
+
+  const runOne = async (i: number) => {
     fileStatuses.value[i] = { state: 'uploading' }
+    const file = files[i]!
     try {
       const result = await importGeneric(file)
       fileStatuses.value[i] = { state: 'ok' }
       okCount += 1
-      // Emit per-file so parent (memory page) can refresh incrementally.
       emit('imported', result)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Import failed'
@@ -340,9 +348,21 @@ async function importGenericBatch() {
       failCount += 1
       if (lastErrors.length < 3) lastErrors.push(`${file.name}: ${msg}`)
     } finally {
-      uploadProgress.value = { done: i + 1, total: files.length }
+      doneSoFar += 1
+      uploadProgress.value = { done: doneSoFar, total: files.length }
     }
   }
+
+  const worker = async () => {
+    while (true) {
+      const i = nextIndex++
+      if (i >= files.length) return
+      await runOne(i)
+    }
+  }
+
+  const workerCount = Math.min(CONCURRENCY, files.length)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
 
   if (failCount === 0) {
     success.value = `Imported ${okCount} ${okCount === 1 ? 'file' : 'files'}.`
@@ -355,14 +375,12 @@ async function importGenericBatch() {
 }
 
 async function importGeneric(file: File): Promise<Record<string, unknown>> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('folder', targetFolder.value)
-
-  return await $fetch<Record<string, unknown>>('/api/memory/ingest', {
-    method: 'POST',
-    body: formData,
+  // Use the shared uploadFile() so the StatusBar pill shows real
+  // bytes-uploaded progress for each file.
+  const result = await ingest.uploadFile('/api/memory/ingest', file, {
+    folder: targetFolder.value,
   })
+  return (result || {}) as Record<string, unknown>
 }
 
 async function importJira(file: File) {

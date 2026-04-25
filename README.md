@@ -380,6 +380,15 @@ npm run serve:frontend     # frontend only
 npm run dev                # HMR frontend + auto-reload backend
 npm run dev:backend        # uvicorn --reload
 npm run dev:frontend       # nuxt dev
+
+# Reset workspace  (~/Jarvis/ data only — source code is never touched)
+npm run reset:all          # delete everything — asks "yes" in terminal to confirm
+npm run reset:db           # delete jarvis.db (SQLite index)
+npm run reset:memory       # delete memory/ folder (all Markdown notes)
+npm run reset:sessions     # delete app/sessions/ (chat history)
+npm run reset:graph        # delete graph/ folder (knowledge graph)
+npm run reset:agents       # delete agents/ folder (specialist definitions)
+npm run reset:cache        # delete app/cache/ (retrieval cache)
 ```
 
 </details>
@@ -446,6 +455,22 @@ This is **not** the source code — it's your personal data directory.
 │   └── graph.json         # knowledge graph data
 └── agents/                # specialist definitions (JSON)
 ```
+
+### Reset / wipe data
+
+All reset commands operate only on `~/Jarvis/` (or `JARVIS_WORKSPACE_PATH`). Source code is never touched.
+
+```bash
+npm run reset:all       # wipe everything — requires typing "yes" to confirm
+npm run reset:db        # database only  (rebuilds on next ingest)
+npm run reset:memory    # all Markdown notes
+npm run reset:sessions  # chat history
+npm run reset:graph     # knowledge graph
+npm run reset:agents    # specialist definitions
+npm run reset:cache     # retrieval cache
+```
+
+After `reset:all`, open **http://localhost:3000** and go through onboarding to create a fresh workspace.
 
 ### Retrieval pipeline
 

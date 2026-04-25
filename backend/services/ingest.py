@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -84,8 +85,15 @@ async def fast_ingest(
     target_folder: str = "knowledge",
     workspace_path: Optional[Path] = None,
     original_name: Optional[str] = None,
+    job_id: Optional[str] = None,
 ) -> Dict:
     """Import a file into memory without AI."""
+    from services import ingest_jobs
+
+    def _stage(name: str) -> None:
+        if job_id:
+            ingest_jobs.update_stage(job_id, name)
+
     if not file_path.exists():
         raise IngestError(f"File not found: {file_path}")
 
@@ -100,31 +108,35 @@ async def fast_ingest(
     folder.mkdir(parents=True, exist_ok=True)
 
     if ext == ".md":
-        content = file_path.read_text(encoding="utf-8")
+        content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
         if not content.strip().startswith("---"):
             content = _make_frontmatter(title, str(file_path)) + content
         target = _unique_path(folder / display_name)
-        target.write_text(content, encoding="utf-8")
+        await asyncio.to_thread(target.write_text, content, encoding="utf-8")
 
     elif ext == ".txt":
-        content = file_path.read_text(encoding="utf-8")
+        content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
         md_name = f"{_slugify(title)}.md"
         fm = _make_frontmatter(title, str(file_path))
         target = _unique_path(folder / md_name)
-        target.write_text(fm + content, encoding="utf-8")
+        await asyncio.to_thread(target.write_text, fm + content, encoding="utf-8")
 
     elif ext == ".pdf":
-        text = _extract_pdf_text(file_path)
+        # pdfplumber is fully synchronous and CPU-heavy on big PDFs (200 MB+).
+        # Without to_thread it blocks the FastAPI event loop, which is why
+        # /api/memory/ingest/status polls were stacking up as 'pending'.
+        _stage("extracting")
+        text = await asyncio.to_thread(_extract_pdf_text, file_path)
         md_name = f"{_slugify(title)}.md"
         fm = _make_frontmatter(title, str(file_path))
         target = _unique_path(folder / md_name)
-        target.write_text(fm + text, encoding="utf-8")
+        await asyncio.to_thread(target.write_text, fm + text, encoding="utf-8")
 
     elif ext == ".json":
         # Pretty-print JSON inside a fenced code block so it stays readable
         # in the markdown viewer and remains greppable. Invalid JSON is
         # preserved verbatim so the user doesn't lose data.
-        raw = file_path.read_text(encoding="utf-8")
+        raw = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
         try:
             parsed = json.loads(raw)
             body = json.dumps(parsed, indent=2, ensure_ascii=False)
@@ -135,7 +147,7 @@ async def fast_ingest(
         fm = _make_frontmatter(title, str(file_path), tags=["imported", "json"])
         content = f"{fm}```json\n{body}\n```\n"
         target = _unique_path(folder / md_name)
-        target.write_text(content, encoding="utf-8")
+        await asyncio.to_thread(target.write_text, content, encoding="utf-8")
 
     elif ext in (".csv", ".xml"):
         from services.structured_ingest import ingest_structured_file
@@ -153,11 +165,26 @@ async def fast_ingest(
 
     rel_path = target.relative_to(mem).as_posix()
 
+    # Capture size BEFORE the long-running indexing / Smart Connect phases.
+    # Doing it here (a) keeps the sync stat() off the hot async path,
+    # (b) avoids FileNotFoundError if the file is moved/replaced/deleted
+    # by a concurrent process (e.g. reset script, manual edit, another
+    # ingest hitting the same target name).
+    try:
+        target_size = await asyncio.to_thread(lambda: target.stat().st_size)
+    except FileNotFoundError:
+        target_size = 0
+
     from services.memory_service import index_note_file
     try:
+        _stage("indexing")
         await index_note_file(rel_path, workspace_path=workspace_path)
     except Exception as exc:
-        target.unlink(missing_ok=True)
+        # Best-effort cleanup; the file may already be gone.
+        try:
+            target.unlink(missing_ok=True)
+        except Exception:
+            pass
         raise IngestError(f"Failed to index note: {exc}") from exc
 
     # Step 25 — Smart Connect: per-note linking + incremental graph update.
@@ -166,6 +193,7 @@ async def fast_ingest(
     # "Reindex all" / "Repair graph" actions.
     connections_payload = None
     try:
+        _stage("linking")
         from services.connection_service import connect_note
         connections = await connect_note(rel_path, workspace_path=workspace_path)
         connections_payload = connections.model_dump()
@@ -177,7 +205,7 @@ async def fast_ingest(
         "title": title,
         "folder": target_folder,
         "source": str(file_path),
-        "size": target.stat().st_size,
+        "size": target_size,
         "connections": connections_payload,
     }
 

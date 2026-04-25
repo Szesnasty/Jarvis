@@ -361,6 +361,8 @@ async def _index_note(
     await init_database(db_path)
 
     async with aiosqlite.connect(str(db_path)) as db:
+        from services._db import apply_pragmas
+        await apply_pragmas(db)
         await db.execute(
             """
             INSERT INTO notes (path, title, folder, content_preview, body, tags, frontmatter,

@@ -10,9 +10,11 @@ from typing import Any, Optional
 
 import aiosqlite
 import httpx
+import sqlite3
 from pydantic import ValidationError
 
 from models.database import init_database
+from services._db import apply_pragmas
 
 from .models import (
     AMBIGUITY_LEVELS,
@@ -312,9 +314,11 @@ async def worker_loop(worker_idx: int, workspace_path: Optional[Path] = None) ->
     await init_database(target)
 
     async with aiosqlite.connect(str(target)) as db:
-        # 5 s busy timeout: backfill + ingest can hold short write locks;
-        # without this the worker dies with 'database is locked' instantly.
-        await db.execute("PRAGMA busy_timeout = 5000")
+        # Long busy_timeout + NORMAL fsync. Heavy ingest of large PDFs
+        # (200 MB+ → thousands of chunk + embedding writes) holds bursty
+        # write locks; without these the worker dies instantly with
+        # 'database is locked'.
+        await apply_pragmas(db)
         while _worker_running:
             try:
                 if should_pause_for_battery(workspace_path):
@@ -334,6 +338,17 @@ async def worker_loop(worker_idx: int, workspace_path: Optional[Path] = None) ->
                     await mark_item_failed(db, item.id)
             except asyncio.CancelledError:
                 raise
+            except sqlite3.OperationalError as exc:
+                # 'database is locked' under heavy bulk-write contention
+                # (ingest of large PDFs). Back off quietly instead of
+                # spamming a 60-line traceback every poll cycle.
+                msg = str(exc).lower()
+                if "locked" in msg or "busy" in msg:
+                    logger.debug("Enrichment worker %d backing off — DB busy", worker_idx)
+                    await asyncio.sleep(3.0)
+                else:
+                    logger.exception("Enrichment worker %d sqlite error", worker_idx)
+                    await asyncio.sleep(1.0)
             except Exception:
                 logger.exception("Enrichment worker %d loop error", worker_idx)
                 await asyncio.sleep(1.0)
