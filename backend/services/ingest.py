@@ -3,15 +3,26 @@ import json
 import logging
 import re
 import unicodedata
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from config import get_settings
 
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".csv", ".xml", ".json"}
+
+# ── PDF section split (step 27a) ─────────────────────────────────────────────
+# When a PDF's extracted text is long enough AND contains enough top-level
+# headings, split it into one Markdown note per section plus an index note.
+# Below either threshold the existing single-file path is used unchanged.
+SECTION_SPLIT_MIN_CHARS = 30_000
+SECTION_SPLIT_MIN_HEADINGS = 4
+# Hard ceiling: very long papers can produce hundreds of false-positive
+# headings; cap to avoid runaway file creation.
+SECTION_SPLIT_MAX_SECTIONS = 60
 
 
 class IngestError(Exception):
@@ -57,11 +68,184 @@ def _unique_path(target: Path) -> Path:
     raise IngestError(f"Too many files with the same name: {target.name}")
 
 
+def _unique_dir(target: Path) -> Path:
+    """Like ``_unique_path`` but for directories. Returns a non-existing dir."""
+    if not target.exists():
+        return target
+    parent = target.parent
+    name = target.name
+    for i in range(1, 1001):
+        candidate = parent / f"{name}-{i}"
+        if not candidate.exists():
+            return candidate
+    raise IngestError(f"Too many directories with the same name: {target.name}")
+
+
+# ── Heading detection for PDF section split (step 27a) ─────────────────────
+
+# Numbered: "1 Introduction", "2.3 Threat Model", "10. Conclusion"
+_HEADING_NUMBERED_RE = re.compile(r"^\d+(?:\.\d+){0,2}\.?\s+\S+")
+# All-caps: "ABSTRACT", "RELATED WORK" (≥ 4 chars, allows digits/punct)
+_HEADING_ALLCAPS_RE = re.compile(r"^[A-Z][A-Z0-9 \-:&]{3,80}$")
+# Title-case single line, up to 12 words, no trailing period
+_HEADING_TITLECASE_RE = re.compile(r"^[A-Z][\w\- ,&:]{3,80}$")
+
+
+def _is_top_level_numbered(line: str) -> bool:
+    """A numbered heading is top-level if it has zero or one dots in numbering."""
+    parts = line.split(None, 1)
+    if not parts:
+        return False
+    head = parts[0].rstrip(".")
+    return head.count(".") <= 1
+
+
+def _is_heading_line(line: str) -> bool:
+    """Heuristic: would this stripped line plausibly start a section?"""
+    stripped = line.strip()
+    n = len(stripped)
+    if n < 4 or n > 120:
+        return False
+    if stripped.endswith("."):
+        # Heading lines almost never end with a period (unlike sentences).
+        # Exception: numbered headings like "1." are allowed but their
+        # text part is checked separately below.
+        if not _HEADING_NUMBERED_RE.match(stripped):
+            return False
+    if _HEADING_NUMBERED_RE.match(stripped):
+        return True
+    if _HEADING_ALLCAPS_RE.match(stripped):
+        # Reject lines that look like sentences in caps (very long or
+        # full of common-word patterns is hard to detect cheaply; the
+        # length cap above handles the worst cases).
+        return True
+    # Title case: must have ≤ 12 words to look like a heading
+    if _HEADING_TITLECASE_RE.match(stripped):
+        words = stripped.split()
+        if len(words) <= 12:
+            # Reject if the line is almost certainly running prose:
+            # e.g. starts with a function word.
+            first = words[0].lower()
+            if first in {"the", "a", "an", "this", "that", "these", "those",
+                          "in", "on", "at", "for", "of", "to", "by", "with",
+                          "and", "but", "or", "if", "when", "while"}:
+                return False
+            return True
+    return False
+
+
+@dataclass
+class _PdfSection:
+    """Single section extracted from a PDF body."""
+    title: str
+    body: str
+
+
+def _detect_pdf_sections(text: str) -> List["_PdfSection"]:
+    """Detect top-level sections in PDF-extracted plain text.
+
+    Returns a list of (title, body) sections in document order. Always
+    includes a leading "Front Matter" section for content before the
+    first detected heading, when that content is non-empty.
+
+    Sections have whitespace-collapsed bodies but preserve paragraph
+    breaks (double newlines).
+    """
+    if not text or not text.strip():
+        return []
+
+    lines = text.split("\n")
+    n = len(lines)
+
+    # Identify candidate heading line indices. A line counts as a heading
+    # only when surrounded by blank lines (or file boundaries) — this
+    # filters out inline title-cased phrases inside paragraphs.
+    heading_indices: List[int] = []
+    for i, raw in enumerate(lines):
+        if not _is_heading_line(raw):
+            continue
+        prev_blank = i == 0 or lines[i - 1].strip() == ""
+        next_blank = i + 1 >= n or lines[i + 1].strip() == ""
+        if prev_blank and next_blank:
+            heading_indices.append(i)
+
+    # Filter to top-level only:
+    #   - numbered: must be top-level by our rule
+    #   - all-caps and title-case: kept as-is (they're already coarse)
+    top_level: List[int] = []
+    for idx in heading_indices:
+        line = lines[idx].strip()
+        if _HEADING_NUMBERED_RE.match(line):
+            if _is_top_level_numbered(line):
+                top_level.append(idx)
+        else:
+            top_level.append(idx)
+
+    if not top_level:
+        return []
+
+    sections: List[_PdfSection] = []
+
+    # Front matter: everything before the first heading
+    pre_text = "\n".join(lines[: top_level[0]]).strip()
+    if pre_text:
+        sections.append(_PdfSection(title="Front Matter", body=pre_text))
+
+    # Walk top-level headings, body = text up to next top-level heading
+    for j, start in enumerate(top_level):
+        title = lines[start].strip()
+        end = top_level[j + 1] if j + 1 < len(top_level) else n
+        body_lines = lines[start + 1 : end]
+        body = "\n".join(body_lines).strip()
+        sections.append(_PdfSection(title=title, body=body))
+
+    # Hard cap to prevent runaway false-positive heading explosions.
+    if len(sections) > SECTION_SPLIT_MAX_SECTIONS:
+        sections = sections[:SECTION_SPLIT_MAX_SECTIONS]
+    return sections
+
+
 def _make_frontmatter(title: str, source: str, tags: Optional[list] = None) -> str:
     from utils.markdown import add_frontmatter
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     fm = {"title": title, "date": now, "source": source, "tags": tags or ["imported"]}
     # add_frontmatter prepends to body; we just want the frontmatter
+    return add_frontmatter("", fm)
+
+
+def _make_section_frontmatter(
+    *,
+    title: str,
+    source: str,
+    parent_path: str,
+    section_index: int,
+    tags: Optional[list] = None,
+) -> str:
+    """Frontmatter for a per-section note created by PDF section split."""
+    from utils.markdown import add_frontmatter
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    fm = {
+        "title": title,
+        "date": now,
+        "source": source,
+        "parent": parent_path,
+        "section_index": section_index,
+        "tags": tags or ["imported", "pdf", "section"],
+    }
+    return add_frontmatter("", fm)
+
+
+def _make_index_frontmatter(title: str, source: str) -> str:
+    """Frontmatter for the index note that links all sections."""
+    from utils.markdown import add_frontmatter
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    fm = {
+        "title": title,
+        "date": now,
+        "source": source,
+        "tags": ["imported", "pdf", "document"],
+        "document_type": "pdf-document",
+    }
     return add_frontmatter("", fm)
 
 
@@ -78,6 +262,125 @@ def _extract_pdf_text(file_path: Path) -> str:
         return "\n\n".join(text_parts)
     except ImportError:
         raise IngestError("pdfplumber not installed. Install with: pip install pdfplumber")
+
+
+async def _emit_pdf_sections(
+    *,
+    title: str,
+    source_path: Path,
+    target_folder: str,
+    workspace_path: Optional[Path],
+    sections: List[_PdfSection],
+    job_id: Optional[str],
+) -> Dict:
+    """Write index + per-section notes for a long PDF and wire them up.
+
+    Step 27a. The index note links each section via ``[[wiki-link]]`` so
+    the bidirectional resolver in ``graph_service/builder.py`` produces
+    forward and reverse edges. Smart Connect runs ONCE on the index;
+    sections are reachable through the index hub, which keeps ingest
+    cost roughly the same as a single file.
+    """
+    from services import ingest_jobs
+    from services.memory_service import index_note_file
+
+    def _stage(name: str) -> None:
+        if job_id:
+            ingest_jobs.update_stage(job_id, name)
+
+    mem = _memory_dir(workspace_path)
+    folder = mem / target_folder
+    folder.mkdir(parents=True, exist_ok=True)
+
+    doc_slug = _slugify(title) or "document"
+    doc_dir = _unique_dir(folder / doc_slug)
+    doc_dir.mkdir(parents=True, exist_ok=False)
+
+    section_files: List[Path] = []
+    section_titles: List[str] = []
+    rel_doc_dir = doc_dir.relative_to(mem).as_posix()
+    index_rel_path = f"{rel_doc_dir}/index.md"
+
+    width = max(2, len(str(len(sections))))
+    for i, section in enumerate(sections, start=1):
+        slug = _slugify(section.title) or f"section-{i}"
+        slug = slug[:60].rstrip("-") or f"section-{i}"
+        fname = f"{str(i).zfill(width)}-{slug}.md"
+        target = doc_dir / fname
+        section_fm = _make_section_frontmatter(
+            title=section.title,
+            source=str(source_path),
+            parent_path=index_rel_path,
+            section_index=i,
+        )
+        await asyncio.to_thread(
+            target.write_text, section_fm + section.body + "\n", encoding="utf-8"
+        )
+        section_files.append(target)
+        section_titles.append(section.title)
+
+    # Index note links each section as a wiki-link. Wiki targets are paths
+    # relative to memory/ without the .md suffix, matching extract_wiki_links.
+    index_lines = [f"# {title}", ""]
+    for i, sf in enumerate(section_files, start=1):
+        rel = sf.relative_to(mem).with_suffix("").as_posix()
+        index_lines.append(f"{i}. [[{rel}]] — {section_titles[i - 1]}")
+    index_body = "\n".join(index_lines) + "\n"
+    index_fm = _make_index_frontmatter(title, str(source_path))
+    index_path = doc_dir / "index.md"
+    await asyncio.to_thread(
+        index_path.write_text, index_fm + index_body, encoding="utf-8"
+    )
+
+    logger.info(
+        "PDF section split: %s -> %d sections under %s",
+        source_path.name, len(sections), rel_doc_dir,
+    )
+
+    total_size = 0
+    try:
+        total_size = await asyncio.to_thread(
+            lambda: index_path.stat().st_size
+            + sum(sf.stat().st_size for sf in section_files)
+        )
+    except FileNotFoundError:
+        pass
+
+    _stage("indexing")
+    try:
+        await index_note_file(index_rel_path, workspace_path=workspace_path)
+        for sf in section_files:
+            sf_rel = sf.relative_to(mem).as_posix()
+            await index_note_file(sf_rel, workspace_path=workspace_path)
+    except Exception as exc:
+        # Best-effort cleanup of the whole document directory.
+        try:
+            for sf in section_files:
+                sf.unlink(missing_ok=True)
+            index_path.unlink(missing_ok=True)
+            doc_dir.rmdir()
+        except Exception:
+            pass
+        raise IngestError(f"Failed to index sections: {exc}") from exc
+
+    connections_payload = None
+    try:
+        _stage("linking")
+        from services.connection_service import connect_note
+        connections = await connect_note(index_rel_path, workspace_path=workspace_path)
+        connections_payload = connections.model_dump()
+    except Exception as exc:
+        logger.warning("Smart Connect after section split failed: %s", exc)
+
+    return {
+        "path": index_rel_path,
+        "title": title,
+        "folder": target_folder,
+        "source": str(source_path),
+        "size": total_size,
+        "sections": len(sections),
+        "connections": connections_payload,
+    }
 
 
 async def fast_ingest(
@@ -127,6 +430,23 @@ async def fast_ingest(
         # /api/memory/ingest/status polls were stacking up as 'pending'.
         _stage("extracting")
         text = await asyncio.to_thread(_extract_pdf_text, file_path)
+
+        # Step 27a — split long PDFs with enough headings into per-section
+        # notes so the graph sees them as a cluster of related notes rather
+        # than a single hub. Below either threshold the existing single-
+        # file path runs unchanged (memos, short reports stay one file).
+        sections = _detect_pdf_sections(text) if len(text) >= SECTION_SPLIT_MIN_CHARS else []
+        if len(sections) >= SECTION_SPLIT_MIN_HEADINGS:
+            _stage("splitting")
+            return await _emit_pdf_sections(
+                title=title,
+                source_path=file_path,
+                target_folder=target_folder,
+                workspace_path=workspace_path,
+                sections=sections,
+                job_id=job_id,
+            )
+
         md_name = f"{_slugify(title)}.md"
         fm = _make_frontmatter(title, str(file_path))
         target = _unique_path(folder / md_name)
