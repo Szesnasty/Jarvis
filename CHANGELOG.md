@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.13.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.12.0...jarvis-v0.13.0) (2026-04-25)
+
+
+### ✨ Features
+
+* **import:** multi-file selection in generic mode ([b184daa](https://github.com/Szesnasty/Jarvis/commit/b184daabbede86cdbebcc5a08337d9fe438b561a))
+
+
+### 🐛 Bug Fixes
+
+* **db:** apply busy_timeout to enrichment worker + backfill writers ([45a6d52](https://github.com/Szesnasty/Jarvis/commit/45a6d52f9efa147751331230e4efbffa67e453ad))
+
 ## [0.12.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.11.0...jarvis-v0.12.0) (2026-04-25)
 
 

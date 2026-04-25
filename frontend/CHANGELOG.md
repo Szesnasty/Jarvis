@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.13.0...frontend-v0.14.0) (2026-04-25)
+
+
+### ✨ Features
+
+* **import:** multi-file selection in generic mode ([b184daa](https://github.com/Szesnasty/Jarvis/commit/b184daabbede86cdbebcc5a08337d9fe438b561a))
+
 ## [0.13.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.12.0...frontend-v0.13.0) (2026-04-25)
 
 
