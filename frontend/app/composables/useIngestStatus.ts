@@ -6,7 +6,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 export interface IngestJob {
   id: string
   name: string
-  kind: 'file' | 'url' | 'youtube'
+  kind: 'file' | 'url' | 'youtube' | 'graph_rebuild'
   size_bytes: number | null
   status: 'running' | 'done' | 'failed'
   stage?: string
@@ -155,6 +155,9 @@ export function useIngestStatus() {
     }
     if (n === 1) {
       const one = serverActive.value[0]
+      if (one?.kind === 'graph_rebuild') {
+        return 'Building graph…'
+      }
       const name = one?.name || 'file'
       const short = name.length > 24 ? name.slice(0, 21) + '...' : name
       return capitalize(one?.stage || 'processing') + ' - ' + short

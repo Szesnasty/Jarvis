@@ -181,6 +181,7 @@ async def ingest_file(
         finally:
             tmp_path.unlink(missing_ok=True)
 
+        ingest_jobs.schedule_graph_rebuild()
         return result
     finally:
         ingest_jobs.finish_job(job_id, error=error_for_job)
@@ -220,6 +221,7 @@ async def ingest_url_endpoint(body: UrlIngestRequest):
             error_for_job = str(exc)
             raise HTTPException(status_code=400, detail=error_for_job)
 
+        ingest_jobs.schedule_graph_rebuild()
         return result
     finally:
         ingest_jobs.finish_job(job_id, error=error_for_job)
