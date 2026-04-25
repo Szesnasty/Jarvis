@@ -7,14 +7,31 @@
         </svg>
         Smart Connect
       </h3>
-      <button
-        class="suggestions__rerun"
-        :disabled="busy"
-        :title="`Re-run Smart Connect for this note (mode=${mode})`"
-        @click="onRerun"
-      >
-        {{ busy === 'rerun' ? 'Running…' : 'Re-run' }}
-      </button>
+      <div class="suggestions__header-actions">
+        <template v-if="confirmKeepAll">
+          <span class="suggestions__confirm-text">Keep {{ strongCount }} suggested links?</span>
+          <button class="suggestions__btn-text" @click="confirmKeepAll = false">Cancel</button>
+          <button class="suggestions__btn suggestions__btn--promote" @click="doKeepAll">Keep all</button>
+        </template>
+        <template v-else>
+          <button
+            v-if="showKeepAll"
+            class="suggestions__btn suggestions__btn--keep-all"
+            :disabled="busy === '__keep_all__'"
+            @click="onKeepAll"
+          >
+            {{ busy === '__keep_all__' ? 'Linking…' : `Keep all (${strongCount})` }}
+          </button>
+          <button
+            class="suggestions__rerun"
+            :disabled="!!busy"
+            :title="`Re-run Smart Connect for this note (mode=${mode})`"
+            @click="onRerun"
+          >
+            {{ busy === 'rerun' ? 'Running…' : 'Re-run' }}
+          </button>
+        </template>
+      </div>
     </header>
 
     <p v-if="aliasesMatched.length > 0" class="suggestions__aliases">
@@ -34,6 +51,30 @@
         <div class="suggestions__meta">
           <span class="suggestions__confidence">{{ Math.round(s.confidence * 100) }}%</span>
           <span v-for="m in s.methods" :key="m" class="suggestions__method">{{ m }}</span>
+          <span
+            v-if="s.score_breakdown && Object.keys(s.score_breakdown).length > 0"
+            class="suggestions__why"
+            tabindex="0"
+            :aria-label="`Why: ${whyText(s)}`"
+            :data-tooltip="whyText(s)"
+            title=""
+          >
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <span class="suggestions__why-tooltip" role="tooltip">
+              <strong>Why this suggestion?</strong>
+              <span v-for="(val, key) in s.score_breakdown" :key="key" class="suggestions__why-row">
+                <span class="suggestions__why-method">{{ key }}</span>
+                <span class="suggestions__why-val">{{ val.toFixed(2) }}</span>
+              </span>
+              <span class="suggestions__why-divider"></span>
+              <span class="suggestions__why-row suggestions__why-row--total">
+                <span class="suggestions__why-method">total</span>
+                <span class="suggestions__why-val">{{ s.confidence.toFixed(2) }}</span>
+              </span>
+            </span>
+          </span>
         </div>
         <div class="suggestions__actions">
           <button
@@ -75,6 +116,7 @@ const { dismissSuggestion, promoteSuggestion, rerunConnect } = useApi()
 const { show: showSnackbar } = useSnackbar()
 
 const busy = ref<string | null>(null)
+const confirmKeepAll = ref(false)
 const mode: 'fast' | 'aggressive' = 'fast'
 
 const suggestions = computed<SuggestedLink[]>(() => {
@@ -90,6 +132,15 @@ const aliasesMatched = computed<string[]>(() => {
   return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []
 })
 
+const strongSuggestions = computed<SuggestedLink[]>(() =>
+  suggestions.value.filter(s => s.confidence >= 0.8),
+)
+
+const strongCount = computed(() => strongSuggestions.value.length)
+
+/** Show "Keep all (N)" only when 2 ≤ strong count ≤ 5. */
+const showKeepAll = computed(() => strongCount.value >= 2 && strongCount.value <= 5)
+
 function tierOf(c: number): 'strong' | 'normal' | 'weak' {
   if (c >= 0.8) return 'strong'
   if (c >= 0.6) return 'normal'
@@ -99,6 +150,14 @@ function tierOf(c: number): 'strong' | 'normal' | 'weak' {
 function pathLabel(p: string): string {
   const last = p.split('/').pop() ?? p
   return last.replace(/\.md$/, '')
+}
+
+function whyText(s: SuggestedLink): string {
+  if (!s.score_breakdown) return ''
+  const lines = Object.entries(s.score_breakdown)
+    .map(([k, v]) => `${k}: ${v.toFixed(2)}`)
+    .join(', ')
+  return `${lines} → total: ${s.confidence.toFixed(2)}`
 }
 
 async function onPromote(target: string): Promise<void> {
@@ -124,6 +183,35 @@ async function onDismiss(target: string): Promise<void> {
     emit('changed')
   } catch (e: unknown) {
     showSnackbar(`Could not dismiss: ${(e as Error).message}`, { type: 'error' })
+  } finally {
+    busy.value = null
+  }
+}
+
+function onKeepAll(): void {
+  if (strongCount.value >= 4) {
+    confirmKeepAll.value = true
+  } else {
+    void doKeepAll()
+  }
+}
+
+async function doKeepAll(): Promise<void> {
+  if (!props.note) return
+  confirmKeepAll.value = false
+  busy.value = '__keep_all__'
+  const targets = strongSuggestions.value.map(s => s.path)
+  let promoted = 0
+  try {
+    for (const target of targets) {
+      await promoteSuggestion(props.note.path, target)
+      promoted++
+    }
+    showSnackbar(`Linked ${promoted} notes`, { type: 'success' })
+    emit('changed')
+  } catch (e: unknown) {
+    showSnackbar(`Keep all failed: ${(e as Error).message}`, { type: 'error' })
+    if (promoted > 0) emit('changed')
   } finally {
     busy.value = null
   }
@@ -308,4 +396,119 @@ async function onRerun(): Promise<void> {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+.suggestions__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.suggestions__confirm-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.suggestions__btn-text {
+  background: none;
+  border: none;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem 0.3rem;
+}
+
+.suggestions__btn-text:hover {
+  color: var(--text-primary);
+}
+
+.suggestions__btn--keep-all {
+  font-size: 0.72rem;
+  padding: 0.25rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--success, #4ade80);
+  border-radius: 6px;
+  color: var(--success, #4ade80);
+  cursor: pointer;
+}
+
+.suggestions__btn--keep-all:hover:not(:disabled) {
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.suggestions__btn--keep-all:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* "Why?" info icon + tooltip */
+.suggestions__why {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.suggestions__why:hover,
+.suggestions__why:focus-visible {
+  color: var(--neon-cyan, #00c8ff);
+  outline: none;
+}
+
+.suggestions__why-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 200;
+  min-width: 160px;
+  padding: 0.55rem 0.7rem;
+  background: var(--bg-overlay, #1a1a2e);
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.suggestions__why:hover .suggestions__why-tooltip,
+.suggestions__why:focus-visible .suggestions__why-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.suggestions__why-tooltip strong {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.2rem;
+}
+
+.suggestions__why-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.suggestions__why-row--total {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.suggestions__why-method {
+  color: var(--text-secondary);
+}
+
+.suggestions__why-val {
+  font-variant-numeric: tabular-nums;
+}
+
+.suggestions__why-divider {
+  border-top: 1px solid var(--border-subtle);
+  margin: 0.15rem 0;
+}
+
 </style>

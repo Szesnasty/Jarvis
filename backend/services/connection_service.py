@@ -75,6 +75,8 @@ class SuggestedLink(BaseModel):
     methods: List[str]
     tier: str = "normal"  # "strong" | "normal" | "weak"
     evidence: Optional[str] = None
+    score_breakdown: Optional[Dict[str, float]] = None
+    suggested_at: Optional[str] = None
     suggested_by: Optional[str] = None
 
 
@@ -156,6 +158,46 @@ def tier_for(score: float) -> str:
 
 
 _HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*$", re.MULTILINE)
+
+
+def _compute_score_breakdown(
+    path: str,
+    bm25_scores: Dict[str, float],
+    note_emb_scores: Dict[str, float],
+    chunk_emb_scores: Dict[str, Tuple[float, Optional[str]]],
+    alias_scores: Optional[Dict[str, Tuple[float, str]]],
+    active_weight_sum: float,
+) -> Optional[Dict[str, float]]:
+    """Return per-signal normalized contributions when ≥ 2 signals fired.
+
+    Returns ``None`` when fewer than 2 methods contributed (per spec: omit
+    rather than show redundant single-method data).  Values sum to
+    ``confidence ± 0.001`` (rounding).
+    """
+    if active_weight_sum <= 0.0:
+        return None
+
+    b = bm25_scores.get(path, 0.0)
+    ne = note_emb_scores.get(path, 0.0)
+    ce_score, _ = chunk_emb_scores.get(path, (0.0, None))
+    al_score, _ = (alias_scores or {}).get(path, (0.0, ""))
+
+    signals = [
+        ("bm25",      W_BM25,      b),
+        ("note_emb",  W_NOTE_EMB,  ne),
+        ("chunk_emb", W_CHUNK_EMB, ce_score),
+        ("alias",     W_ALIAS,     al_score),
+    ]
+    active = [(name, w, v) for name, w, v in signals if v > 0.0]
+    if len(active) < 2:
+        return None
+
+    breakdown: Dict[str, float] = {}
+    for name, w, v in active:
+        contribution = round(w * _clamp(v) / active_weight_sum, 3)
+        if contribution > 0.0:
+            breakdown[name] = contribution
+    return breakdown or None
 
 
 def build_connection_query(fm: Dict, body: str) -> str:
@@ -291,6 +333,19 @@ async def generate_suggestions(
         kept = enforce_caps(merged, _folder_of(note_path))
 
     suggested_by = f"smart_connect_v{CURRENT_SMART_CONNECT_VERSION}"
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Pre-compute active_weight_sum used for all breakdowns in this context.
+    active_weight_sum = 0.0
+    if bm25_scores:
+        active_weight_sum += W_BM25
+    if note_emb_scores:
+        active_weight_sum += W_NOTE_EMB
+    if chunk_emb_scores:
+        active_weight_sum += W_CHUNK_EMB
+    if alias_scores:
+        active_weight_sum += W_ALIAS
+
     suggestions = [
         SuggestedLink(
             path=p,
@@ -299,6 +354,11 @@ async def generate_suggestions(
             tier=tier,
             evidence=evidence,
             suggested_by=suggested_by,
+            suggested_at=now_utc,
+            score_breakdown=_compute_score_breakdown(
+                p, bm25_scores, note_emb_scores, chunk_emb_scores, alias_scores,
+                active_weight_sum,
+            ),
         )
         for (p, score, methods, evidence, tier) in kept
     ]
@@ -622,6 +682,8 @@ async def _finalise(
             "confidence": s.confidence,
             "methods": s.methods,
             **({"evidence": s.evidence} if s.evidence else {}),
+            **({"score_breakdown": s.score_breakdown} if s.score_breakdown else {}),
+            **({"suggested_at": s.suggested_at} if s.suggested_at else {}),
             **({"suggested_by": s.suggested_by} if s.suggested_by else {}),
         }
         for s in suggested
