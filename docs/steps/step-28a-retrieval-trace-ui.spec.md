@@ -6,7 +6,7 @@
 > only surfaces it.
 
 **Parent**: [step-28-document-intelligence.md](step-28-document-intelligence.md)
-**Status**: ⬜ Planned
+**Status**: ✅ Done
 
 ---
 
