@@ -318,10 +318,55 @@ def _files_dir(spec_id: str, workspace_path: Optional[Path] = None) -> Path:
 
 _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._\- ]{0,200}$")
 _ALLOWED_EXTENSIONS = {".md", ".txt", ".pdf", ".csv", ".json"}
+_FALLBACK_STEM = "file"
+
+
+def _sanitize_filename(filename: str) -> str:
+    """Sanitize a user-supplied filename into a filesystem-safe form.
+
+    - Strips path components (anything before the last ``/`` or ``\\``).
+    - Validates the extension against :data:`_ALLOWED_EXTENSIONS`.
+    - Replaces characters outside ``[A-Za-z0-9._- ]`` with ``-`` (so Polish,
+      German, em-dashes, parentheses, commas etc. no longer 422 the upload).
+    - Collapses runs of ``-`` and trims junk at the start/end.
+    - Caps the stem length so the final name fits :data:`_SAFE_FILENAME_RE`.
+    - Falls back to ``file<ext>`` if nothing usable remains.
+
+    Raises :class:`ValueError` only for empty / unsupported extension cases.
+    """
+    if not filename:
+        raise ValueError("Filename is required")
+
+    # Strip any path components — keep only the leaf name.
+    leaf = Path(filename.replace("\\", "/")).name
+    if not leaf or leaf in (".", ".."):
+        raise ValueError(f"Invalid filename: {filename!r}")
+
+    ext = Path(leaf).suffix.lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise ValueError(f"Unsupported file type: {ext}")
+
+    stem = Path(leaf).stem
+    # Replace anything outside the safe set with '-'.
+    safe_stem = re.sub(r"[^a-zA-Z0-9._\- ]+", "-", stem)
+    safe_stem = re.sub(r"-{2,}", "-", safe_stem).strip("-. ")
+    if not safe_stem:
+        safe_stem = _FALLBACK_STEM
+    # Cap stem so the full name comfortably fits the validator.
+    safe_stem = safe_stem[:190]
+    # Stem must start with [a-zA-Z0-9] per validator.
+    if not re.match(r"^[a-zA-Z0-9]", safe_stem):
+        safe_stem = f"{_FALLBACK_STEM}-{safe_stem}"[:190]
+
+    safe_name = f"{safe_stem}{ext}"
+    if not _SAFE_FILENAME_RE.match(safe_name):
+        # Defensive fallback — should not happen after the steps above.
+        safe_name = f"{_FALLBACK_STEM}{ext}"
+    return safe_name
 
 
 def _validate_filename(filename: str) -> None:
-    """Validate filename to prevent path traversal and restrict to allowed types."""
+    """Validate a stored (already-sanitized) filename for read/delete paths."""
     if not _SAFE_FILENAME_RE.match(filename):
         raise ValueError(f"Invalid filename: {filename!r}")
     if ".." in filename or "/" in filename or "\\" in filename:
@@ -355,7 +400,9 @@ def list_specialist_files(spec_id: str, workspace_path: Optional[Path] = None) -
 def save_specialist_file(spec_id: str, filename: str, content: bytes, workspace_path: Optional[Path] = None) -> Dict:
     """Save an uploaded file to a specialist's knowledge directory."""
     get_specialist(spec_id, workspace_path)
-    _validate_filename(filename)
+    # Sanitize first so users can upload files with Polish/Unicode/parens etc.
+    # without hitting a 422; the stored name is always safe.
+    filename = _sanitize_filename(filename)
     files_dir = _files_dir(spec_id, workspace_path)
     target = files_dir / filename
 
