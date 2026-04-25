@@ -95,6 +95,19 @@ def _unique_dir(target: Path) -> Path:
 
 # Numbered: "1 Introduction", "2.3 Threat Model", "10. Conclusion"
 _HEADING_NUMBERED_RE = re.compile(r"^\d+(?:\.\d+){0,2}\.?\s+\S+")
+# Strict numbered heading used when blank-surround is missing (typical
+# for pdfplumber output, which produces continuous text per page).
+# Requires: 1- or 2-digit number, optional .X subsection, then a Title-cased
+# title of 1–10 short words with no terminal period. This is precise enough
+# to skip inline numerical references like "Table 3 shows ..." or "5.2 ms".
+_HEADING_NUMBERED_STRICT_RE = re.compile(
+    r"^\d{1,2}(?:\.\d{1,2})?\.?\s+[A-Z][\w\-'’/&: ,]{1,80}$"
+)
+# Table-of-contents entry: numbered heading whose title text ends with a
+# trailing page number (e.g. "1.1 Publications 29"). These look like
+# real headings but reference page numbers in the printed PDF, so they
+# come from the TOC rather than the section itself.
+_HEADING_TOC_TRAIL_RE = re.compile(r"\s+\d{1,4}$")
 # All-caps: "ABSTRACT", "RELATED WORK" (≥ 4 chars, allows digits/punct)
 _HEADING_ALLCAPS_RE = re.compile(r"^[A-Z][A-Z0-9 \-:&]{3,80}$")
 # Title-case single line, up to 12 words, no trailing period
@@ -176,12 +189,29 @@ def _detect_pdf_sections(text: str) -> List["_DocumentSection"]:
     lines = text.split("\n")
     n = len(lines)
 
-    # Identify candidate heading line indices. A line counts as a heading
-    # only when surrounded by blank lines (or file boundaries) — this
-    # filters out inline title-cased phrases inside paragraphs.
+    # Identify candidate heading line indices.
+    #
+    # Two acceptance paths:
+    #   (a) The line matches the *strict* numbered-heading regex
+    #       (1- or 2-digit prefix + Title-cased short title). These are
+    #       precise enough on their own that we do not require blank
+    #       surround — pdfplumber output rarely has blank lines between
+    #       paragraphs, so demanding both would reject every real
+    #       heading in academic PDFs.
+    #   (b) Any other heading-like line (ALL-CAPS, title-case, looser
+    #       numbered) is only accepted when surrounded by blank lines
+    #       (or file boundaries). This keeps inline phrases out.
     heading_indices: List[int] = []
     for i, raw in enumerate(lines):
+        stripped = raw.strip()
         if not _is_heading_line(raw):
+            continue
+        # Skip TOC entries: they look like real headings but their title
+        # text ends with a printed page number ("1.1 Publications 29").
+        if _HEADING_TOC_TRAIL_RE.search(stripped):
+            continue
+        if _HEADING_NUMBERED_STRICT_RE.match(stripped):
+            heading_indices.append(i)
             continue
         prev_blank = i == 0 or lines[i - 1].strip() == ""
         next_blank = i + 1 >= n or lines[i + 1].strip() == ""
@@ -199,6 +229,33 @@ def _detect_pdf_sections(text: str) -> List["_DocumentSection"]:
                 top_level.append(idx)
         else:
             top_level.append(idx)
+
+    # If we matched many strict numbered headings, drop coarser candidates
+    # entirely — they'd usually be accidental matches inside body text
+    # (e.g. an ALL-CAPS acronym left on its own line).
+    strict_count = sum(
+        1
+        for idx in top_level
+        if _HEADING_NUMBERED_STRICT_RE.match(lines[idx].strip())
+    )
+    if strict_count >= SECTION_SPLIT_MIN_HEADINGS:
+        top_level = [
+            idx
+            for idx in top_level
+            if _HEADING_NUMBERED_STRICT_RE.match(lines[idx].strip())
+        ]
+
+    # Deduplicate: when the same heading text appears more than once
+    # (TOC echo of the real section, repeated running header on every
+    # page, etc.) keep only the LAST occurrence — that's the one with
+    # the real body following it. Using ``last`` rather than ``first``
+    # also prevents a TOC line from stealing all text up to the real
+    # section as its "body".
+    seen: Dict[str, int] = {}
+    for idx in top_level:
+        key = re.sub(r"\s+", " ", lines[idx].strip()).lower()
+        seen[key] = idx
+    top_level = sorted(seen.values())
 
     if not top_level:
         return []

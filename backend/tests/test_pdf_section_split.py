@@ -122,6 +122,72 @@ def test_detect_sections_empty_text():
     assert _detect_pdf_sections("   \n\n   ") == []
 
 
+# ── pdfplumber-style continuous text (no blank-surround) ────
+
+
+def test_detect_sections_pdfplumber_no_blank_surround():
+    """pdfplumber extracts text without blank lines between sections.
+
+    The strict numbered-heading path must accept these without the
+    blank-surround requirement, otherwise zero sections are detected
+    on real academic PDFs (regression from real-world usage).
+    """
+    body = ("body sentence. " * 30 + "\n") * 4
+    text = (
+        "Title page line\n"
+        "1 Introduction\n" + body +
+        "2 Background\n" + body +
+        "3 Method\n" + body +
+        "4 Results\n" + body +
+        "5 Conclusion\n" + body
+    )
+    sections = _detect_pdf_sections(text)
+    titles = [s.title for s in sections]
+    assert "1 Introduction" in titles
+    assert "5 Conclusion" in titles
+    assert len(sections) >= 5  # 5 numbered + optional Front Matter
+
+
+def test_detect_sections_filters_toc_entries():
+    """TOC lines (heading title + trailing page number) must be skipped."""
+    body = ("body sentence. " * 30 + "\n") * 4
+    text = (
+        # TOC block — these would be false-positive headings
+        "1.1 Publications 29\n"
+        "1.2 Patents 42\n"
+        "1.3 Notable AI Models 46\n"
+        "1.4 Hardware 56\n"
+        "1.5 AI Conferences 75\n"
+        "\n"
+        # Real sections
+        "1 Introduction\n" + body +
+        "2 Background\n" + body +
+        "3 Method\n" + body +
+        "4 Results\n" + body
+    )
+    sections = _detect_pdf_sections(text)
+    titles = [s.title for s in sections]
+    assert "1.1 Publications 29" not in titles
+    assert "1.5 AI Conferences 75" not in titles
+    assert "1 Introduction" in titles
+
+
+def test_detect_sections_dedup_repeated_headings():
+    """Repeated headings (running headers, TOC echoes) keep only one entry."""
+    body = ("body sentence. " * 30 + "\n") * 4
+    text = (
+        "1 Introduction\n" + body +
+        "1 Introduction\n" + body +  # repeat
+        "2 Background\n" + body +
+        "3 Method\n" + body +
+        "4 Results\n" + body
+    )
+    sections = _detect_pdf_sections(text)
+    titles = [s.title for s in sections]
+    # "1 Introduction" appears once
+    assert titles.count("1 Introduction") == 1
+
+
 # ── _emit_pdf_sections integration ──────────────────────────
 
 
