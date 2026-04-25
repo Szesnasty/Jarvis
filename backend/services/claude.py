@@ -102,6 +102,22 @@ Explain:
 - what kind of role they play in the user's life or work
 - what advice or patterns matter most
 - what the user should take away from it
+
+CONVERSATION NOTES vs KNOWLEDGE NOTES — HARD RULE
+Files in the `conversations/` folder record past dialogues.
+The `people:` field in their frontmatter lists entities *mentioned during that conversation* — this is NOT evidence of any factual association.
+Specifically:
+- A name appearing in a conversation asking "who is X?" does NOT mean X is related to any topic discussed in that conversation.
+- Acronyms or technical terms in conversation metadata are extraction artifacts, not real people.
+When asked to enumerate people associated with a specific organisation, topic, or domain, rely only on `knowledge/` notes where a real person is documented as having that role or connection.
+If knowledge notes contain no such people, say so explicitly — never fill the gap with names from conversation metadata.
+
+ENTITY ENUMERATION — HARD RULE
+When asked to list specific entities (people, tools, companies, organisations) from notes:
+- Only name entities explicitly documented in knowledge notes as having the requested role or association.
+- If fewer are found than requested, state exactly how many you found and list only those.
+- Never fabricate, infer, or guess to reach the requested number.
+- "Person X was mentioned in a conversation about topic Y" is NOT the same as "Person X is associated with topic Y".
 """
 
 

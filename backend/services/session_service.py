@@ -393,7 +393,10 @@ def _extract_people_from_messages(messages: List[dict]) -> List[str]:
         people = []
         seen = set()
         for e in entities:
-            if e.type == "person" and e.confidence >= 0.3:
+            # Higher threshold to reject misclassified tech terms / Polish verbs /
+            # acronyms that spaCy small model mistakes for person names in
+            # conversation text ("Ataki", "OWSAP", "Kim", "Definiować", etc.).
+            if e.type == "person" and e.confidence >= 0.7:
                 key = e.text.lower()
                 if key not in seen:
                     seen.add(key)
