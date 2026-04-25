@@ -401,6 +401,10 @@ async def _index_note(
         aliases = fm.get("aliases") or []
         if not isinstance(aliases, list):
             aliases = []
+        # Step 26b: honour weak_aliases frontmatter field.
+        weak_aliases = fm.get("weak_aliases") or []
+        if not isinstance(weak_aliases, list):
+            weak_aliases = []
         headings = [h.rstrip() for h in _re.findall(r"^#{1,6}\s+(.+)", body, flags=_re.MULTILINE)]
         upsert_note_aliases(
             db_path,
@@ -408,6 +412,7 @@ async def _index_note(
             title=title,
             aliases=aliases,
             headings=headings,
+            weak_aliases=weak_aliases,
         )
     except Exception as exc:
         logger.warning("alias_index upsert failed for %s: %s",

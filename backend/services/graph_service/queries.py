@@ -162,7 +162,14 @@ DEFAULT_ORPHAN_IGNORE_EDGE_TYPES = frozenset({
     "part_of",
     "temporal",
     "derived_from",
+    "same_batch",         # provenance — not a semantic relation
+    "suggested_related",  # unconfirmed — not yet user-validated
 })
+
+# Maximum weight contribution of a ``suggested_related`` edge in any
+# graph-scoring context (retrieval, orphan checks).  Shared constant so
+# Step 26b's retrieval guard and Step 26d's expansion weights stay in sync.
+SUGGESTED_RELATED_MAX_WEIGHT: float = 0.35
 DEFAULT_ORPHAN_IGNORE_TAGS = frozenset({
     "imported",
     "data",

@@ -229,3 +229,104 @@ async def test_connect_note_does_not_retry_when_not_orphan(ws_db, monkeypatch):
     # No suggestion crossed the normal floor and the note isn't an orphan,
     # so aggressive mode does NOT engage and weak suggestions stay dropped.
     assert all(s.tier in {"normal", "strong"} for s in result.suggested)
+
+
+# ---------------------------------------------------------------------------
+# Step 26b: same_batch / derived_from / suggested_related as orphan indicators
+# ---------------------------------------------------------------------------
+
+def _stub_graph_with_single_edge(ws_db, note_path: str, edge_type: str) -> None:
+    """Build a minimal graph where note has exactly one edge of the given type."""
+    from services.graph_service import _save_and_cache
+    from services.graph_service.models import Graph
+
+    g = Graph()
+    g.add_node(f"note:{note_path}", "note", "Test Note")
+    g.add_node("note:other.md", "note", "Other")
+    g.add_edge(f"note:{note_path}", "note:other.md", edge_type, weight=0.8)
+    _save_and_cache(g, workspace_path=ws_db)
+
+
+@pytest.mark.anyio
+async def test_note_with_only_derived_from_edge_is_semantic_orphan(ws_db):
+    """derived_from is in DEFAULT_ORPHAN_IGNORE_EDGE_TYPES — note is still an orphan."""
+    _stub_graph_with_single_edge(ws_db, "p/derived.md", "derived_from")
+    assert is_semantic_orphan("p/derived.md", workspace_path=ws_db)
+
+
+@pytest.mark.anyio
+async def test_note_with_only_same_batch_edge_is_semantic_orphan(ws_db):
+    """same_batch (Step 26b addition) is in ignore set — note is still an orphan."""
+    _stub_graph_with_single_edge(ws_db, "p/batch.md", "same_batch")
+    assert is_semantic_orphan("p/batch.md", workspace_path=ws_db)
+
+
+@pytest.mark.anyio
+async def test_note_with_only_suggested_related_edge_is_semantic_orphan(ws_db):
+    """suggested_related (Step 26b addition) is in ignore set — note is still an orphan."""
+    _stub_graph_with_single_edge(ws_db, "p/suggest.md", "suggested_related")
+    assert is_semantic_orphan("p/suggest.md", workspace_path=ws_db)
+
+
+@pytest.mark.anyio
+async def test_note_with_confirmed_related_edge_is_not_semantic_orphan(ws_db):
+    """A user-confirmed 'related' edge is NOT in the ignore set — note escapes orphan status."""
+    from services.graph_service import _save_and_cache
+    from services.graph_service.models import Graph
+
+    note_path = "p/confirmed.md"
+    g = Graph()
+    g.add_node(f"note:{note_path}", "note", "Confirmed")
+    g.add_node("note:peer.md", "note", "Peer")
+    g.add_edge(f"note:{note_path}", "note:peer.md", "related", weight=1.0)
+    _save_and_cache(g, workspace_path=ws_db)
+
+    assert not is_semantic_orphan(note_path, workspace_path=ws_db)
+
+
+# ---------------------------------------------------------------------------
+# Step 26b: retrieval _compute_graph_score caps suggested_related edges
+# ---------------------------------------------------------------------------
+
+def test_compute_graph_score_caps_suggested_related():
+    """suggested_related edges must be capped at SUGGESTED_RELATED_MAX_WEIGHT."""
+    from services.retrieval.pipeline import _compute_graph_score
+    from services.graph_service.models import Graph
+    from services.graph_service.queries import SUGGESTED_RELATED_MAX_WEIGHT
+
+    g = Graph()
+    g.add_node("note:a.md", "note", "A")
+    g.add_node("note:b.md", "note", "B")
+    # Add a suggested_related edge with a weight well above the cap
+    g.add_edge("note:a.md", "note:b.md", "suggested_related", weight=0.9)
+
+    score = _compute_graph_score(
+        "note:a.md",
+        g,
+        anchors=[],
+        candidate_ids={"note:a.md", "note:b.md"},
+    )
+    # If the cap is applied, edge contribution = min(0.9, 0.35) = 0.35.
+    # Without cap it would be 0.9. Score should reflect the cap.
+    assert score <= SUGGESTED_RELATED_MAX_WEIGHT + 0.01  # small tolerance for path/cluster bonuses
+
+
+def test_compute_graph_score_related_edge_not_capped():
+    """A confirmed 'related' edge is NOT capped — uses its full weight."""
+    from services.retrieval.pipeline import _compute_graph_score
+    from services.graph_service.models import Graph
+    from services.graph_service.queries import SUGGESTED_RELATED_MAX_WEIGHT
+
+    g = Graph()
+    g.add_node("note:a.md", "note", "A")
+    g.add_node("note:b.md", "note", "B")
+    g.add_edge("note:a.md", "note:b.md", "related", weight=0.9)
+
+    score = _compute_graph_score(
+        "note:a.md",
+        g,
+        anchors=[],
+        candidate_ids={"note:a.md", "note:b.md"},
+    )
+    # related edge at 0.9 > SUGGESTED_RELATED_MAX_WEIGHT — score must exceed the cap
+    assert score > SUGGESTED_RELATED_MAX_WEIGHT

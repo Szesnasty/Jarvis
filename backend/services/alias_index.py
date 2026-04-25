@@ -38,6 +38,31 @@ MAX_NGRAM = 4
 # Token regex — keep unicode word chars (Polish, etc.) and digits.
 _TOKEN_RE = re.compile(r"[\w']+", re.UNICODE)
 
+# ---------------------------------------------------------------------------
+# Alias guardrails (Step 26b)
+# ---------------------------------------------------------------------------
+
+# Short acronyms that ARE discriminative despite being < 4 chars.
+# Keep this list small and explicit — extend only after careful thought.
+_ALIAS_SHORT_ALLOWLIST: Set[str] = {
+    "aws", "jwt", "sql", "css", "gpu", "cpu",
+    "ui", "ux", "s3", "k8s", "ci", "cd",
+}
+
+# Generic terms so broad they appear in nearly every note.
+# Phrases consisting *entirely* of these tokens are silently rejected.
+_ALIAS_STOPWORDS: Set[str] = {
+    "ai", "api", "ml", "nlp", "llm", "rag", "etl",
+    "memory", "graph", "model", "data", "note", "file",
+    "notes", "docs", "doc", "page", "item", "record",
+    "list", "plan", "task", "work", "project",
+}
+
+# Maximum fraction of notes that may share a phrase before it is treated as
+# too common to be discriminative.  Minimum hard floor: 10 notes.
+_FREQ_CAP_FRACTION = 0.05
+_FREQ_CAP_FLOOR = 10
+
 # Characters NFKD doesn't decompose (no combining marks). Mapped manually so
 # Polish/Czech/etc. stems compare equal to their ASCII transliteration.
 _EXTRA_DIACRITIC_MAP = str.maketrans({
@@ -73,30 +98,74 @@ def _ensure_table(db_path: Path) -> None:
         conn.commit()
 
 
+def _phrase_passes_guardrails(phrase_norm: str) -> bool:
+    """Return True iff the phrase is discriminative enough to be indexed.
+
+    Rules (in order):
+    1. Allow short phrases that are in the explicit allowlist.
+    2. Reject phrases shorter than MIN_PHRASE_CHARS.
+    3. Reject phrases whose *every* token is in the stopword set.
+    """
+    if phrase_norm in _ALIAS_SHORT_ALLOWLIST:
+        return True
+    if len(phrase_norm) < MIN_PHRASE_CHARS:
+        return False
+    tokens = [t.lower() for t in _TOKEN_RE.findall(phrase_norm)]
+    if tokens and all(t in _ALIAS_STOPWORDS for t in tokens):
+        return False
+    return True
+
+
 def _collect_phrases(
     title: Optional[str],
     aliases: Iterable[str],
     headings: Iterable[str],
+    *,
+    weak_aliases: Iterable[str] = (),
 ) -> List[Tuple[str, str]]:
-    """Return list of (phrase_norm, kind) pairs, deduplicated, length-filtered."""
+    """Return list of (phrase_norm, kind) pairs, deduplicated, guardrail-filtered.
+
+    Phrases that fail :func:`_phrase_passes_guardrails` are silently dropped.
+    ``weak_aliases`` entries are indexed with ``kind='weak_alias'``.
+    """
     out: Dict[Tuple[str, str], None] = {}
+
     if title:
         norm = normalise_phrase(title)
-        if len(norm) >= MIN_PHRASE_CHARS:
+        if _phrase_passes_guardrails(norm):
             out[(norm, "title")] = None
+
     for raw in aliases or ():
         if not isinstance(raw, str):
             continue
         norm = normalise_phrase(raw)
-        if len(norm) >= MIN_PHRASE_CHARS:
+        if _phrase_passes_guardrails(norm):
             out.setdefault((norm, "alias"), None)
+
     for raw in headings or ():
         if not isinstance(raw, str):
             continue
         norm = normalise_phrase(raw)
-        if len(norm) >= MIN_PHRASE_CHARS:
+        if _phrase_passes_guardrails(norm):
             out.setdefault((norm, "heading"), None)
+
+    for raw in weak_aliases or ():
+        if not isinstance(raw, str):
+            continue
+        norm = normalise_phrase(raw)
+        if _phrase_passes_guardrails(norm):
+            out.setdefault((norm, "weak_alias"), None)
+
     return list(out.keys())
+
+
+def _count_distinct_notes_for_phrase(conn: sqlite3.Connection, phrase_norm: str) -> int:
+    """Return how many distinct note_paths currently have this phrase indexed."""
+    row = conn.execute(
+        "SELECT COUNT(DISTINCT note_path) FROM alias_index WHERE phrase_norm = ?",
+        (phrase_norm,),
+    ).fetchone()
+    return row[0] if row else 0
 
 
 def upsert_note_aliases(
@@ -106,23 +175,51 @@ def upsert_note_aliases(
     title: Optional[str],
     aliases: Iterable[str] = (),
     headings: Iterable[str] = (),
+    weak_aliases: Iterable[str] = (),
 ) -> int:
     """Replace all alias_index rows for ``note_path`` with the new set.
+
+    Applies guardrail checks:
+    - Length + allowlist filter (via :func:`_phrase_passes_guardrails`)
+    - Stopword-only phrases rejected
+    - Frequency cap: phrase already in > max(10, 5% of total_notes) notes → skip
 
     Returns the number of rows written.
     """
     _ensure_table(db_path)
-    rows = _collect_phrases(title, aliases, headings)
+    rows = _collect_phrases(title, aliases, headings, weak_aliases=weak_aliases)
+
     with sqlite3.connect(str(db_path)) as conn:
+        # Cache total note count once per call to avoid N+1 queries.
+        total_notes_row = conn.execute("SELECT COUNT(*) FROM alias_index").fetchone()
+        # Use count of distinct note_paths as a proxy for vault size (cheaper
+        # than a join to the notes table and available in alias_index itself).
+        distinct_notes_row = conn.execute(
+            "SELECT COUNT(DISTINCT note_path) FROM alias_index"
+        ).fetchone()
+        total_notes = distinct_notes_row[0] if distinct_notes_row else 0
+        freq_cap = max(_FREQ_CAP_FLOOR, int(total_notes * _FREQ_CAP_FRACTION))
+
         conn.execute("DELETE FROM alias_index WHERE note_path = ?", (note_path,))
-        if rows:
-            conn.executemany(
+
+        written = 0
+        for norm, kind in rows:
+            # Frequency cap check — run BEFORE insert so a blocked phrase
+            # never appears in the index for the new note.
+            existing_count = _count_distinct_notes_for_phrase(conn, norm)
+            already_indexed = False  # we just deleted this note's rows above
+            if existing_count >= freq_cap and not already_indexed:
+                continue  # phrase is too common — skip
+
+            conn.execute(
                 "INSERT OR IGNORE INTO alias_index(phrase_norm, note_path, kind) "
                 "VALUES (?, ?, ?)",
-                [(norm, note_path, kind) for norm, kind in rows],
+                (norm, note_path, kind),
             )
+            written += 1
+
         conn.commit()
-    return len(rows)
+    return written
 
 
 def remove_note(db_path: Path, note_path: str) -> None:

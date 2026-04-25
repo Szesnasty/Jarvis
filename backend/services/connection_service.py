@@ -502,6 +502,16 @@ def _merge_candidates(
         ce_score, ce_section = chunk_emb_scores.get(path, (0.0, None))
         al_score, al_phrase = alias_scores.get(path, (0.0, ""))
 
+        # Step 26b: weak_alias alone must NOT emit a suggestion.
+        # If the only non-zero signal is a weak alias (score == 0.35),
+        # skip this candidate unless another signal also fired.
+        is_weak_alias_only = (
+            al_score > 0.0 and al_score < 1.0  # weak alias contributed
+            and b == 0.0 and ne == 0.0 and ce_score == 0.0  # nothing else fired
+        )
+        if is_weak_alias_only:
+            continue
+
         raw = score_candidate(
             bm25=b, note_emb=ne, chunk_emb=ce_score, alias=al_score,
         )
@@ -569,9 +579,22 @@ def _alias_signal(
     for hit in hits:
         path = hit["path"]
         phrase = str(hit.get("phrase", ""))
+        kind = str(hit.get("kind", ""))
+        # Step 26b: weak_alias hits contribute 0.35 instead of 1.0.
+        # A strong alias (title/alias/heading) always wins over a weak one.
+        is_weak = kind == "weak_alias"
+        score = 0.35 if is_weak else 1.0
         prev = by_path.get(path)
-        if prev is None or len(phrase) > len(prev[1]):
-            by_path[path] = (1.0, phrase)
+        if prev is None:
+            by_path[path] = (score, phrase)
+        else:
+            # Prefer a longer phrase (more specific), but a strong alias
+            # always overrides a weak one regardless of length.
+            prev_score, prev_phrase = prev
+            if prev_score < 1.0 and (not is_weak or len(phrase) > len(prev_phrase)):
+                by_path[path] = (score, phrase)
+            elif not is_weak and prev_score < 1.0:
+                by_path[path] = (score, phrase)
         if phrase and phrase not in matched:
             matched.append(phrase)
     return by_path, matched
