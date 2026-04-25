@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.14.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.13.0...backend-v0.14.0) (2026-04-25)
+
+
+### ✨ Features
+
+* **retrieval:** step 28a — surface per-note retrieval trace in chat UI ([6e5c3b9](https://github.com/Szesnasty/Jarvis/commit/6e5c3b96ff7c16eec0323e43ffdde2f3a5314ffb))
+* **step-28b/UX:** bulk-promote workflow for Smart Connect suggestions ([6e3603e](https://github.com/Szesnasty/Jarvis/commit/6e3603eeae5641286dbcb36b1dece1e5889e60ed))
+* **step-28b:** auto-queue Smart Connect for split-document sections ([7cd535e](https://github.com/Szesnasty/Jarvis/commit/7cd535e8ce9b75331057642600a7fbc3ca153375))
+* **step-28b:** memory sidebar document grouping ([aaa969f](https://github.com/Szesnasty/Jarvis/commit/aaa969f044542f940296ed4cc596bba33291440c))
+* **step-28c:** eval baseline against reference PDFs ([ffb0276](https://github.com/Szesnasty/Jarvis/commit/ffb02766bc7da0520e3e35e9039228f71c6094b2))
+* **step-28d:** section type classification for PDF section notes ([89842be](https://github.com/Szesnasty/Jarvis/commit/89842bee4043fd0bb09a9d5653baeef985baa01a))
+* **step-28e:** client estimate specialist ([2fbdff2](https://github.com/Szesnasty/Jarvis/commit/2fbdff20363d969d8c728d0f3893a2c0a610aaab))
+
+
+### 🐛 Bug Fixes
+
+* **step-28b:** add document_type/parent/section_index to NoteMetadataResponse ([a6c503a](https://github.com/Szesnasty/Jarvis/commit/a6c503a4b6136fdaeccdf99951dc19054a25e01d))
+* **step-28b:** idempotent _finalise eliminates Smart Connect git noise ([180fa99](https://github.com/Szesnasty/Jarvis/commit/180fa99a58df2a70a5a60b49a3d08af7d3ddadd4))
+* **step-28b:** ingest split-document sections into graph at ingest time ([42e564b](https://github.com/Szesnasty/Jarvis/commit/42e564bceb3290867d23a3e64cdbd9cb7db48e32))
+
+
+### ⚡ Performance
+
+* cap NER text at 20k chars + fix memory limit=200 for folder view ([104f529](https://github.com/Szesnasty/Jarvis/commit/104f529f9daa9d2cf7a6ea1bcfaa7cce6aebac59))
+
 ## [0.13.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.12.1...backend-v0.13.0) (2026-04-25)
 
 
