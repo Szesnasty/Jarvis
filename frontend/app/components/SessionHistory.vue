@@ -1,7 +1,14 @@
 <template>
   <div class="session-history">
     <div class="session-history__header">
-      <h3 class="session-history__title">Sessions</h3>
+      <h3 class="session-history__title">
+        Sessions
+        <HelpIcon
+          inline
+          aria-label="What are sessions?"
+          text="Each session is one conversation with Jarvis, stored in app/sessions/. Switching sessions changes the chat history Claude sees on the next turn — your memory notes are shared across all sessions. Click + New to start fresh; delete a session to forget that thread entirely."
+        />
+      </h3>
       <button class="session-history__new" @click="$emit('new-session')">+ New</button>
     </div>
     <div v-if="loading" class="session-history__loading">
@@ -112,6 +119,8 @@ function formatDate(iso: string): string {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  display: inline-flex;
+  align-items: center;
 }
 
 .session-history__new {

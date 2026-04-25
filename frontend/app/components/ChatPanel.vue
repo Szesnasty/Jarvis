@@ -268,7 +268,6 @@ watch(
         @input="autoResize"
       />
       <ModelSelector />
-      <SmartConnectStatus compact aria-label="Smart Connect coverage" />
       <!-- Voice button hidden for now -->
       <button
         class="chat-panel__icon-btn chat-panel__icon-btn--duel"
