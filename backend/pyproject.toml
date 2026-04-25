@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarvis-backend"
-version = "0.12.1"
+version = "0.13.0"
 description = "Jarvis — An AI workspace that remembers what matters (backend)"
 requires-python = ">=3.12"
 

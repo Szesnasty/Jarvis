@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.15.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.14.0...frontend-v0.15.0) (2026-04-25)
+
+
+### ✨ Features
+
+* **graph:** 'Bridges only' filter — hide entities connected to a single note ([8c85f35](https://github.com/Szesnasty/Jarvis/commit/8c85f3558b60cb9b8af53b40698f1753807dccbc))
+* **graph:** auto-reload graph page when rebuild job completes ([31bec9e](https://github.com/Szesnasty/Jarvis/commit/31bec9e68854f1e9fff128f618f15a1af97e68c6))
+* **graph:** entity quality + similarity perf + graph UX polish ([4b424d5](https://github.com/Szesnasty/Jarvis/commit/4b424d5147cd021d701641cad5765da58d56c41e))
+* **ingest:** auto rebuild graph after every file/url ingest ([43398f2](https://github.com/Szesnasty/Jarvis/commit/43398f2f69684bde315c1bf7d19314ce2054bf1b))
+* large-file ingest progress + SQLite stability + workspace reset ([b4e205a](https://github.com/Szesnasty/Jarvis/commit/b4e205ab727866a4e628ea030bd025995f20cbeb))
+
+
+### 🐛 Bug Fixes
+
+* **graph:** add immediate:true to rebuild watcher ([74bd995](https://github.com/Szesnasty/Jarvis/commit/74bd9951592152c81b03e26f0c5240f776120f7f))
+* **graph:** distinct colors for org/project/place/source/batch + 5s status polling ([d04a07d](https://github.com/Szesnasty/Jarvis/commit/d04a07d1063ac42f4a1dc13a45f0b8845c0b63e3))
+* **graph:** prevent node overlap — stronger collision (3 iter / 0.82 strength / +24 padding) + more repulsion ([6addb46](https://github.com/Szesnasty/Jarvis/commit/6addb466598864d4aedaa81da6f9a56751144104))
+* **graph:** suppress hub nodes (&gt;50 edges) and folder areas by default ([ae74559](https://github.com/Szesnasty/Jarvis/commit/ae7455919ce9031e99609e447b182c77eabc15ed))
+* **memory:** move orphan banner above note list, increase prominence ([327199c](https://github.com/Szesnasty/Jarvis/commit/327199c93aafc7e98f2067f9429cd5ec581b4614))
+
 ## [0.14.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.13.0...frontend-v0.14.0) (2026-04-25)
 
 
