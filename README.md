@@ -119,6 +119,10 @@ All steps before the model run on your machine. The LLM sees only the distilled 
 ### A real knowledge graph
 Notes, people, projects, places, and sources are connected through a graph that is part of retrieval and reasoning — not just a visualization. Every new note is linked at ingest time using cheap local signals (BM25, embeddings, alias matches, shared sources/batches), with user review for promote / dismiss in the memory page.
 
+**Smart Connect quality loop.** Suggestions come with a transparent score breakdown (BM25 / semantic / alias / shared-source) so you can see *why* two notes were linked. Confirmed `related` edges drive retrieval at full weight; unconfirmed `suggested_related` candidates are capped at 0.35 by default and never inflate scores. A one-click **Backfill** runs Smart Connect across the whole vault, and a per-suggestion event log tracks promote / dismiss / keep-all decisions.
+
+**Controlled graph expansion.** During chat, Jarvis expands one hop from anchor notes through high-trust edges (`related`, `part_of`) to surface neighbours that BM25 alone would miss — within a strict token budget so core context is never sacrificed. Three toggles in **Settings → Retrieval** let you turn each edge type on or off.
+
 ### Local or cloud — your choice
 Run fully local with Ollama and downloadable models, or connect Anthropic, OpenAI, or Google via API key. Switch between local and cloud per conversation. No vendor lock-in.
 
@@ -191,6 +195,8 @@ The file is open — use it as-is or adapt it to your workflow.
 - Specialist system with full UI wizard
 - Duel Mode — round-based debate with scored verdict
 - Web search via DuckDuckGo (no extra API key)
+- **Smart Connect quality loop** — vault-wide backfill, score breakdown per suggestion, event log, and dismissal stats
+- **Controlled graph expansion** in chat — one-hop expansion via confirmed `related` / `part_of` edges with token-budget cap (toggles in Settings → Retrieval)
 - **Built-in MCP server (26 tools over stdio)** \u2014 use Jarvis memory from Claude Desktop, Cursor, VS Code Copilot, Continue, and other MCP-aware clients ([full tool list](./docs/features/mcp-server/tools.md))
 
 **Coming next:** stronger feedback loops, smarter graph enrichment, Council Mode, voice (once quality is reliable).
