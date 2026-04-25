@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.16.0...frontend-v0.16.1) (2026-04-25)
+
+
+### 🐛 Bug Fixes
+
+* **smart-connect:** SQLite lock contention + 2-files badge + banner flicker ([83c4678](https://github.com/Szesnasty/Jarvis/commit/83c46785c83bb3e2e4403d53035bc5e2661a706f))
+
 ## [0.16.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.15.0...frontend-v0.16.0) (2026-04-25)
 
 
