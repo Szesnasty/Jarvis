@@ -170,4 +170,147 @@ describe('components/SuggestionsPanel.vue', () => {
     })
     expect(wrapper.findAll('.suggestions__item')).toHaveLength(1)
   })
+
+  // -------------------------------------------------------------------------
+  // Step 26c: Keep all (N) button
+  // -------------------------------------------------------------------------
+
+  it('Keep-all button is hidden when fewer than 2 strong suggestions', async () => {
+    const wrapper = await mountSuspended(SuggestionsPanel, {
+      props: {
+        note: makeNote({
+          suggested_related: [
+            { path: 'a.md', confidence: 0.85, methods: ['bm25'] },
+          ],
+        }),
+      },
+    })
+    expect(wrapper.find('.suggestions__btn--keep-all').exists()).toBe(false)
+  })
+
+  it('Keep-all button is hidden when more than 5 strong suggestions', async () => {
+    const wrapper = await mountSuspended(SuggestionsPanel, {
+      props: {
+        note: makeNote({
+          suggested_related: Array.from({ length: 6 }, (_, i) => ({
+            path: `n${i}.md`,
+            confidence: 0.90,
+            methods: ['bm25'],
+          })),
+        }),
+      },
+    })
+    expect(wrapper.find('.suggestions__btn--keep-all').exists()).toBe(false)
+  })
+
+  it('Keep-all button visible and shows count when 2–5 strong suggestions', async () => {
+    const wrapper = await mountSuspended(SuggestionsPanel, {
+      props: {
+        note: makeNote({
+          suggested_related: [
+            { path: 'a.md', confidence: 0.82, methods: ['bm25'] },
+            { path: 'b.md', confidence: 0.91, methods: ['alias'] },
+            { path: 'c.md', confidence: 0.55, methods: ['bm25'] },  // not strong
+          ],
+        }),
+      },
+    })
+    const btn = wrapper.find('.suggestions__btn--keep-all')
+    expect(btn.exists()).toBe(true)
+    expect(btn.text()).toContain('2')
+  })
+
+  it('Keep-all with N ≤ 3 promotes immediately and emits changed once', async () => {
+    promoteMock.mockResolvedValue({ note_path: 'p/a.md', target_path: 'x.md', related: [] })
+    const wrapper = await mountSuspended(SuggestionsPanel, {
+      props: {
+        note: makeNote({
+          suggested_related: [
+            { path: 'x.md', confidence: 0.85, methods: ['bm25'] },
+            { path: 'y.md', confidence: 0.88, methods: ['alias'] },
+          ],
+        }),
+      },
+    })
+    // Should not show confirmation panel first
+    await wrapper.find('.suggestions__btn--keep-all').trigger('click')
+    expect(wrapper.find('.suggestions__confirm-text').exists()).toBe(false)
+    // Wait for async promotions
+    await new Promise(r => setTimeout(r, 10))
+    expect(promoteMock).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('changed')).toHaveLength(1)
+    expect(showSnackbar).toHaveBeenCalledWith(expect.stringContaining('2'), expect.any(Object))
+  })
+
+  it('Keep-all with N = 4 shows inline confirmation before promoting', async () => {
+    const wrapper = await mountSuspended(SuggestionsPanel, {
+      props: {
+        note: makeNote({
+          suggested_related: Array.from({ length: 4 }, (_, i) => ({
+            path: `n${i}.md`,
+            confidence: 0.85,
+            methods: ['bm25'],
+          })),
+        }),
+      },
+    })
+    await wrapper.find('.suggestions__btn--keep-all').trigger('click')
+    // Confirmation should appear
+    expect(wrapper.find('.suggestions__confirm-text').exists()).toBe(true)
+    expect(promoteMock).not.toHaveBeenCalled()
+  })
+
+  it('Cancel hides the confirmation panel', async () => {
+    const wrapper = await mountSuspended(SuggestionsPanel, {
+      props: {
+        note: makeNote({
+          suggested_related: Array.from({ length: 4 }, (_, i) => ({
+            path: `n${i}.md`,
+            confidence: 0.85,
+            methods: ['bm25'],
+          })),
+        }),
+      },
+    })
+    await wrapper.find('.suggestions__btn--keep-all').trigger('click')
+    expect(wrapper.find('.suggestions__confirm-text').exists()).toBe(true)
+    await wrapper.find('.suggestions__btn-text').trigger('click')
+    expect(wrapper.find('.suggestions__confirm-text').exists()).toBe(false)
+    expect(promoteMock).not.toHaveBeenCalled()
+  })
+
+  // -------------------------------------------------------------------------
+  // Step 26c: Why? tooltip
+  // -------------------------------------------------------------------------
+
+  it('Why info icon shown when score_breakdown is present', async () => {
+    const wrapper = await mountSuspended(SuggestionsPanel, {
+      props: {
+        note: makeNote({
+          suggested_related: [
+            {
+              path: 'x.md',
+              confidence: 0.82,
+              methods: ['bm25', 'alias'],
+              score_breakdown: { bm25: 0.50, alias: 0.32 },
+            },
+          ],
+        }),
+      },
+    })
+    expect(wrapper.find('.suggestions__why').exists()).toBe(true)
+  })
+
+  it('Why info icon absent when score_breakdown is missing', async () => {
+    const wrapper = await mountSuspended(SuggestionsPanel, {
+      props: {
+        note: makeNote({
+          suggested_related: [
+            { path: 'x.md', confidence: 0.82, methods: ['bm25'] },
+          ],
+        }),
+      },
+    })
+    expect(wrapper.find('.suggestions__why').exists()).toBe(false)
+  })
 })

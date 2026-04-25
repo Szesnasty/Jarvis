@@ -341,4 +341,7 @@ async def init_database(db_path: Path) -> None:
         # Step 25 PR 5: dismissed suggestions for Smart Connect.
         from services.dismissed_suggestions import DISMISSED_SUGGESTIONS_SQL
         await db.executescript(DISMISSED_SUGGESTIONS_SQL)
+        # Step 26c: connection event log.
+        from services.connection_events import CONNECTION_EVENTS_SQL
+        await db.executescript(CONNECTION_EVENTS_SQL)
         await db.commit()

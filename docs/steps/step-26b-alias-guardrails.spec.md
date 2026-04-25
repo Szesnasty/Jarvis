@@ -5,7 +5,7 @@
 > tier. Also correctly classify provenance edges so they don't mask semantic
 > orphans.
 
-**Status**: ⬜ Not started
+**Status**: ✅ Implemented
 **Depends on**: Step 26a (versioning constants used in tests)
 **Effort**: ~1 day backend
 

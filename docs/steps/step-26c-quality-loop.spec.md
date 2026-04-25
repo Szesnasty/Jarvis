@@ -4,7 +4,7 @@
 > a suggestion was made, acceptance rate is tracked, and a stats endpoint
 > shows which signals actually drive useful connections.
 
-**Status**: ⬜ Not started
+**Status**: ✅ Implemented
 **Depends on**: Step 26a (versioning, `SuggestedLink` model), Step 26b (methods
 list is clean after alias guardrails)
 **Effort**: ~1 day backend + 0.5 day frontend

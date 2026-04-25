@@ -45,7 +45,11 @@ export interface SuggestedLink {
   path: string
   confidence: number
   methods: string[]
+  tier?: string
   evidence?: unknown
+  score_breakdown?: Record<string, number> | null
+  suggested_at?: string | null
+  suggested_by?: string | null
 }
 
 export interface SemanticOrphan {
