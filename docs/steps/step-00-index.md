@@ -191,6 +191,24 @@
 
 ---
 
+## Phase 19 — Graph Density for Long Documents
+
+> **Execution order**: 27a → 27b → 27c.
+> 27a (PDF section split) alone closes most of the gap; 27b (scaled
+> entity caps) and 27c (concept pass improvements) amplify it.
+>
+> **Core rule**: A 200-page PDF must produce a *cluster of related
+> notes* in the graph, not a single hub with 80 satellite entities.
+
+| Step | Title | Status | Order |
+|------|-------|--------|-------|
+| [27](step-27-graph-density.md) | Graph density for long documents — overview | ⬜ | — |
+| [27a](step-27a-pdf-section-split.spec.md) | Split large PDFs into section notes at ingest | ⬜ | → 1st |
+| [27b](step-27b-scaled-entity-limits.spec.md) | Length-scaled entity + co-mention caps | ⬜ | → 2nd |
+| [27c](step-27c-concept-pass-improvements.spec.md) | Concept pass improvements for mixed PL/EN PDFs | ⬜ | → 3rd |
+
+---
+
 ## Execution Rule
 
 Complete each step fully before moving to the next.
