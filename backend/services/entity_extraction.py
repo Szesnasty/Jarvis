@@ -1,7 +1,7 @@
 import logging
 import re
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import FrozenSet, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +125,269 @@ _NOT_NAME_WORDS = frozenset({
     # Role/title words that appear in compound terms (not person names)
     "coach", "manager", "guide", "assistant", "planner", "tracker",
 })
+
+# Words that are never the first token of a real person/org name. spaCy
+# routinely captures sentence fragments that start with one of these
+# (e.g. "With Deep Learning", "For Crows - Pairs", "By Sampling From").
+# Rejecting on the first token alone catches most bibliography artifacts.
+_PREPOSITION_LEAD = frozenset({
+    # English prepositions / articles / conjunctions
+    "with", "from", "by", "for", "about", "after", "before", "during",
+    "under", "over", "through", "of", "in", "on", "at", "to", "into",
+    "onto", "upon", "toward", "towards", "across", "against", "among",
+    "around", "behind", "below", "beneath", "beside", "between",
+    "beyond", "despite", "except", "following", "including", "inside",
+    "like", "near", "outside", "past", "since", "until", "within",
+    "without", "such", "these", "those", "this", "that", "an", "the",
+    "and", "or", "but", "if", "while", "because", "although", "though",
+    "however", "moreover", "therefore", "furthermore", "additionally",
+    "specifically", "namely", "particularly", "especially",
+    "as", "when", "where", "whereas", "whether",
+    # English auxiliaries / verbs that look capitalised in section starts
+    "is", "are", "was", "were", "be", "being", "been", "have", "has",
+    "had", "do", "does", "did", "will", "would", "could", "should",
+    "may", "might", "must", "can",
+    # Time words that get capitalised after periods
+    "today", "tomorrow", "yesterday", "now", "later", "soon",
+})
+
+# Common English nouns that spaCy frequently misclassifies as ORG when
+# they appear capitalised at the start of a section, table caption, or
+# heading (e.g. "Accuracy", "Training Data"). These are NEVER organisations
+# in a personal knowledge graph.
+_GENERIC_ENGLISH_NOUNS = frozenset({
+    # Section / paper structure
+    "abstract", "introduction", "background", "discussion", "conclusion",
+    "conclusions", "method", "methods", "methodology", "approach",
+    "approaches", "result", "results", "experiment", "experiments",
+    "evaluation", "evaluations", "analysis", "limitations",
+    "acknowledgements", "acknowledgments", "references", "appendix",
+    "figure", "figures", "table", "tables", "section", "sections",
+    "chapter", "chapters", "page", "pages", "paragraph", "summary",
+    # Generic concepts often capitalised
+    "accuracy", "performance", "quality", "training", "training data",
+    "test data", "validation", "evaluation", "implementation",
+    "architecture", "architectures", "model", "models", "system",
+    "systems", "feedback", "input", "output", "data", "dataset",
+    "datasets", "benchmark", "benchmarks", "task", "tasks",
+    "framework", "frameworks", "pipeline", "pipelines", "process",
+    "processes", "function", "functions", "feature", "features",
+    "parameter", "parameters", "objective", "loss", "metric",
+    "metrics", "score", "scores", "rate", "rates", "step", "steps",
+    # Tech umbrella terms
+    "artificial intelligence", "machine learning", "deep learning",
+    "natural language", "computer vision",
+    # Reference fragments
+    "see figure", "see table", "see section", "et al",
+    # Polish equivalents for completeness
+    "wstęp", "podsumowanie", "wnioski", "metoda", "metody", "wyniki",
+    "rysunek", "tabela", "rozdział", "strona",
+})
+
+# Maximum word count for a real person/org name. Anything longer is almost
+# certainly a sentence fragment.
+_MAX_NAME_TOKENS = 5
+
+# Characters that disqualify an entity (bibliography fragments, sentence
+# splits, etc.). Apostrophes and dots (for initials) are allowed.
+_INVALID_NAME_PATTERN = re.compile(r"[\d/\\\(\)\[\]\{\}<>=+*&^%$#@~`|;:?!]")
+
+# Tech / domain acronyms that spaCy routinely tags as ORG when they
+# appear capitalised in academic prose. They're concepts, not entities,
+# and they create huge fan-in stars (one paper mentions "LLM" 200 times).
+# Real organisations that happen to be acronyms (IBM, NASA, OECD, IEEE,
+# NIST, ACM) are rare enough that we accept the small recall loss in
+# exchange for a much cleaner graph. Add to the allow-list below if needed.
+_ACRONYM_DENY: FrozenSet[str] = frozenset({
+    # AI/ML model & technique acronyms
+    "ai", "ml", "dl", "rl", "nlp", "cv", "nlg", "nlu", "ir",
+    "llm", "llms", "lm", "lms", "slm", "slms", "plm", "plms",
+    "gpt", "bert", "t5", "elmo", "mlm", "clm", "rlm", "rlhf",
+    "rnn", "cnn", "lstm", "gru", "mlp", "ffn", "moe", "vae", "gan",
+    "cot", "tot", "sft", "ppo", "dpo", "kto", "rag", "icl", "few-shot",
+    "palm", "lamda", "llama", "mistral", "claude", "gemini",
+    # Hardware
+    "gpu", "gpus", "tpu", "tpus", "cpu", "cpus", "ram", "rom", "ssd",
+    # Software / interface
+    "api", "apis", "url", "urls", "sdk", "cli", "gui", "tui", "rest",
+    "json", "xml", "yaml", "html", "css", "sql", "ssh", "tcp", "udp",
+    "http", "https", "ip", "dns", "vpn",
+    # Generic process
+    "ci", "cd", "qa", "qe", "ux", "ui", "pr", "prs", "ci/cd",
+    # Compound that often slips through
+    "cot", "ai/ml",
+})
+
+# Single allow-list of legitimate acronymic organisations. Keep small;
+# extend on demand. Lowercase keys for case-insensitive comparison.
+_ACRONYM_ORG_ALLOW: FrozenSet[str] = frozenset({
+    "ibm", "nasa", "oecd", "ieee", "nist", "acm", "mit", "ucl",
+    "fbi", "cia", "nsa", "epa", "fda", "cdc", "who", "un", "eu",
+    "google", "apple", "amazon", "microsoft", "meta", "openai",
+    "anthropic", "deepmind",
+})
+
+# Substrings that signal a PDF text-extraction artifact: prepositions /
+# articles that ended up *inside* a single token because the PDF→text pass
+# lost the whitespace between words. Real names never contain these.
+_PDF_FUSED_SUBSTRINGS: Tuple[str, ...] = (
+    "ofthe", "andthe", "forthe", "tothe", "fromthe", "inthe", "withthe",
+    "ofcommerce", "ofdefense", "ofstate", "ofjustice", "ofhealth",
+    "department", "appendix", "categoriesand", "subcategoriesfor",
+    "identifyingcontextual", "adaptedfrom",
+)
+
+# Generic AI/ML domain words that spaCy frequently slings together as
+# title-case "person" or "org" candidates ("Adapter Tuning", "Domain
+# Expert", "Internal Feedback", "Generative Agents"). When a multi-word
+# candidate consists *entirely* of these words it is rejected.
+_DOMAIN_GENERIC_TOKENS: FrozenSet[str] = frozenset({
+    "adapter", "adapters", "tuning", "fine-tuning", "finetuning",
+    "encoder", "encoders", "decoder", "decoders", "transformer",
+    "transformers", "embedding", "embeddings", "attention",
+    "model", "models", "modeling", "modelling", "agent", "agents",
+    "alignment", "feedback", "expert", "experts", "techniques",
+    "exploration", "explorations", "variant", "variants",
+    "domain", "internal", "external", "human", "machine",
+    "natural", "neural", "deep", "shallow", "supervised",
+    "unsupervised", "reinforcement", "self", "auto",
+    "input", "output", "data", "training", "evaluation", "evaluation",
+    "test", "validation", "context", "contextual", "prefix", "suffix",
+    "key", "value", "query", "head", "layer", "block", "loss",
+    "score", "ranking", "retrieval", "generation", "generative",
+    "generation", "summarization", "translation", "classification",
+    "regression", "clustering", "policy", "reward", "instruction",
+    "instructions", "prompt", "prompts", "prompting", "chain",
+    "thought", "reasoning", "planning", "search", "memory",
+    "collection", "dataset", "datasets", "benchmark", "benchmarks",
+    "framework", "method", "methods", "approach", "approaches",
+    "system", "systems", "pipeline", "feature", "features",
+    "objective", "metric", "metrics", "task", "tasks",
+    "early", "late", "recent", "next", "previous", "current",
+    "first", "second", "third", "final", "initial",
+    "third-party", "third",
+    # Common AI architecture / engineering nouns
+    "architecture", "architectures",
+    "labeler", "labelers", "selection", "selections",
+    "arena", "chatbot", "chatbots",
+    "request", "requests", "information",
+    "review", "reviews", "process", "processes",
+    "analysis", "analyses", "study", "studies",
+})
+
+
+def _is_pdf_fused_token(token: str) -> bool:
+    """True for single tokens that are clearly fused PDF text fragments.
+
+    Matches: very long tokens that contain glue substrings like ``ofthe``,
+    ``forthe`` or ``department``, OR camelCase-joined runs of >= 14 chars
+    where lowercase letters are followed by uppercase mid-token (a strong
+    sign that whitespace was lost between words).
+    """
+    if len(token) < 14:
+        return False
+    lower = token.lower()
+    for needle in _PDF_FUSED_SUBSTRINGS:
+        if needle in lower:
+            return True
+    # Detect lowercase→uppercase boundaries inside the token (>=2 such
+    # transitions => almost certainly a fused phrase like
+    # "CategoriesandsubcategoriesfortheMANAGE").
+    transitions = sum(
+        1 for i in range(1, len(token))
+        if token[i - 1].islower() and token[i].isupper()
+    )
+    return transitions >= 2
+
+
+def _passes_structural_filters(name: str, etype: Optional[str] = None) -> bool:
+    """Common structural rejects shared by both Polish and English NER paths.
+
+    ``etype`` (optional) enables type-aware filtering: e.g. tech acronyms
+    are rejected as organisations but a real person named "Wu" still
+    passes when classified as person.
+    """
+    if not name:
+        return False
+    # Reject names with control characters (PDF metadata leak: null bytes,
+    # form feeds, etc. show up as raw \x00 sequences when a font-encoded
+    # string slipped into the extracted text).
+    if any(ord(c) < 0x20 for c in name):
+        return False
+    tokens = name.split()
+    if not tokens or len(tokens) > _MAX_NAME_TOKENS:
+        return False
+    first_lower = tokens[0].lower()
+    if first_lower in _PREPOSITION_LEAD:
+        return False
+    # Reject candidates whose first token is a gerund / present participle
+    # ("Improving MLLMs", "Building Models", "Using LLMs"). These are
+    # sentence-start fragments, never names. Heuristic: token ends in
+    # "ing", length >= 6, and starts with uppercase. We check that the
+    # stem (without "ing") looks verby by requiring the original token to
+    # be > 5 chars to avoid collateral on "King", "Bing", "Ming".
+    first_token = tokens[0]
+    if (
+        len(first_token) >= 6
+        and first_token.lower().endswith("ing")
+        and first_token[0].isupper()
+    ):
+        return False
+    last_lower = tokens[-1].lower().rstrip(".,;:")
+    if last_lower in _PREPOSITION_LEAD:
+        return False  # "by" / "and" trailing → bibliography fragment
+    if name.lower() in _GENERIC_ENGLISH_NOUNS:
+        return False
+    if _INVALID_NAME_PATTERN.search(name):
+        return False
+    # Reject names where any single token is just one letter (initials are
+    # OK with a trailing dot, but raw "K" alone marks bibliography fragments
+    # like "Huang and K").
+    for tok in tokens:
+        bare = tok.rstrip(".,;:")
+        if len(bare) == 1 and bare.isalpha():
+            return False
+    # PDF text-extraction fusion: any single token matching the fused
+    # pattern means whitespace was lost — the candidate is not a real name.
+    for tok in tokens:
+        if _is_pdf_fused_token(tok):
+            return False
+    # Type-aware filters
+    if etype == "organization":
+        # Single short tech acronym → reject (LLM, GPT, NLP, …) unless on
+        # the explicit allow-list.
+        if len(tokens) == 1:
+            single_lower = tokens[0].lower().rstrip("s.,;:")
+            if single_lower in _ACRONYM_DENY and single_lower not in _ACRONYM_ORG_ALLOW:
+                return False
+            # Pure all-caps single token <= 4 chars that's *not* on the
+            # allow-list is almost certainly a domain acronym, not an org.
+            stripped = tokens[0].rstrip("s.,;:")
+            if (
+                len(stripped) <= 4
+                and stripped.isupper()
+                and single_lower not in _ACRONYM_ORG_ALLOW
+            ):
+                return False
+    if etype == "person":
+        # Multi-word candidate where every token is a generic domain word
+        # → it's a noun phrase ("Adapter Tuning", "Domain Expert"), not a
+        # person. Single-token persons are handled by confidence scoring
+        # elsewhere; we don't reject "Ren" outright because it could be a
+        # real surname.
+        if len(tokens) >= 2:
+            domain_lower = {t.lower().rstrip(".,;:") for t in tokens}
+            if domain_lower.issubset(_DOMAIN_GENERIC_TOKENS):
+                return False
+        # Single-token short "person" names (<=3 chars) that are also in
+        # the acronym deny set ("LM", "PR", "AI") → reject. Real surnames
+        # of that length (Wu, Li, Xu) survive because they're not in
+        # _ACRONYM_DENY.
+        if len(tokens) == 1:
+            single_lower = tokens[0].lower().rstrip("s.,;:")
+            if single_lower in _ACRONYM_DENY:
+                return False
+    return True
 
 
 def _lemmatize_name(ent) -> str:
@@ -309,6 +572,11 @@ def _extract_with_spacy(text: str, existing_people: List[str]) -> List[Extracted
             for w in words
         ):
             continue
+        # Structural filters: prepositions/articles as first/last token,
+        # generic English nouns, sentence fragments, single-letter tokens,
+        # PDF text-extraction fusion, type-specific acronym filters.
+        if not _passes_structural_filters(name, etype):
+            continue
 
         # --- Lemmatization: normalize declined Polish names ---
         lemma_name = _lemmatize_name(ent)
@@ -383,6 +651,9 @@ def _extract_with_spacy(text: str, existing_people: List[str]) -> List[Extracted
                 continue
             # Reject entities with special characters (⭐, emoji, etc.)
             if not all(c.isalpha() or c in " .'-" for c in name):
+                continue
+            # Same structural rejects as the PL path
+            if not _passes_structural_filters(name, etype):
                 continue
 
             is_single_word = len(words) == 1

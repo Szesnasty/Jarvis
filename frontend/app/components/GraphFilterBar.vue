@@ -146,6 +146,7 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
   place:          { label: 'Places',     color: '#22d3ee' },
   source:         { label: 'Source',     color: '#a3e635' },
   batch:          { label: 'Batch',      color: '#94a3b8' },
+  concept:        { label: 'Concepts',   color: '#fde047' },
   jira_issue:     { label: 'Issues',     color: '#60a5fa' },
   jira_epic:      { label: 'Epics',      color: '#f472b6' },
   jira_project:   { label: 'Projects',   color: '#facc15' },
