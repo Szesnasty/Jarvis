@@ -59,6 +59,8 @@ def write_event(
     try:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(str(db_path)) as conn:
+            # Wait up to 5 s for concurrent writers (backfill loop + worker).
+            conn.execute("PRAGMA busy_timeout = 5000")
             conn.executescript(CONNECTION_EVENTS_SQL)  # idempotent CREATE IF NOT EXISTS
             conn.execute(
                 "INSERT INTO connection_events"
@@ -94,6 +96,7 @@ def backfill_suggested_dedup_key_exists(
         if not db_path.exists():
             return False
         with sqlite3.connect(str(db_path)) as conn:
+            conn.execute("PRAGMA busy_timeout = 5000")
             row = conn.execute(
                 "SELECT 1 FROM connection_events"
                 " WHERE event_type = 'backfill_suggested'"
