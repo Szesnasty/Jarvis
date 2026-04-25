@@ -147,6 +147,50 @@ def _resolve_bidirectional_links(graph: Graph) -> None:
             forward_set.add((tgt, src))
 
 
+# Entity node types that get pruned when their degree drops to 1.
+# Only **derived** node types are eligible for pruning:
+#   * ``tag`` — frontmatter facet, the note already implicitly carries it
+#   * ``concept`` — TF-IDF artefact, no value without cross-doc bridges
+# Real-world entities (person, org, project, place) are NEVER pruned even
+# at degree 1. The user wants to be able to find people/places/projects
+# they remember reading about, regardless of how many notes mention them.
+_PRUNABLE_ENTITY_TYPES = frozenset({"tag", "concept"})
+
+
+def _prune_singleton_entities(graph: Graph) -> None:
+    """Remove derived entity nodes (tag/concept) connected to a single note.
+
+    A degree-1 tag or concept contributes no bridging value to the graph —
+    the note's frontmatter already encodes the tag, and a one-note concept
+    is by definition not a topical bridge. Visually these nodes appear as
+    disconnected leaves on the periphery and clutter the layout.
+
+    Real-world entities (person, org, project, place) are preserved even
+    at degree 1 so the user can always find names they remember.
+    """
+    # Build undirected degree counts
+    degree: Dict[str, int] = {}
+    for e in graph.edges:
+        degree[e.source] = degree.get(e.source, 0) + 1
+        degree[e.target] = degree.get(e.target, 0) + 1
+
+    to_remove = {
+        nid for nid, node in graph.nodes.items()
+        if node.type in _PRUNABLE_ENTITY_TYPES and degree.get(nid, 0) <= 1
+    }
+    if not to_remove:
+        return
+
+    graph.edges = [
+        e for e in graph.edges
+        if e.source not in to_remove and e.target not in to_remove
+    ]
+    for nid in to_remove:
+        graph.nodes.pop(nid, None)
+
+    logger.info("Pruned %d singleton entity nodes", len(to_remove))
+
+
 def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
     global _graph_cache
     mem = _memory_path(workspace_path)
@@ -189,10 +233,16 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
             graph.add_node(tag_id, "tag", str(tag))
             graph.add_edge(note_id, tag_id, "tagged")
 
-        # Wiki links
-        for link in extract_wiki_links(body):
-            target_id = f"note:{link}"
-            graph.add_edge(note_id, target_id, "linked")
+        # Wiki links — skip for ingest index notes (TOC). The TOC links every
+        # section, which produces a star-hub in the graph that visually
+        # dominates and adds no semantic value: sections are already grouped
+        # via the shared ``area:knowledge/<doc-slug>`` parent folder.
+        source_type = str(fm.get("source_type", ""))
+        is_ingest_index = source_type.startswith("index/")
+        if not is_ingest_index:
+            for link in extract_wiki_links(body):
+                target_id = f"note:{link}"
+                graph.add_edge(note_id, target_id, "linked")
 
         # People
         for person in fm.get("people", []):
@@ -277,6 +327,14 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
             logger.info("Concept pass: %d about_concept edges added", concept_count)
     except Exception as exc:
         logger.debug("Concept pass skipped: %s", exc)
+
+    # Pass 12.5: Prune low-bridging entity nodes.
+    # Remove entity nodes (tag/person/org/project/place/concept) whose only
+    # purpose in the graph is to anchor a single note. With degree=1 they
+    # contribute no bridging value (the note already implicitly represents
+    # them) and visually they litter the periphery as disconnected dots.
+    # Notes, areas, sources and graph hubs are preserved unconditionally.
+    _prune_singleton_entities(graph)
 
     # Pass 9: Embed node labels for semantic anchoring (step 20b)
     if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") != "1":
