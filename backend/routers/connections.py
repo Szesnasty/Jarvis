@@ -564,6 +564,9 @@ async def connection_coverage() -> dict:
     sections_total = 0
     sections_with_suggestions = 0
     sections_pending_by_parent: dict[str, int] = {}
+    pending_strong_suggestions = 0
+    pending_strong_notes: set[str] = set()
+    STRONG_THRESHOLD = 0.8
 
     if mem.exists():
         for note_path in _iter_note_paths(db_p, mem):
@@ -575,9 +578,20 @@ async def connection_coverage() -> dict:
                 fm, _ = parse_frontmatter(full_path.read_text(encoding="utf-8"))
             except Exception:
                 continue
-            has_suggestions = bool(fm.get("suggested_related"))
+            suggestions = fm.get("suggested_related") or []
+            has_suggestions = bool(suggestions)
             if has_suggestions:
                 notes_with_suggestions += 1
+
+            for s in suggestions:
+                if isinstance(s, dict):
+                    try:
+                        c = float(s.get("confidence") or 0)
+                    except (TypeError, ValueError):
+                        c = 0.0
+                    if c >= STRONG_THRESHOLD:
+                        pending_strong_suggestions += 1
+                        pending_strong_notes.add(note_path)
 
             parent = fm.get("parent")
             if parent:
@@ -607,5 +621,151 @@ async def connection_coverage() -> dict:
         "sections_with_suggestions": sections_with_suggestions,
         "sections_pending": sections_pending,
         "documents_pending": documents_pending,
+        "pending_strong_suggestions": pending_strong_suggestions,
+        "pending_strong_notes": len(pending_strong_notes),
+        "strong_threshold": STRONG_THRESHOLD,
         "active_section_jobs": active_section_jobs,
     }
+
+
+# ---------------------------------------------------------------------------
+# Bulk promote endpoint (Step 28b plan B — workspace-wide triage)
+# ---------------------------------------------------------------------------
+
+class BulkPromoteRequest(BaseModel):
+    min_confidence: float = 0.8
+    scope: str = "all"  # "all" or "document:<parent_path>"
+    dry_run: bool = False
+
+
+class BulkPromoteResponse(BaseModel):
+    promoted: int
+    notes_changed: int
+    skipped: int
+    scanned: int
+    min_confidence: float
+    dry_run: bool
+
+
+@router.post("/promote-bulk", response_model=BulkPromoteResponse)
+async def promote_bulk(payload: BulkPromoteRequest) -> BulkPromoteResponse:
+    """Promote all suggestions ≥ ``min_confidence`` across the workspace
+    (or restricted to one document's sections) in a single call.
+
+    Honours dismissed-pair history (skips any pair the user previously
+    dismissed) and emits one ``promote`` event per promoted pair so the
+    Smart Connect quality stats stay accurate.
+    """
+    from services.connection_events import write_event
+    from services.connection_service import CURRENT_SMART_CONNECT_VERSION
+    from services.dismissed_suggestions import list_dismissed_for
+    from services.memory_service import _db_path
+    from utils.markdown import add_frontmatter, parse_frontmatter
+
+    if not (0.0 <= payload.min_confidence <= 1.0):
+        raise HTTPException(
+            status_code=400, detail="min_confidence must be between 0 and 1"
+        )
+
+    ws = _workspace()
+    db_p = _db_path(ws)
+    mem = ws / "memory"
+    if not mem.exists():
+        return BulkPromoteResponse(
+            promoted=0, notes_changed=0, skipped=0, scanned=0,
+            min_confidence=payload.min_confidence, dry_run=payload.dry_run,
+        )
+
+    scope_parent: Optional[str] = None
+    if payload.scope.startswith("document:"):
+        scope_parent = payload.scope[len("document:"):].strip() or None
+    elif payload.scope != "all":
+        raise HTTPException(
+            status_code=400,
+            detail="scope must be 'all' or 'document:<parent_path>'",
+        )
+
+    promoted = 0
+    notes_changed = 0
+    skipped = 0
+    scanned = 0
+
+    for note_path in _iter_note_paths(db_p, mem):
+        full_path = mem / note_path
+        if not full_path.exists():
+            continue
+        try:
+            raw = full_path.read_text(encoding="utf-8")
+            fm, body = parse_frontmatter(raw)
+        except Exception:
+            continue
+
+        if scope_parent is not None and fm.get("parent") != scope_parent:
+            continue
+
+        suggestions = fm.get("suggested_related") or []
+        if not suggestions:
+            continue
+        scanned += 1
+
+        dismissed = list_dismissed_for(db_p, note_path)
+        related = list(fm.get("related") or [])
+        related_set = set(related)
+        kept_suggestions: list = []
+        promoted_here: list[tuple[str, Optional[float], Optional[list], Optional[str]]] = []
+
+        for s in suggestions:
+            if not isinstance(s, dict):
+                kept_suggestions.append(s)
+                continue
+            target = s.get("path")
+            try:
+                conf = float(s.get("confidence") or 0)
+            except (TypeError, ValueError):
+                conf = 0.0
+            if (
+                target
+                and conf >= payload.min_confidence
+                and target not in dismissed
+                and target not in related_set
+            ):
+                promoted_here.append(
+                    (target, s.get("confidence"), s.get("methods"), s.get("tier"))
+                )
+                related.append(target)
+                related_set.add(target)
+            else:
+                kept_suggestions.append(s)
+                if target and target in dismissed:
+                    skipped += 1
+
+        if not promoted_here:
+            continue
+
+        if not payload.dry_run:
+            fm["related"] = related
+            fm["suggested_related"] = kept_suggestions
+            full_path.write_text(add_frontmatter(body, fm), encoding="utf-8")
+            for target, conf, methods, tier in promoted_here:
+                write_event(
+                    db_p,
+                    event_type="promote",
+                    note_path=note_path,
+                    target_path=target,
+                    confidence=conf,
+                    methods=methods,
+                    tier=tier,
+                    smart_connect_version=CURRENT_SMART_CONNECT_VERSION,
+                )
+
+        promoted += len(promoted_here)
+        notes_changed += 1
+
+    return BulkPromoteResponse(
+        promoted=promoted,
+        notes_changed=notes_changed,
+        skipped=skipped,
+        scanned=scanned,
+        min_confidence=payload.min_confidence,
+        dry_run=payload.dry_run,
+    )

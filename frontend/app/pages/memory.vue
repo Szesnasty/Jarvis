@@ -40,6 +40,12 @@
         </span>
         <button class="memory-page__orphans-link" @click="onShowFirstOrphan">Review</button>
       </div>
+      <BulkPromoteBanner
+        :pending-strong="coverage?.pending_strong_suggestions ?? 0"
+        :pending-notes="coverage?.pending_strong_notes ?? 0"
+        @review="onReviewFirstStrong"
+        @promoted="onBulkPromoted"
+      />
       <NoteList
         :notes="notes"
         :selected-path="selectedPath"
@@ -76,10 +82,13 @@ import type { NoteMetadata, NoteDetail, SemanticOrphan } from '~/types'
 
 type SearchMode = 'keyword' | 'semantic' | 'hybrid'
 
-const { fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSemanticOrphans } = useApi()
+const { fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSemanticOrphans, fetchConnectionsCoverage } = useApi()
+
+type Coverage = Awaited<ReturnType<typeof fetchConnectionsCoverage>>
 
 const notes = ref<NoteMetadata[]>([])
 const orphans = ref<SemanticOrphan[]>([])
+const coverage = ref<Coverage | null>(null)
 const selectedPath = ref<string | null>(null)
 const selectedNote = ref<NoteDetail | null>(null)
 const activeFolder = ref<string | null>(null)
@@ -189,8 +198,9 @@ async function onSuggestionChanged() {
   if (selectedPath.value) {
     selectedNote.value = await fetchNote(selectedPath.value)
   }
-  // Orphan count may shift after promote / dismiss / re-run.
+  // Orphan + coverage counts may shift after promote / dismiss / re-run.
   void loadOrphans()
+  void loadCoverage()
 }
 
 async function loadOrphans() {
@@ -198,6 +208,14 @@ async function loadOrphans() {
     orphans.value = await fetchSemanticOrphans()
   } catch {
     orphans.value = []
+  }
+}
+
+async function loadCoverage() {
+  try {
+    coverage.value = await fetchConnectionsCoverage()
+  } catch {
+    coverage.value = null
   }
 }
 
@@ -209,6 +227,24 @@ async function onShowFirstOrphan() {
   await onSelectNote(path)
 }
 
+async function onReviewFirstStrong() {
+  // Open the first note that has a strong suggestion so the user can
+  // inspect what 'Keep all' would actually do.
+  const candidate = notes.value.find((n) => {
+    const arr = (n as { suggested_related?: Array<{ confidence?: number }> }).suggested_related
+    return Array.isArray(arr) && arr.some((s) => (s.confidence ?? 0) >= 0.8)
+  })
+  if (candidate) await onSelectNote(candidate.path)
+}
+
+async function onBulkPromoted() {
+  // After bulk promote, reload everything that depends on suggestion state.
+  await Promise.all([loadNotes(), loadOrphans(), loadCoverage()])
+  if (selectedPath.value) {
+    selectedNote.value = await fetchNote(selectedPath.value)
+  }
+}
+
 async function onDeleteNote(path: string) {
   await deleteNote(path)
   notes.value = notes.value.filter(n => n.path !== path)
@@ -218,16 +254,23 @@ async function onDeleteNote(path: string) {
   }
 }
 
-const _onMemoryChanged = () => { loadNotes(); loadOrphans() }
+const _onMemoryChanged = () => { loadNotes(); loadOrphans(); loadCoverage() }
+
+let _coverageTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   loadNotes()
   loadOrphans()
+  loadCoverage()
   window.addEventListener('jarvis:memory-changed', _onMemoryChanged)
+  // Light polling so the bulk-promote banner appears as soon as Smart
+  // Connect finishes producing suggestions for a freshly imported document.
+  _coverageTimer = setInterval(loadCoverage, 10_000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('jarvis:memory-changed', _onMemoryChanged)
+  if (_coverageTimer) clearInterval(_coverageTimer)
 })
 </script>
 
