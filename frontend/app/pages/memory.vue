@@ -112,7 +112,7 @@ async function loadNotes() {
   loadingNotes.value = true
   try {
     if (!searchQuery.value || searchMode.value !== 'semantic') {
-      const params: { folder?: string; search?: string } = {}
+      const params: { folder?: string; search?: string; limit: number } = { limit: 200 }
       if (activeFolder.value) params.folder = activeFolder.value
       if (searchQuery.value) params.search = searchQuery.value
       const result = await fetchNotes(params)

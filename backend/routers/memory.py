@@ -32,7 +32,7 @@ router = APIRouter(prefix="/api/memory", tags=["memory"])
 async def get_notes_list(
     folder: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(50, ge=1, le=2000),
 ):
     results = await list_notes(folder=folder, search=search, limit=limit)
     return results

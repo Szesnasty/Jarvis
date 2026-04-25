@@ -522,6 +522,11 @@ def _extract_with_spacy(text: str, existing_people: List[str]) -> List[Extracted
     existing_set = {p.lower() for p in existing_people}
     entities: List[ExtractedEntity] = []
 
+    # Hard cap: spaCy is O(n) and very large texts (270 KB PDF sections) can
+    # take minutes. Truncate to 20 000 chars — sufficient for name discovery.
+    if len(text) > 20_000:
+        text = text[:20_000]
+
     # Use Polish model as primary (works well on both PL and mixed PL/EN text)
     doc = _nlp_pl(text)
     for ent in doc.ents:
