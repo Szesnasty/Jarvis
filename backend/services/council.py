@@ -426,7 +426,7 @@ class DuelOrchestrator:
             return
 
         # 2. Build shared context (retrieval)
-        shared_context, _tokens = await build_context(
+        shared_context, _tokens, _trace = await build_context(
             config.topic, workspace_path=workspace_path,
         )
 

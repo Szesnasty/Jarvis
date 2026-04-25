@@ -68,12 +68,25 @@ export interface ConnectionResult {
 
 // --- Chat ---
 
+// Step 28a — per-note retrieval trace surfaced under each assistant answer.
+export interface TraceItem {
+  path: string
+  title: string
+  score: number
+  reason: 'primary' | 'expansion'
+  via: string
+  edge_type?: string | null
+  tier?: string | null
+  signals?: Record<string, number>
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   model?: string
   provider?: string
   timestamp?: string
+  trace?: TraceItem[]
 }
 
 export interface WsTextDelta {
@@ -131,7 +144,12 @@ export interface WsMemoryChanged {
   action: string
 }
 
-export type WsEvent = WsTextDelta | WsToolUse | WsToolResult | WsDone | WsError | WsSessionStart | WsSessionHistory | WsDisconnected | WsWarning | WsMemoryChanged
+export interface WsTrace {
+  type: 'trace'
+  items: TraceItem[]
+}
+
+export type WsEvent = WsTextDelta | WsToolUse | WsToolResult | WsDone | WsError | WsSessionStart | WsSessionHistory | WsDisconnected | WsWarning | WsMemoryChanged | WsTrace
 
 // --- Sessions ---
 

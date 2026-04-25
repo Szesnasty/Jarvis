@@ -197,6 +197,7 @@ watch(
           </div>
           <div v-if="msg.role === 'assistant'" v-html="renderMarkdown(msg.content)" />
           <template v-else>{{ msg.content }}</template>
+          <TraceList v-if="msg.role === 'assistant' && msg.trace" :items="msg.trace" />
         </div>
       </div>
 

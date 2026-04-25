@@ -145,7 +145,7 @@ class TestJarvisSystemPromptWiring:
             seed_builtin_specialists(workspace)
             # Stub context builder to avoid retrieval pipeline.
             async def _empty_ctx(*args, **kwargs):
-                return "", 0
+                return "", 0, []
             monkeypatch.setattr("services.claude.build_context", _empty_ctx)
             prompt, _ = await build_system_prompt_with_stats(
                 "hello", workspace_path=workspace,
@@ -164,7 +164,7 @@ class TestJarvisSystemPromptWiring:
                 workspace,
             )
             async def _empty_ctx(*args, **kwargs):
-                return "", 0
+                return "", 0, []
             monkeypatch.setattr("services.claude.build_context", _empty_ctx)
             prompt, _ = await build_system_prompt_with_stats(
                 "hello", workspace_path=workspace,
@@ -189,7 +189,7 @@ class TestJarvisSystemPromptWiring:
                 workspace,
             )
             async def _empty_ctx(*args, **kwargs):
-                return "", 0
+                return "", 0, []
             monkeypatch.setattr("services.claude.build_context", _empty_ctx)
             prompt, _ = await build_system_prompt_with_stats(
                 "hello", workspace_path=workspace,

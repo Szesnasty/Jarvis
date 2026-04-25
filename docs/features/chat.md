@@ -12,8 +12,9 @@ sources:
   - frontend/app/composables/useChat.ts
   - frontend/app/composables/useWebSocket.ts
   - frontend/app/components/ChatPanel.vue
+  - frontend/app/components/TraceList.vue
 depends_on: [retrieval, sessions, specialists, api-key-management]
-last_updated: 2026-04-14
+last_updated: 2026-04-25
 ---
 
 # Chat & LLM Integration
@@ -118,6 +119,13 @@ All frames are JSON. The client sends; the server sends back a stream of events 
 
 { "type": "tool_result", "name": string, "content": string }
 // Tool finished. Claude continues generating.
+
+{ "type": "trace", "items": TraceItem[] }
+// Step 28a — sent right before `done` when context retrieval was non-empty.
+// Each item describes one note that fed the prompt: path, title, score,
+// reason ("primary" | "expansion"), dominant signal (`via`), edge_type/tier
+// for graph-expansion entries, and a `signals` map of raw per-signal scores.
+// Older clients ignore unknown event types; safe to skip.
 
 { "type": "done", "session_id": string }
 // Turn is complete. The final assembled response is already in session history.

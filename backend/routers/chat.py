@@ -412,6 +412,12 @@ async def _handle_message(
         else:
             done_fields["tool_mode"] = "json_fallback"
 
+    # Step 28a — surface the per-note retrieval trace before `done`. Older
+    # clients ignore unknown event types, so this degrades cleanly.
+    trace_items = prompt_stats.get("trace") or []
+    if trace_items:
+        await _send_event(ws, "trace", items=trace_items)
+
     await _send_event(ws, "done", **done_fields)
 
     # Save conversation to memory after every assistant reply.

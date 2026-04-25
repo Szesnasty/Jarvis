@@ -7,8 +7,8 @@ sources:
   - backend/services/retrieval/pipeline.py
   - backend/services/context_builder.py
 depends_on: [memory, knowledge-graph]
-last_reviewed: 2025-07-27
-last_updated: 2025-07-27
+last_reviewed: 2026-04-25
+last_updated: 2026-04-25
 ---
 
 # Hybrid Retrieval Pipeline
@@ -101,10 +101,10 @@ Returns an empty list if `query` is blank or whitespace-only, or if no signal pr
 async def build_context(
     user_message: str,
     workspace_path=None,
-) -> Tuple[Optional[str], int]:
+) -> Tuple[Optional[str], int, List[dict]]:
 ```
 
-Returns a tuple of `(context_text, token_estimate)`. `context_text` is a ready-to-inject context string or `None` if no relevant notes or preferences were found. `token_estimate` is `len(text) // 4` or `0`. The string combines user preferences, specialist knowledge, and up to 3 truncated note bodies. This return value is used directly by the chat service when constructing the system prompt sent to Claude.
+Returns `(context_text, token_estimate, trace)`. `context_text` is a ready-to-inject context string or `None` if no relevant notes or preferences were found. `token_estimate` is `len(text) // 4` or `0`. `trace` is the per-note retrieval trace described below — empty list when nothing was retrieved. This return value is used directly by the chat service when constructing the system prompt sent to Claude; the chat router then forwards `trace` to the WebSocket as a `trace` event.
 
 ### `build_graph_scoped_context()`
 
@@ -113,10 +113,29 @@ async def build_graph_scoped_context(
     node_id: str,
     user_message: str,
     workspace_path=None,
-) -> Optional[str]:
+) -> Tuple[Optional[str], List[dict]]:
 ```
 
-Returns a context string scoped to the node's neighborhood (depth 2, max 5 notes), or `None` if no neighbor notes were found.
+Returns `(context_text, trace)` scoped to the node's neighborhood (depth 2, max 5 notes). The trace lists the focal note as a primary entry and each connected neighbour as an expansion entry.
+
+### Retrieval trace (step 28a)
+
+Both context builders collect a structured per-note trace alongside the prompt string. Each entry has the shape:
+
+```python
+{
+  "path": "knowledge/hai-ai-index/03-research-and-development.md",
+  "title": "Research and Development",
+  "score": 0.74,
+  "reason": "primary",                # primary | expansion
+  "via": "cosine",                    # bm25 | cosine | graph | rerank | …
+  "edge_type": None,                  # set when reason=expansion
+  "tier": None,                       # strong | weak when via=graph
+  "signals": {"bm25": 0.42, "cosine": 0.81, "graph": 0.30}
+}
+```
+
+`via` is the dominant signal (the key with the highest value in `_signals`) for primary entries. Expansion entries always carry `via="graph"` plus the originating `edge_type` and `tier`. The trace covers what was actually emitted into the prompt; candidates dropped by token budget or unreadable files do not appear.
 
 ### Tuning constants
 
