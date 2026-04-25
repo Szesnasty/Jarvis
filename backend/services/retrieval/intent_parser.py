@@ -1,13 +1,14 @@
 """Deterministic query-intent parser for Jira-aware retrieval (step 22f).
 
 Pattern-based — no LLM. Extracts Jira issue keys, status words, sprint
-references, risk/ambiguity hints, and business-area keywords.
+references, risk/ambiguity hints, business-area keywords, and section-type
+preferences (step 28d).
 """
 
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Tuple
 
 from services.enrichment.models import DEFAULT_BUSINESS_AREAS
 from services.retrieval.intent import FacetFilter, QueryIntent
@@ -100,6 +101,74 @@ _BLOCKS_RE = re.compile(
     re.IGNORECASE,
 )
 
+# ── Section-type intent (step 28d) ────────────────────────────────
+# Maps section_type label → list of (pattern, weight) trigger phrases.
+# First match with total weight ≥ 1.0 is accepted.
+_SECTION_TYPE_PATTERNS: List[Tuple[str, List[Tuple[re.Pattern, float]]]] = [
+    ("risks", [
+        (re.compile(r"\b(risk|risks|ryzyk[ao]|zagrożeni[ae]|threat|threats|vulnerability|vulnerabilities)\b", re.I), 1.0),
+        (re.compile(r"\bwhat (risks?|threats?)\b", re.I), 1.0),
+        (re.compile(r"\bjakie ryzyk[ao]\b", re.I), 1.0),
+    ]),
+    ("requirements", [
+        (re.compile(r"\b(requirements?|wymagani[ae]|wymagań)\b", re.I), 1.0),
+        (re.compile(r"\bwhat (does|do) .*? (require|need|expect)\b", re.I), 1.0),
+        (re.compile(r"\bjakie wymagania\b", re.I), 1.0),
+        (re.compile(r"\bco (klient|zamawiający) (wymaga|oczekuje)\b", re.I), 1.0),
+    ]),
+    ("integrations", [
+        (re.compile(r"\b(integrations?|integracje|integracja)\b", re.I), 1.0),
+        (re.compile(r"\bwhat (api|apis|webhooks?|integrations?)\b", re.I), 1.0),
+        (re.compile(r"\bco dokument mówi o integracjach\b", re.I), 1.0),
+    ]),
+    ("timeline", [
+        (re.compile(r"\b(timeline|milestones?|deadlines?|harmonogram|terminy?|etapy)\b", re.I), 1.0),
+        (re.compile(r"\bwhat (is the timeline|are the (?:milestones?|deadlines?))\b", re.I), 1.0),
+    ]),
+    ("pricing", [
+        (re.compile(r"\b(pricing|costs?|budget|wycena|koszt[uy]?|budżet)\b", re.I), 1.0),
+        (re.compile(r"\bhow much\b", re.I), 1.0),
+        (re.compile(r"\bile to kosztuje\b", re.I), 1.0),
+    ]),
+    ("security", [
+        (re.compile(r"\b(security|bezpieczeństwo|auth(?:entication|orization)?|encryption|rbac|access control)\b", re.I), 1.0),
+    ]),
+    ("stakeholders", [
+        (re.compile(r"\b(stakeholders?|interesariusze?|właściciel|owner)\b", re.I), 1.0),
+        (re.compile(r"\bwho (is responsible|owns|manages)\b", re.I), 1.0),
+    ]),
+    ("open_questions", [
+        (re.compile(r"\b(tbd|open (?:questions?|issues?)|do ustalenia|niejasności)\b", re.I), 1.0),
+        (re.compile(r"\bwhat (is|are) (unclear|unknown|pending|tbd)\b", re.I), 1.0),
+    ]),
+    ("technical_constraints", [
+        (re.compile(r"\b(constraints?|limitations?|ograniczeni[ae]|wymogi techniczne)\b", re.I), 1.0),
+    ]),
+    ("business_goals", [
+        (re.compile(r"\b(goals?|objectives?|kpis?|cele|cel|okrs?)\b", re.I), 1.0),
+        (re.compile(r"\bwhat (are|is) the (goals?|objectives?|kpis?)\b", re.I), 1.0),
+        (re.compile(r"\bjakie (są )?(cele|kpis?)\b", re.I), 1.0),
+    ]),
+]
+
+# Imported lazily to avoid circular import at module level
+_Tuple = None  # placeholder to satisfy type-checkers below
+
+
+def _detect_preferred_section_types(text: str) -> List[str]:
+    """Return section types signalled by the query (step 28d).
+
+    Iterates pattern groups in order; first matching type added to result.
+    Multiple types can match (e.g. "security requirements").
+    """
+    matched: List[str] = []
+    for stype, patterns in _SECTION_TYPE_PATTERNS:
+        for pattern, _w in patterns:
+            if pattern.search(text):
+                matched.append(stype)
+                break  # only count each type once
+    return matched
+
 
 def parse_intent(query: str) -> QueryIntent:
     """Parse a user query into a structured QueryIntent."""
@@ -162,6 +231,9 @@ def parse_intent(query: str) -> QueryIntent:
         pks = list(dict.fromkeys(k.split("-")[0] for k in keys))
         project_keys = pks if pks else None
 
+    # --- Section-type preference (step 28d) ---
+    preferred_section_types = _detect_preferred_section_types(text)
+
     # --- Build facet filter ---
     facets = FacetFilter(
         status_category=status_categories or None,
@@ -183,4 +255,5 @@ def parse_intent(query: str) -> QueryIntent:
         business_area_hint=business_area_hint,
         risk_hint=risk_hint,
         keys_in_query=keys,
+        preferred_section_types=preferred_section_types,
     )

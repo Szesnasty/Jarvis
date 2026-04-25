@@ -504,10 +504,16 @@ def _matches_facets(frontmatter: Dict, facets: FacetFilter) -> bool:
     return True
 
 
+# Section-type boost (step 28d)
+BOOST_SECTION_TYPE = 0.10
+BOOST_SECTION_TYPE_CAP = 0.10
+
+
 def _compute_post_fusion_boost(
     path: str,
     intent: QueryIntent,
     enrichment: Optional[Dict],
+    section_type: Optional[str] = None,
 ) -> float:
     """Compute additive boost after fusion. Capped at BOOST_CAP."""
     boost = 0.0
@@ -521,6 +527,11 @@ def _compute_post_fusion_boost(
     # Sprint active boost
     if intent.sprint_filter == "active" and path.startswith("jira/"):
         boost += BOOST_SPRINT_ACTIVE
+
+    # Section-type boost (step 28d) — not gated on Jira flag
+    if intent.preferred_section_types and section_type:
+        if section_type in intent.preferred_section_types:
+            boost += BOOST_SECTION_TYPE
 
     return min(boost, BOOST_CAP)
 
@@ -792,10 +803,13 @@ async def retrieve_with_intent(
             + w_enrich * data.get("_enrichment", 0.0)
         )
 
-        # Post-fusion boosts (step 22f)
+        # Post-fusion boosts (step 22f + 28d)
         boost = 0.0
+        section_type = data.get("section_type")
         if jira_enabled and intent.has_jira_signals:
-            boost = _compute_post_fusion_boost(path, intent, enrichments.get(path))
+            boost = _compute_post_fusion_boost(path, intent, enrichments.get(path), section_type)
+        elif intent.preferred_section_types and section_type:
+            boost = _compute_post_fusion_boost(path, intent, None, section_type)
 
         final = fused + boost
 

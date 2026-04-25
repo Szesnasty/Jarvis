@@ -408,11 +408,13 @@ def _make_section_frontmatter(
     section_index: int,
     doc_type: str = "pdf",
     tags: Optional[list] = None,
+    section_type: Optional[str] = None,
+    section_type_confidence: Optional[float] = None,
 ) -> str:
     """Frontmatter for a per-section note created by document section split."""
     from utils.markdown import add_frontmatter
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    fm = {
+    fm: dict = {
         "title": title,
         "date": now,
         "source": source,
@@ -421,6 +423,10 @@ def _make_section_frontmatter(
         "tags": tags or [],
         "source_type": f"section/{doc_type}",
     }
+    if section_type is not None:
+        fm["section_type"] = section_type
+    if section_type_confidence is not None:
+        fm["section_type_confidence"] = section_type_confidence
     return add_frontmatter("", fm)
 
 
@@ -495,18 +501,45 @@ async def _emit_document_sections(
     rel_doc_dir = doc_dir.relative_to(mem).as_posix()
     index_rel_path = f"{rel_doc_dir}/index.md"
 
+    # Step 28d — import classifier for section typing
+    try:
+        from services.document_classifier import (
+            classify_section_heuristic,
+            classify_section_llm,
+            SECTION_TYPES,
+        )
+        _classifier_available = True
+    except ImportError:
+        _classifier_available = False
+
     width = max(2, len(str(len(sections))))
     for i, section in enumerate(sections, start=1):
         slug = _slugify(section.title) or f"section-{i}"
         slug = slug[:60].rstrip("-") or f"section-{i}"
         fname = f"{str(i).zfill(width)}-{slug}.md"
         target = doc_dir / fname
+
+        # Step 28d — classify section type
+        stype: Optional[str] = None
+        stype_conf: Optional[float] = None
+        if _classifier_available:
+            h_type, h_conf, _signals = classify_section_heuristic(
+                section.title, section.body
+            )
+            if h_type != "other":
+                stype, stype_conf = h_type, round(h_conf, 2)
+            # LLM fallback is async but we skip it here for fast_ingest;
+            # classify_existing_sections.py script handles the backfill with
+            # LLM if desired.
+
         section_fm = _make_section_frontmatter(
             title=section.title,
             source=str(source_path),
             parent_path=index_rel_path,
             section_index=i,
             doc_type=doc_type,
+            section_type=stype,
+            section_type_confidence=stype_conf,
         )
         await asyncio.to_thread(
             target.write_text, section_fm + section.body + "\n", encoding="utf-8"
