@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.16.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.15.0...frontend-v0.16.0) (2026-04-25)
+
+
+### ✨ Features
+
+* **retrieval:** step 28a — surface per-note retrieval trace in chat UI ([6e5c3b9](https://github.com/Szesnasty/Jarvis/commit/6e5c3b96ff7c16eec0323e43ffdde2f3a5314ffb))
+* **step-28a:** retrieval trace UI - add 3 frontend trace tests, mark 28a and step-28 Done ([c25205e](https://github.com/Szesnasty/Jarvis/commit/c25205e9f163f0f2ff7edd9916ae17bba3c54f56))
+* **step-28b/UX:** bulk-promote workflow for Smart Connect suggestions ([6e3603e](https://github.com/Szesnasty/Jarvis/commit/6e3603eeae5641286dbcb36b1dece1e5889e60ed))
+* **step-28b/UX:** move help affordance, surface section_connect in top bar ([f8308e4](https://github.com/Szesnasty/Jarvis/commit/f8308e4737d0766faafc841f6634cc030cec0e88))
+* **step-28b/UX:** SmartConnectStatus badge replaces static help icon ([45405df](https://github.com/Szesnasty/Jarvis/commit/45405dfa4120a92ad61c22e34fc3cf4410b3aeba))
+* **step-28b:** help icon nudging user to Smart Connect backfill ([2e100f5](https://github.com/Szesnasty/Jarvis/commit/2e100f5113a168ef35b26a7c5dee626acd224776))
+* **step-28b:** memory sidebar document grouping ([aaa969f](https://github.com/Szesnasty/Jarvis/commit/aaa969f044542f940296ed4cc596bba33291440c))
+
+
+### 🐛 Bug Fixes
+
+* **step-28b/UX:** auto-expand parent doc on Review + tooltip on Smart Connect title ([1b6b186](https://github.com/Szesnasty/Jarvis/commit/1b6b18629f555ba84b8ed0226f96549d6209c91f))
+* **step-28b:** toggle document expand/collapse on whole row click ([36a314e](https://github.com/Szesnasty/Jarvis/commit/36a314e3b56b43dce8bee037bab76d00a806f2f4))
+* **tests/UX:** fix memory test sort order + SmartConnectStatus tooltip overflow ([afb21bc](https://github.com/Szesnasty/Jarvis/commit/afb21bcfb4915db08dac210eee766bd25253d75e))
+
+
+### ⚡ Performance
+
+* cap NER text at 20k chars + fix memory limit=200 for folder view ([104f529](https://github.com/Szesnasty/Jarvis/commit/104f529f9daa9d2cf7a6ea1bcfaa7cce6aebac59))
+
 ## [0.15.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.14.0...frontend-v0.15.0) (2026-04-25)
 
 
