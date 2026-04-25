@@ -23,7 +23,7 @@ describe('components/ImportDialog.vue', () => {
       props: { visible: true },
     })
     const input = wrapper.find('.import-dialog__file-input')
-    expect(input.attributes('accept')).toBe('.md,.txt,.pdf,.csv,.xml')
+    expect(input.attributes('accept')).toBe('.md,.txt,.pdf,.csv,.xml,.json')
   })
 
   it('dropzone is visible', async () => {
