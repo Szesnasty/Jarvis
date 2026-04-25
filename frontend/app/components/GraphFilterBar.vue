@@ -86,6 +86,15 @@
     </button>
 
     <button
+      class="filter-bar__orphan-btn"
+      :class="{ 'filter-bar__orphan-btn--active': filters.bridgesOnly }"
+      title="Show only entities (people, orgs, tags…) that connect 2+ notes — hides single-source noise"
+      @click="$emit('update:filters', { ...filters, bridgesOnly: !filters.bridgesOnly })"
+    >
+      Bridges only
+    </button>
+
+    <button
       class="filter-bar__glow-btn"
       :title="`Node glow: ${filters.glowLevel}`"
       @click="cycleGlow"
@@ -121,6 +130,8 @@ export interface GraphFilters {
   hideHubs: boolean
   /** Edge-count above which a node is treated as a hub and hidden. */
   hubThreshold: number
+  /** Hide entity-type nodes (person/org/place/source/project/tag) that connect to only one note — keep only bridges across notes. */
+  bridgesOnly: boolean
 }
 
 // Canonical display names and colors for known node types.

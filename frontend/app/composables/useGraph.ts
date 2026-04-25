@@ -27,6 +27,7 @@ export function useGraph() {
     glowLevel: 'normal',
     hideHubs: true,
     hubThreshold: 50,
+    bridgesOnly: true,
   })
 
   const { fetchGraph, fetchGraphStats, fetchGraphNeighbors, fetchOrphans, rebuildGraph: apiRebuild } = useApi()
@@ -69,6 +70,30 @@ export function useGraph() {
     return deg
   })
 
+  // Entity-type nodes that bridge ≥2 distinct notes. Single-source entities (one paper → hundreds of
+  // extracted people/orgs) are pure noise and dominate the canvas as a star pattern.
+  const ENTITY_TYPES = new Set([
+    'person', 'org', 'project', 'place', 'source', 'tag', 'batch',
+    'jira_person', 'jira_label', 'jira_component',
+  ])
+  const bridgeEntityIds = computed(() => {
+    const noteCount = new Map<string, Set<string>>()
+    const isNote = (id: string) => id.startsWith('note:')
+    for (const e of graph.value.edges) {
+      const noteSide = isNote(e.source) ? e.source : isNote(e.target) ? e.target : null
+      const otherSide = isNote(e.source) ? e.target : isNote(e.target) ? e.source : null
+      if (!noteSide || !otherSide || otherSide === noteSide) continue
+      let set = noteCount.get(otherSide)
+      if (!set) { set = new Set(); noteCount.set(otherSide, set) }
+      set.add(noteSide)
+    }
+    const bridges = new Set<string>()
+    for (const [id, notes] of noteCount.entries()) {
+      if (notes.size >= 2) bridges.add(id)
+    }
+    return bridges
+  })
+
   const filteredNodes = computed(() => {
     let nodes = graph.value.nodes
     const sprintKeep = sprintSubgraphIds.value
@@ -86,6 +111,10 @@ export function useGraph() {
       const threshold = filters.value.hubThreshold
       const deg = nodeDegree.value
       nodes = nodes.filter(n => (deg.get(n.id) ?? 0) <= threshold)
+    }
+    if (filters.value.bridgesOnly) {
+      const bridges = bridgeEntityIds.value
+      nodes = nodes.filter(n => !ENTITY_TYPES.has(n.type) || bridges.has(n.id))
     }
     // Search text does NOT filter nodes — it highlights them via searchMatchedNodeIds
     return nodes
