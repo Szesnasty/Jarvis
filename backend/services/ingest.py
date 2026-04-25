@@ -395,7 +395,7 @@ def _detect_json_sections(parsed) -> List["_DocumentSection"]:
 def _make_frontmatter(title: str, source: str, tags: Optional[list] = None) -> str:
     from utils.markdown import add_frontmatter
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    fm = {"title": title, "date": now, "source": source, "tags": tags or ["imported"]}
+    fm = {"title": title, "date": now, "source": source, "tags": tags or []}
     # add_frontmatter prepends to body; we just want the frontmatter
     return add_frontmatter("", fm)
 
@@ -418,7 +418,8 @@ def _make_section_frontmatter(
         "source": source,
         "parent": parent_path,
         "section_index": section_index,
-        "tags": tags or ["imported", doc_type, "section"],
+        "tags": tags or [],
+        "source_type": f"section/{doc_type}",
     }
     return add_frontmatter("", fm)
 
@@ -431,7 +432,7 @@ def _make_index_frontmatter(title: str, source: str, doc_type: str = "pdf") -> s
         "title": title,
         "date": now,
         "source": source,
-        "tags": ["imported", doc_type, "document"],
+        "source_type": f"index/{doc_type}",
         "document_type": f"{doc_type}-document",
     }
     return add_frontmatter("", fm)
@@ -736,7 +737,7 @@ async def fast_ingest(
                 )
 
         md_name = f"{_slugify(title)}.md"
-        fm = _make_frontmatter(title, str(file_path), tags=["imported", "json"])
+        fm = _make_frontmatter(title, str(file_path), tags=[])
         content = f"{fm}```json\n{body}\n```\n"
         target = _unique_path(folder / md_name)
         await asyncio.to_thread(target.write_text, content, encoding="utf-8")
