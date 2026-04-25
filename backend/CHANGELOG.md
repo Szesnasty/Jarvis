@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.13.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.12.1...backend-v0.13.0) (2026-04-25)
+
+
+### ✨ Features
+
+* **graph:** entity quality + similarity perf + graph UX polish ([4b424d5](https://github.com/Szesnasty/Jarvis/commit/4b424d5147cd021d701641cad5765da58d56c41e))
+* **graph:** skip TOC wikilinks from index notes + prune singleton tags/concepts ([c5884f9](https://github.com/Szesnasty/Jarvis/commit/c5884f94bea72f28bfe6bc188da9536baabe67f2))
+* **graph:** step 27b — scale entity caps with body length ([7d136a7](https://github.com/Szesnasty/Jarvis/commit/7d136a7ad7936520610cb0b6e5ba3bdc5362dc62))
+* **graph:** step 27c - concept pass improvements for mixed PL/EN PDFs ([004b6ab](https://github.com/Szesnasty/Jarvis/commit/004b6ab9b20ad82f4ed47f1a59aebc183ba6f92c))
+* **ingest:** auto rebuild graph after every file/url ingest ([43398f2](https://github.com/Szesnasty/Jarvis/commit/43398f2f69684bde315c1bf7d19314ce2054bf1b))
+* **ingest:** step 27a — split large PDFs into per-section notes ([e53aa40](https://github.com/Szesnasty/Jarvis/commit/e53aa4097c710fd1e687c1c7840b748ba3634d84))
+* **ingest:** step 27d — section split for txt/md/json/xml ([fd9e18d](https://github.com/Szesnasty/Jarvis/commit/fd9e18dbbe080cfb30d94271ca6cb76ae5d944c3))
+* large-file ingest progress + SQLite stability + workspace reset ([b4e205a](https://github.com/Szesnasty/Jarvis/commit/b4e205ab727866a4e628ea030bd025995f20cbeb))
+
+
+### 🐛 Bug Fixes
+
+* **graph:** distinct colors for org/project/place/source/batch + 5s status polling ([d04a07d](https://github.com/Szesnasty/Jarvis/commit/d04a07d1063ac42f4a1dc13a45f0b8845c0b63e3))
+* **hallucination:** raise person extraction threshold + add conversation-vs-knowledge rules to system prompt ([3217805](https://github.com/Szesnasty/Jarvis/commit/3217805e60c39d029b399b1b30e98cdeeadb7c3f))
+* **ingest:** remove generic hub tags (imported/pdf/section) from section frontmatter — store as source_type field instead; fix reset:db to also clean .shm/.wal ([dbe2ca9](https://github.com/Szesnasty/Jarvis/commit/dbe2ca9344ccb90637888b790e607624a758f5a5))
+* **ingest:** step 27a — drop blank-surround for strict numbered headings, filter TOC, dedup ([70ede83](https://github.com/Szesnasty/Jarvis/commit/70ede8301572cc1557562be965fbc8b4c2144074))
+* offload connection_service sync I/O to threadpool (fixes /status pending during linking) ([a1fbf55](https://github.com/Szesnasty/Jarvis/commit/a1fbf550fed656c757f2055b5531a3b7e90939df))
+* **security:** parse URL hostname for YouTube detection — fixes CodeQL incomplete substring sanitization ([3cf42f5](https://github.com/Szesnasty/Jarvis/commit/3cf42f583b7ee06adc693869763e99fc44ba8565))
+
 ## [0.12.1](https://github.com/Szesnasty/Jarvis/compare/backend-v0.12.0...backend-v0.12.1) (2026-04-25)
 
 
