@@ -155,5 +155,33 @@ export function useApi() {
       { method: 'POST', body: { note_path: notePath, target_path: targetPath } },
     )
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile, fetchJarvisConfig, updateJarvisConfig, fetchSemanticOrphans, rerunConnect, dismissSuggestion, promoteSuggestion }
+  const promoteBulk = (minConfidence = 0.8, scope: string = 'all', dryRun = false) =>
+    _api<{
+      promoted: number
+      notes_changed: number
+      skipped: number
+      scanned: number
+      min_confidence: number
+      dry_run: boolean
+    }>('/api/connections/promote-bulk', {
+      method: 'POST',
+      body: { min_confidence: minConfidence, scope, dry_run: dryRun },
+    })
+
+  const fetchConnectionsCoverage = () =>
+    _api<{
+      notes_total: number
+      notes_with_suggestions: number
+      notes_pending: number
+      sections_total: number
+      sections_with_suggestions: number
+      sections_pending: number
+      documents_pending: number
+      pending_strong_suggestions: number
+      pending_strong_notes: number
+      strong_threshold: number
+      active_section_jobs: Array<{ id: string; name: string; kind: string; stage?: string }>
+    }>('/api/connections/coverage')
+
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile, fetchJarvisConfig, updateJarvisConfig, fetchSemanticOrphans, rerunConnect, dismissSuggestion, promoteSuggestion, promoteBulk, fetchConnectionsCoverage }
 }
