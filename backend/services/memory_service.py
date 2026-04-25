@@ -163,9 +163,11 @@ async def list_notes(
             params.append(limit)
 
             # bm25() returns negative values; lower = better match
+            # Step 28b — surface frontmatter so the Memory sidebar can group
+            # split documents (document_type / parent / section_index).
             query = f"""
                 SELECT n.path, n.title, n.folder, n.tags,
-                       n.updated_at, n.word_count,
+                       n.updated_at, n.word_count, n.frontmatter,
                        {bm25_expr} AS bm25_score
                 FROM notes n
                 JOIN notes_fts ON notes_fts.rowid = n.id
@@ -183,7 +185,7 @@ async def list_notes(
                 cursor = await db.execute(query, params)
                 rows = await cursor.fetchall()
         else:
-            query = "SELECT path, title, folder, tags, updated_at, word_count FROM notes"
+            query = "SELECT path, title, folder, tags, updated_at, word_count, frontmatter FROM notes"
             params = []
             if folder:
                 query += " WHERE folder = ?"
@@ -199,6 +201,18 @@ async def list_notes(
                 tags = json.loads(row["tags"])
             except (json.JSONDecodeError, TypeError):
                 tags = []
+            # Step 28b — extract document grouping fields from frontmatter
+            # so the Memory sidebar can collapse split documents into
+            # one expandable parent.
+            try:
+                fm = json.loads(row["frontmatter"]) if row["frontmatter"] else {}
+            except (json.JSONDecodeError, TypeError):
+                fm = {}
+            section_index = fm.get("section_index")
+            try:
+                section_index = int(section_index) if section_index is not None else None
+            except (TypeError, ValueError):
+                section_index = None
             item = {
                 "path": row["path"],
                 "title": row["title"],
@@ -206,6 +220,9 @@ async def list_notes(
                 "tags": tags,
                 "updated_at": row["updated_at"],
                 "word_count": row["word_count"],
+                "document_type": fm.get("document_type"),
+                "parent": fm.get("parent"),
+                "section_index": section_index,
             }
             # Include BM25 score for downstream retrieval scoring
             if search:

@@ -11,7 +11,9 @@
       "Read(//c/Users/jacob/Jarvis/.trash/**)",
       "Read(//c/Users/jacob/Jarvis/agents/**)",
       "Read(//c/Users/jacob/Jarvis/app/logs/**)",
-      "Read(//c/Users/jacob/Jarvis/graph/**)"
+      "Read(//c/Users/jacob/Jarvis/graph/**)",
+      "Bash(git commit -m ' *)",
+      "Bash(.venv/bin/python -m pytest tests/test_memory_service.py -x --tb=short)"
     ],
     "additionalDirectories": [
       "C:\\Users\\jacob\\Jarvis\\memory\\conversations",

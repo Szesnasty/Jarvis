@@ -52,30 +52,78 @@
     <p v-else-if="notes.length === 0" class="note-list__empty">No notes yet</p>
 
     <ul v-else class="note-list__items">
-      <li
-        v-for="note in notes"
-        :key="note.path"
-        class="note-list__item"
-        :class="{ 'note-list__item--active': selectedPath === note.path }"
-        @click="$emit('select', note.path)"
-      >
-        <div class="note-list__item-row">
-          <span class="note-list__item-title">{{ note.title || note.path }}</span>
-          <button
-            class="note-list__delete"
-            title="Delete note"
-            @click.stop="confirmDelete(note)"
+      <template v-for="node in tree" :key="nodeKey(node)">
+        <!-- Plain note row -->
+        <li
+          v-if="node.kind === 'note'"
+          class="note-list__item"
+          :class="{ 'note-list__item--active': selectedPath === node.note.path }"
+          @click="$emit('select', node.note.path)"
+        >
+          <div class="note-list__item-row">
+            <span class="note-list__item-title">{{ node.note.title || node.note.path }}</span>
+            <button
+              class="note-list__delete"
+              title="Delete note"
+              @click.stop="confirmDelete(node.note)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
+          <span v-if="node.note.tags.length" class="note-list__item-tags">{{ node.note.tags.join(', ') }}</span>
+          <span class="note-list__item-date">{{ node.note.updated_at.slice(0, 10) }}</span>
+        </li>
+
+        <!-- Document row (PDF section split etc.) -->
+        <template v-else>
+          <li
+            class="note-list__item note-list__item--document"
+            :class="{ 'note-list__item--active': selectedPath === node.index.path }"
+            @click="$emit('select', node.index.path)"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
-              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-            </svg>
-          </button>
-        </div>
-        <span class="note-list__item-tags">{{ note.tags.join(', ') }}</span>
-        <span class="note-list__item-date">{{ note.updated_at.slice(0, 10) }}</span>
-      </li>
+            <div class="note-list__item-row">
+              <button
+                class="note-list__chevron-btn"
+                :title="isExpanded(node.index.path) ? 'Collapse' : 'Expand'"
+                @click.stop="toggleDoc(node.index.path)"
+              >
+                <span class="note-list__chevron" :class="{ 'note-list__chevron--open': isExpanded(node.index.path) }">▸</span>
+              </button>
+              <span class="note-list__item-title">{{ node.index.title || node.index.path }}</span>
+              <span class="note-list__section-count">{{ node.sections.length }} {{ node.sections.length === 1 ? 'section' : 'sections' }}</span>
+              <button
+                class="note-list__delete"
+                title="Delete document and all sections"
+                @click.stop="confirmDeleteDocument(node)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="3 6 5 6 21 6"/>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                </svg>
+              </button>
+            </div>
+            <span class="note-list__item-date">{{ node.index.updated_at.slice(0, 10) }}</span>
+          </li>
+
+          <li
+            v-for="section in (isExpanded(node.index.path) ? node.sections : [])"
+            :key="section.path"
+            class="note-list__item note-list__item--section"
+            :class="{ 'note-list__item--active': selectedPath === section.path }"
+            @click="$emit('select', section.path)"
+          >
+            <div class="note-list__item-row">
+              <span class="note-list__section-num">{{ String(section.section_index ?? '').padStart(2, '0') }}</span>
+              <span class="note-list__item-title">{{ section.title || section.path }}</span>
+            </div>
+          </li>
+        </template>
+      </template>
     </ul>
 
     <ConfirmDialog
@@ -87,11 +135,22 @@
       @confirm="handleDelete"
       @cancel="deleteTarget = null"
     />
+
+    <ConfirmDialog
+      :visible="deleteDocTarget !== null"
+      :loading="deleting"
+      title="Delete document?"
+      :message="`&quot;${deleteDocTarget?.index.title || ''}&quot; and ${deleteDocTarget?.sections.length ?? 0} section${(deleteDocTarget?.sections.length ?? 0) === 1 ? '' : 's'} will be permanently removed.`"
+      confirm-label="Delete"
+      @confirm="handleDeleteDocument"
+      @cancel="deleteDocTarget = null"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import type { NoteMetadata } from '~/types'
+import type { NoteMetadata, NoteTreeNode } from '~/types'
+import { buildNoteTree, sortNoteTreeByRecency } from '~/composables/useNoteTree'
 
 type SearchMode = 'keyword' | 'semantic' | 'hybrid'
 
@@ -113,7 +172,30 @@ const emit = defineEmits<{
 const searchQuery = ref('')
 const searchMode = ref<SearchMode>('keyword')
 const deleteTarget = ref<NoteMetadata | null>(null)
+type DocumentNode = Extract<NoteTreeNode, { kind: 'document' }>
+const deleteDocTarget = ref<DocumentNode | null>(null)
 const deleting = ref(false)
+
+// Step 28b — group split documents (PDF / future) under one expandable row.
+const tree = computed<NoteTreeNode[]>(() => sortNoteTreeByRecency(buildNoteTree(props.notes)))
+
+// Per-document expanded state, persisted across Memory ↔ Graph navigation.
+const expanded = useState<Record<string, boolean>>('noteTreeExpanded', () => ({}))
+
+function nodeKey(node: NoteTreeNode): string {
+  return node.kind === 'document' ? `doc:${node.index.path}` : `note:${node.note.path}`
+}
+
+function isExpanded(path: string): boolean {
+  // Auto-expand every document while a search is active so matching sections
+  // are visible without the user having to click each parent open.
+  if (searchQuery.value.trim()) return true
+  return !!expanded.value[path]
+}
+
+function toggleDoc(path: string) {
+  expanded.value = { ...expanded.value, [path]: !expanded.value[path] }
+}
 
 const searchModes: { value: SearchMode; label: string; icon: string; tooltip: string }[] = [
   { value: 'keyword', label: 'Keyword', icon: '🔍', tooltip: 'Exact word match via BM25' },
@@ -145,6 +227,26 @@ async function handleDelete() {
   } finally {
     deleting.value = false
     deleteTarget.value = null
+  }
+}
+
+function confirmDeleteDocument(node: DocumentNode) {
+  deleteDocTarget.value = node
+}
+
+async function handleDeleteDocument() {
+  const target = deleteDocTarget.value
+  if (!target) return
+  deleting.value = true
+  try {
+    // Sections first so the index doesn't briefly point at deleted children.
+    for (const section of target.sections) {
+      await props.onDelete(section.path)
+    }
+    await props.onDelete(target.index.path)
+  } finally {
+    deleting.value = false
+    deleteDocTarget.value = null
   }
 }
 
@@ -359,6 +461,81 @@ function onClearSearch() {
 .note-list__item-date {
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+/* Step 28b — document grouping styles. */
+.note-list__chevron-btn {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.note-list__chevron-btn:hover {
+  color: var(--neon-cyan);
+  background: var(--bg-elevated);
+}
+
+.note-list__chevron {
+  display: inline-block;
+  font-size: 0.7rem;
+  transition: transform 0.15s ease;
+  line-height: 1;
+}
+
+.note-list__chevron--open {
+  transform: rotate(90deg);
+}
+
+.note-list__section-count {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.note-list__item--document .note-list__item-title {
+  font-weight: 600;
+}
+
+.note-list__item--section {
+  margin-left: 1.25rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0 8px 8px 0;
+}
+
+.note-list__item--section .note-list__item-row {
+  gap: 0.5rem;
+}
+
+.note-list__item--section .note-list__item-title {
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.note-list__item--section.note-list__item--active .note-list__item-title {
+  color: var(--neon-cyan);
+}
+
+.note-list__section-num {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  min-width: 1.5rem;
 }
 
 .note-list__loading {

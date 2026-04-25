@@ -65,12 +65,14 @@
         "frontend/app/components/NoteViewer.vue",
         "frontend/app/components/SuggestionsPanel.vue",
         "frontend/app/components/ImportDialog.vue",
-        "frontend/app/components/LinkIngestDialog.vue"
+        "frontend/app/components/LinkIngestDialog.vue",
+        "frontend/app/composables/useNoteTree.ts",
+        "frontend/app/types/index.ts"
       ],
       "depends_on": [
         "database"
       ],
-      "last_updated": "2026-04-27",
+      "last_updated": "2026-04-25",
       "status": "current"
     },
     "jira-ingest": {

@@ -127,6 +127,57 @@ async def test_list_notes_by_folder(ws_db):
     assert notes[0]["folder"] == "inbox"
 
 
+# Step 28b — document grouping fields surfaced from frontmatter ─────────
+
+
+@pytest.mark.anyio
+async def test_list_notes_exposes_document_type(ws_db):
+    """Index notes from PDF section split carry document_type=pdf-document."""
+    index_md = (
+        "---\n"
+        "title: HAI AI Index Report 2025\n"
+        "document_type: pdf-document\n"
+        "tags: [imported, pdf]\n"
+        "---\n\n"
+        "1. [[hai-ai-index/01-introduction]]\n"
+    )
+    await create_note("knowledge/hai-ai-index/index.md", index_md, ws_db)
+    notes = await list_notes(workspace_path=ws_db)
+    assert len(notes) == 1
+    assert notes[0]["document_type"] == "pdf-document"
+    assert notes[0]["parent"] is None
+    assert notes[0]["section_index"] is None
+
+
+@pytest.mark.anyio
+async def test_list_notes_exposes_parent_and_section_index(ws_db):
+    """Section notes carry parent + section_index from frontmatter."""
+    section_md = (
+        "---\n"
+        "title: Introduction\n"
+        "parent: knowledge/hai-ai-index/index.md\n"
+        "section_index: 2\n"
+        "---\n\n"
+        "Body of the introduction section.\n"
+    )
+    await create_note("knowledge/hai-ai-index/01-introduction.md", section_md, ws_db)
+    notes = await list_notes(workspace_path=ws_db)
+    assert len(notes) == 1
+    assert notes[0]["parent"] == "knowledge/hai-ai-index/index.md"
+    assert notes[0]["section_index"] == 2
+    assert notes[0]["document_type"] is None
+
+
+@pytest.mark.anyio
+async def test_list_notes_missing_fields_default_to_none(ws_db):
+    """A plain note without grouping fields still lists with None values."""
+    await create_note("inbox/plain.md", SAMPLE_CONTENT, ws_db)
+    notes = await list_notes(workspace_path=ws_db)
+    assert notes[0]["document_type"] is None
+    assert notes[0]["parent"] is None
+    assert notes[0]["section_index"] is None
+
+
 
 
 @pytest.mark.anyio

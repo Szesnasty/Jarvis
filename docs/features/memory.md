@@ -16,7 +16,7 @@ sources:
   - frontend/app/components/LinkIngestDialog.vue
 depends_on: [database]
 last_reviewed: 2026-04-14
-last_updated: 2026-04-14
+last_updated: 2026-04-25
 ---
 
 
@@ -157,6 +157,32 @@ The memory page is a two-panel layout: a sidebar with `NoteList` for browsing/se
 `ImportDialog` uses a drag-and-drop zone backed by a hidden `<input type="file">` and submits via `multipart/form-data` using Nuxt's `$fetch`. `LinkIngestDialog` uses `v-model` for open/close state and performs client-side URL type detection with the same regex patterns used on the backend, giving the user immediate visual feedback before submitting.
 
 `SuggestionsPanel` renders Smart Connect output above the note body. It reads `suggested_related` and `aliases_matched` directly from the note's frontmatter (so it stays in sync with what the backend actually wrote), colour-codes each item by tier (strong / normal / weak), and exposes three actions per suggestion: open the linked note, **Keep** (calls `POST /api/connections/promote` → moves the path into `related:`), and **Dismiss** (calls `POST /api/connections/dismiss` → records the pair so it never returns). A header-level **Re-run** button calls `POST /api/connections/run/{path}?mode=fast` to recompute suggestions on demand. After every action `NoteViewer` emits `changed`; the page reloads the note and refreshes the orphan count. The memory page sidebar shows a small banner with the current semantic-orphan count and a Review button that opens the first orphan.
+
+#### Document grouping in the sidebar (step 28b)
+
+When a large document (e.g. a PDF) is ingested it is split into many section notes under a folder, with an `index.md` capturing the document-level metadata. The sidebar would otherwise show dozens of rows — one per section. Document grouping collapses them into a single expandable row.
+
+**How it works end-to-end:**
+
+1. **Frontmatter signals.** `memory_service.list_notes` now reads three fields from each note's stored `frontmatter` JSON column and includes them in every list item:
+   - `document_type` — set to `"pdf-document"` (or a future type) on index notes.
+   - `parent` — set to the index note's path on every section note.
+   - `section_index` — 1-based integer ordering sections within the document.
+
+2. **Type definition.** `NoteMetadata` in `frontend/app/types/index.ts` carries the three optional fields. The `NoteTreeNode` union (`{ kind: 'note'; note }` | `{ kind: 'document'; index; sections[] }`) describes the render tree.
+
+3. **Tree builder.** `buildNoteTree(notes)` in `frontend/app/composables/useNoteTree.ts` is a pure function (no I/O, fully unit-tested) that:
+   - Buckets section notes by their `parent` path.
+   - For each index note, emits a `document` node with sorted sections attached.
+   - Section notes whose parent is not in the current list (e.g. filtered out) fall through as plain `note` nodes (orphan recovery).
+   - All other notes emit as plain `note` nodes.
+   `sortNoteTreeByRecency` sorts the final tree by the representative note's `updated_at` DESC, preserving the existing "most recent first" order.
+
+4. **Render.** `NoteList.vue` replaces its former flat `<li v-for="note">` loop with a `<template v-for="node in tree">` that dispatches on `node.kind`. Document rows show a chevron toggle plus a section count badge. Clicking the document title selects the index note; clicking a section row selects the section. Expanded state is persisted in `useState<Record<string, boolean>>('noteTreeExpanded')` so navigating to the Graph page and back does not collapse everything.
+
+5. **Search behaviour.** While `searchQuery` is non-empty, `isExpanded()` returns `true` for every document unconditionally, so matching sections are always visible.
+
+6. **Bulk delete.** The delete button on a document row calls `handleDeleteDocument`, which deletes each section note first (in order) then deletes the index note, all using the existing `/api/memory/notes/{path}` `DELETE` endpoint. A confirm dialog states the number of sections that will be removed.
 
 ## Key Files
 

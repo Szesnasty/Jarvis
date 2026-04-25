@@ -25,7 +25,20 @@ export interface NoteMetadata {
   tags: string[]
   updated_at: string
   word_count: number
+  // Step 28b — document grouping fields. Index notes from PDF/etc section
+  // split carry `document_type` (e.g. "pdf-document"); section notes carry
+  // `parent` (the index path) and `section_index` (1-based). Plain notes
+  // have all three null.
+  document_type?: string | null
+  parent?: string | null
+  section_index?: number | null
 }
+
+// Step 28b — Memory sidebar tree node. Documents collapse into one
+// expandable row with their sections; everything else stays flat.
+export type NoteTreeNode =
+  | { kind: 'note'; note: NoteMetadata }
+  | { kind: 'document'; index: NoteMetadata; sections: NoteMetadata[] }
 
 export interface NoteDetail {
   path: string
