@@ -50,9 +50,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import type { GraphNode } from '~/types'
 import { useGraph } from '~/composables/useGraph'
+import { useIngestStatus } from '~/composables/useIngestStatus'
 import GraphCanvas from '~/components/GraphCanvas.vue'
 import GraphNodePreview from '~/components/GraphNodePreview.vue'
 import GraphFilterBar from '~/components/GraphFilterBar.vue'
@@ -64,6 +65,23 @@ const {
 } = useGraph()
 
 const canvasRef = ref<InstanceType<typeof GraphCanvas> | null>(null)
+const ingest = useIngestStatus()
+
+// Auto-reload graph when a graph_rebuild job transitions from running → done.
+// We track whether a rebuild was active; when active_count drops to 0 after
+// having a rebuild job, we reload the graph data automatically.
+let rebuildWasActive = false
+watch(
+  () => ingest.active.value.some((j: any) => j.kind === 'graph_rebuild'),
+  (isActive: boolean) => {
+    if (isActive) {
+      rebuildWasActive = true
+    } else if (rebuildWasActive) {
+      rebuildWasActive = false
+      loadGraph()
+    }
+  },
+)
 
 function handleNodeClick(node: GraphNode): void {
   selectNode(node)
