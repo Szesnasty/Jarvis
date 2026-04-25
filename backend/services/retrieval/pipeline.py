@@ -44,6 +44,43 @@ BOOST_CAP = 0.40
 _ANCHOR_SIMILARITY_THRESHOLD = 0.50
 _MAX_SEMANTIC_ANCHORS = 5
 
+# Step 26d: per-edge-type weights for chat retrieval expansion.
+# ``suggested_related`` weight MUST equal SUGGESTED_RELATED_MAX_WEIGHT (26b guard)
+# — both import from graph_service.queries to prevent drift.
+# Types not listed here default to 0.0 (ignored in expansion + graph scoring).
+_EXPANSION_EDGE_WEIGHTS_BASE: dict[str, float] = {
+    "related":           1.00,  # user-confirmed
+    "part_of":           0.60,  # project / area membership
+    "mentions":          0.50,  # explicit body mention
+    "similar_to":        0.45,  # semantic cluster
+    # suggested_related filled in at import time from shared constant
+}
+
+
+def _get_expansion_weights(
+    use_related: bool = True,
+    use_part_of: bool = True,
+    use_suggested_strong: bool = False,
+) -> dict[str, float]:
+    """Return edge-weight map respecting the three retrieval expansion toggles."""
+    from services.graph_service.queries import SUGGESTED_RELATED_MAX_WEIGHT
+
+    weights = dict(_EXPANSION_EDGE_WEIGHTS_BASE)
+    weights["suggested_related"] = SUGGESTED_RELATED_MAX_WEIGHT if use_suggested_strong else 0.0
+    if not use_related:
+        weights["related"] = 0.0
+    if not use_part_of:
+        weights["part_of"] = 0.0
+    return weights
+
+
+# Max neighbours added by one-hop anchor expansion (step 26d)
+_ANCHOR_EXPAND_MAX = 8
+
+# Context budget for graph-expansion notes (step 26d)
+_MAX_EXPANSION_NOTES = 6
+_MAX_EXPANSION_TOKENS = 1500
+
 
 def _is_jira_retrieval_enabled() -> bool:
     """Check if Jira-aware retrieval is feature-gated on."""
@@ -159,21 +196,26 @@ def _compute_graph_score(
     graph: graph_service.Graph,
     anchors: List[str],
     candidate_ids: Set[str],
+    *,
+    expansion_weights: Optional[dict] = None,
 ) -> float:
     """Combined graph score: edge connectivity + path distance + cluster bonus.
 
     Returns a value in the [0, 1] range.
 
-    ``suggested_related`` edges are capped at SUGGESTED_RELATED_MAX_WEIGHT
-    (Step 26b retrieval guard) so unconfirmed suggestions cannot dominate
-    retrieval ranking before the user has reviewed them.
+    Step 26d: edges are weighted by type using ``expansion_weights``.  Types
+    not present in the map (or with weight 0.0) do not contribute to scoring;
+    provenance edges (``derived_from``, ``same_batch``) are excluded.  The
+    convergence bonus only counts neighbours reachable via expansion-eligible
+    edges, consistent with the anchor-expansion logic.
     """
-    from services.graph_service.queries import SUGGESTED_RELATED_MAX_WEIGHT
-
     if node_id not in graph.nodes:
         return 0.0
 
-    # (a) Edge weight to other candidates in pool
+    if expansion_weights is None:
+        expansion_weights = _get_expansion_weights()
+
+    # (a) Edge weight to other candidates in pool — type-weighted
     edge_score = 0.0
     neighbor_ids: Set[str] = set()
     cluster_count = 0
@@ -185,17 +227,25 @@ def _compute_graph_score(
             other = edge.source
         if other is None:
             continue
+
+        type_weight = expansion_weights.get(edge.type, 0.0)
+        if type_weight == 0.0:
+            continue
+
+        # Tier-aware downgrade for unconfirmed suggestions (step 26d)
+        effective_type_weight = type_weight
+        if edge.type == "suggested_related":
+            tier = getattr(edge, "tier", None) or (getattr(edge, "data", None) or {}).get("tier")
+            if tier and tier != "strong":
+                effective_type_weight = type_weight * 0.5  # ≤ 0.175
+
         if other in candidate_ids:
-            # Cap unconfirmed suggestion edges so they don't dominate ranking.
-            effective_weight = edge.weight
-            if edge.type == "suggested_related":
-                effective_weight = min(edge.weight, SUGGESTED_RELATED_MAX_WEIGHT)
-            edge_score += effective_weight
+            edge_score += edge.weight * effective_type_weight
             neighbor_ids.add(other)
             if edge.type == "similar_to":
                 cluster_count += 1
 
-    # (b) Convergence bonus — connects to 3+ other candidates
+    # (b) Convergence bonus — connects to 3+ other candidates via eligible edges
     if len(neighbor_ids) >= 3:
         edge_score += 0.3
 
@@ -211,7 +261,94 @@ def _compute_graph_score(
     return min(raw, 1.0)
 
 
+def _expand_anchors(
+    graph: graph_service.Graph,
+    anchors: List[str],
+    *,
+    max_added: int = _ANCHOR_EXPAND_MAX,
+    expansion_weights: Optional[dict] = None,
+) -> List[str]:
+    """Add one-hop neighbours via high-trust edges to the anchor set.
+
+    - Includes neighbours via ``related`` (full weight).
+    - Includes neighbours via ``part_of`` so notes in the same project are
+      reachable from any member.
+    - Includes ``suggested_related`` ONLY when weight > 0 and tier == 'strong'.
+    - Sorted by edge.weight × type_weight descending; capped at max_added.
+    - Original anchors always retained.
+    """
+    if expansion_weights is None:
+        expansion_weights = _get_expansion_weights()
+
+    anchor_set = set(anchors)
+    scored_candidates: List[tuple] = []  # (score, node_id)
+
+    for anchor in anchors:
+        for edge in graph.edges:
+            if edge.source == anchor:
+                other = edge.target
+            elif edge.target == anchor:
+                other = edge.source
+            else:
+                continue
+
+            if other in anchor_set:
+                continue  # already an anchor
+
+            type_weight = expansion_weights.get(edge.type, 0.0)
+            if type_weight == 0.0:
+                continue
+
+            # Only expand via strong suggested_related
+            if edge.type == "suggested_related":
+                tier = getattr(edge, "tier", None) or (getattr(edge, "data", None) or {}).get("tier")
+                if not tier or tier != "strong":
+                    continue
+
+            scored_candidates.append((edge.weight * type_weight, other))
+
+    # Deduplicate, keep highest score per node, sort descending
+    best: dict[str, float] = {}
+    for score, node_id in scored_candidates:
+        if score > best.get(node_id, 0.0):
+            best[node_id] = score
+
+    top = sorted(best, key=lambda n: best[n], reverse=True)[:max_added]
+    return anchors + [n for n in top if n not in anchor_set]
+
+
 # ── Enrichment signal (step 22f) ──────────────────────────────────
+
+
+def _load_graph_expansion_config(workspace_path=None) -> dict:
+    """Read ``retrieval.graph_expansion`` from config.json.
+
+    Returns a dict with the three keys expected by ``_get_expansion_weights``.
+    Falls back to spec defaults on any read/parse error.
+    """
+    import json as _json
+
+    defaults = {
+        "use_related": True,
+        "use_part_of": True,
+        "use_suggested_strong": False,
+    }
+    try:
+        if workspace_path is None:
+            from config import get_settings
+            workspace_path = get_settings().workspace_path
+        config_path = workspace_path / "app" / "config.json"
+        if not config_path.exists():
+            return defaults
+        data = _json.loads(config_path.read_text(encoding="utf-8"))
+        cfg = data.get("retrieval", {}).get("graph_expansion", {})
+        return {
+            "use_related": bool(cfg.get("use_related", True)),
+            "use_part_of": bool(cfg.get("use_part_of", True)),
+            "use_suggested_strong": bool(cfg.get("use_suggested_strong", False)),
+        }
+    except Exception:
+        return defaults
 
 
 async def _load_enrichments_for_paths(
@@ -599,10 +736,16 @@ async def retrieve_with_intent(
             anchors = _extract_query_entities_fallback(query, graph)
 
         candidate_ids = {f"note:{p}" for p in candidate_pool}
+        # Step 26d: expand anchors via one-hop high-trust edges
+        expansion_weights = _get_expansion_weights(
+            **_load_graph_expansion_config(workspace_path)
+        )
+        anchors = _expand_anchors(graph, anchors, expansion_weights=expansion_weights)
         for path, data in candidate_pool.items():
             node_id = f"note:{path}"
             data["_graph"] = _compute_graph_score(
-                node_id, graph, anchors, candidate_ids
+                node_id, graph, anchors, candidate_ids,
+                expansion_weights=expansion_weights,
             )
 
     # --- Signal 4: Enrichment match (step 22f, gated) ---
