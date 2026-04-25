@@ -203,6 +203,7 @@ async def backfill_connections(payload: BackfillRequest) -> StreamingResponse:
                 ]
             else:
                 async with aiosqlite.connect(str(db_p)) as db:
+                    await db.execute("PRAGMA busy_timeout = 5000")
                     cursor = await db.execute("SELECT path FROM notes ORDER BY path")
                     rows = await cursor.fetchall()
                     paths = [row[0] for row in rows]

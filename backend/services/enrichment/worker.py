@@ -312,6 +312,9 @@ async def worker_loop(worker_idx: int, workspace_path: Optional[Path] = None) ->
     await init_database(target)
 
     async with aiosqlite.connect(str(target)) as db:
+        # 5 s busy timeout: backfill + ingest can hold short write locks;
+        # without this the worker dies with 'database is locked' instantly.
+        await db.execute("PRAGMA busy_timeout = 5000")
         while _worker_running:
             try:
                 if should_pause_for_battery(workspace_path):
