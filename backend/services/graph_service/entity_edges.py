@@ -159,6 +159,13 @@ def apply_extracted_entities(
         return 0
 
     extraction_text = clean_conversation_text(body) if is_conversation else body
+    # Limit NER to the first 20 000 chars. spaCy is O(n) and large PDF sections
+    # can exceed 270 KB; full-text NER on those notes takes minutes per note and
+    # makes the graph rebuild hang. Entity names appear early in most texts so
+    # truncating at 20k chars loses little signal while keeping rebuild fast.
+    _NER_CHAR_LIMIT = 20_000
+    if len(extraction_text) > _NER_CHAR_LIMIT:
+        extraction_text = extraction_text[:_NER_CHAR_LIMIT]
     person_min_confidence = 0.3 if is_conversation else 0.5
 
     fm_people = {str(p).lower() for p in fm.get("people", [])}
