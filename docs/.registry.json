@@ -134,6 +134,7 @@
         "backend/services/graph_service/builder.py",
         "backend/services/graph_service/queries.py",
         "backend/services/graph_service/entity_edges.py",
+        "backend/services/graph_service/concepts.py",
         "backend/services/entity_extraction.py",
         "backend/services/entity_canonicalization.py",
         "frontend/app/pages/graph.vue",

@@ -242,6 +242,9 @@ def chunk_markdown(
     paragraph_min_tokens: int = 20,       # paragraphs >= this become own chunks
     subject_kind: str = "note",
     multi_granularity: bool = True,
+    long_prose_threshold_tokens: int = 4000,  # auto-switch to lean mode above this
+    long_prose_section_window: int = 220,    # bigger windows in long-prose mode
+    long_prose_section_overlap: int = 60,    # ~25% overlap (vs 50% default)
 ) -> List[Chunk]:
     """Split markdown content into many overlapping, high-signal chunks.
 
@@ -306,6 +309,25 @@ def chunk_markdown(
             if section_body:
                 sections.append((heading_text, section_body))
 
+    # ---- 2a. Long-prose detection -----------------------------------------
+    # PDF-extracted papers / books arrive as one mega-section with no
+    # markdown structure and tens of thousands of words. Running the full
+    # multi-granularity pipeline (section + bullet + paragraph + 2× coarse)
+    # over an unstructured wall of text produces ~6× duplicated chunks
+    # that all match the same query, killing retrieval diversity.
+    #
+    # Detect the case (no headings + body above the long-prose threshold)
+    # and switch to a leaner config: bigger section window, lower overlap,
+    # skip the bullet/paragraph passes and the extra-coarse pass.
+    is_long_prose = (
+        multi_granularity
+        and not heading_matches
+        and _approx_tokens(body) > long_prose_threshold_tokens
+    )
+    if is_long_prose:
+        max_chunk_tokens = long_prose_section_window
+        overlap_tokens = long_prose_section_overlap
+
     # ---- 3. Section chunks (with overlap) ---------------------------------
     for section_title, section_text in sections:
         # Build context prefix – title + section + (tags for jira)
@@ -343,7 +365,7 @@ def chunk_markdown(
             ))
 
         # ---- 4. Per-bullet chunks ----------------------------------------
-        if multi_granularity:
+        if multi_granularity and not is_long_prose:
             bullets = _extract_bullets(section_text)
             for bullet in bullets:
                 if _approx_tokens(bullet) < 2:
@@ -357,7 +379,7 @@ def chunk_markdown(
                 ))
 
         # ---- 4b. Per-paragraph chunks (prose-heavy sections) -------------
-        if multi_granularity:
+        if multi_granularity and not is_long_prose:
             paragraphs = _extract_paragraphs(section_text)
             # Only emit per-paragraph chunks when there are multiple
             # substantive prose paragraphs (so we don't duplicate a
@@ -394,7 +416,13 @@ def chunk_markdown(
     # ---- 6. Extra-coarse pass (long-range context) -----------------------
     # A second sliding window with a larger window size captures
     # multi-paragraph relationships the fine coarse pass misses.
-    if multi_granularity and _approx_tokens(body) > extra_coarse_window_tokens:
+    # Skipped for long-prose docs — the (already widened) section pass
+    # plus the coarse pass cover the same ground.
+    if (
+        multi_granularity
+        and not is_long_prose
+        and _approx_tokens(body) > extra_coarse_window_tokens
+    ):
         coarse_prefix_parts2: List[str] = []
         if title:
             coarse_prefix_parts2.append(title)

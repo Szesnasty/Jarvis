@@ -358,48 +358,84 @@ def _build_intra_file_edges(
     chunk_embeds: Dict[str, List[Tuple[int, List[float]]]],
     min_chunks: int = 8,
     distance_threshold: int = 3,
-    similarity_floor: float = 0.80,
-    max_per_chunk: int = 3,
+    similarity_floor: float = 0.72,
+    max_per_chunk: int = 5,
+    max_chunks_per_doc: int = 400,
 ) -> List[Edge]:
     """Build same_document_thread edges within long files.
 
-    Only processes subjects with > ``min_chunks`` chunks.  Connects
-    chunks ``(i, j)`` where ``|i - j| >= distance_threshold`` and
-    ``cosine >= similarity_floor``.  Limited to ``max_per_chunk`` edges.
+    Connects chunks ``(i, j)`` where ``|i - j| >= distance_threshold`` and
+    ``cosine >= similarity_floor``. Limited to ``max_per_chunk`` outbound
+    edges per chunk.
+
+    Implementation notes
+    --------------------
+    Long documents (e.g. PDF-extracted papers) can contain thousands of
+    chunks; the previous Python loop did ~3765² = 14M cosines per paper
+    and timed out. We now:
+
+    * Stride-sample to ``max_chunks_per_doc`` if a doc exceeds it.
+    * Stack vectors into a normalised matrix and compute the full
+      pairwise sim matrix with one ``M @ M.T`` numpy call.
+    * Mask the lower triangle (forward direction only) and the
+      neighbour-distance band (``|i - j| < distance_threshold``).
+
+    Threshold lowered from 0.80 → 0.72 because diverse-vocabulary
+    sections of one paper (intro vs experiments vs related work) often
+    cap below 0.80 yet are clearly the same document thread. A more
+    permissive floor combined with a per-chunk top-K cap (5 instead of
+    3) makes intra-file structure visible without flooding the graph.
     """
+    import numpy as np
+
     edges: List[Edge] = []
 
     for path, chunks in chunk_embeds.items():
         if len(chunks) <= min_chunks:
             continue
 
-        # Sort by chunk index
         chunks_sorted = sorted(chunks, key=lambda c: c[0])
+        if len(chunks_sorted) > max_chunks_per_doc:
+            step = len(chunks_sorted) / max_chunks_per_doc
+            chunks_sorted = [chunks_sorted[int(i * step)] for i in range(max_chunks_per_doc)]
 
-        # For each chunk, find top-k similar distant chunks
-        for ci, (idx_i, vec_i) in enumerate(chunks_sorted):
-            candidates: List[Tuple[int, float]] = []
-            for cj, (idx_j, vec_j) in enumerate(chunks_sorted):
-                if abs(idx_i - idx_j) < distance_threshold:
-                    continue
-                sim = node_cosine(vec_i, vec_j)
-                if sim >= similarity_floor:
-                    candidates.append((idx_j, sim))
+        indices = np.array([c[0] for c in chunks_sorted], dtype=np.int64)
+        vecs = np.array([c[1] for c in chunks_sorted], dtype=np.float32)
+        norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        unit = vecs / norms
 
-            # Keep top-k
-            candidates.sort(key=lambda x: x[1], reverse=True)
-            for target_idx, sim in candidates[:max_per_chunk]:
-                # Emit only forward direction (i < j) to avoid duplicates
-                if idx_i < target_idx:
-                    src_id = "note:%s" % path
-                    evidence = ((idx_i, target_idx, round(sim, 3)),)
-                    edges.append(Edge(
-                        source=src_id, target=src_id,
-                        type=EDGE_SAME_DOCUMENT_THREAD,
-                        weight=round(sim, 3),
-                        evidence=evidence,
-                        origin="intra_file",
-                    ))
+        sims = unit @ unit.T  # (n, n) cosine matrix
+
+        # Forward direction only + distance band → mask out the rest
+        n = sims.shape[0]
+        ii, jj = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+        idx_diff = np.abs(indices[ii] - indices[jj])
+        keep = (jj > ii) & (idx_diff >= distance_threshold) & (sims >= similarity_floor)
+
+        if not keep.any():
+            continue
+
+        # Per-row top-K by similarity (max_per_chunk outbound edges/chunk)
+        for row in range(n):
+            row_keep = np.where(keep[row])[0]
+            if row_keep.size == 0:
+                continue
+            row_sims = sims[row, row_keep]
+            order = np.argsort(-row_sims)[:max_per_chunk]
+            src_idx = int(indices[row])
+            src_id = "note:%s" % path
+            for k in order:
+                target_idx = int(indices[int(row_keep[k])])
+                sim = float(row_sims[int(k)])
+                evidence = ((src_idx, target_idx, round(sim, 3)),)
+                edges.append(Edge(
+                    source=src_id, target=src_id,
+                    type=EDGE_SAME_DOCUMENT_THREAD,
+                    weight=round(sim, 3),
+                    evidence=evidence,
+                    origin="intra_file",
+                ))
 
     return edges
 

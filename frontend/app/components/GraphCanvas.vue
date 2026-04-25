@@ -126,6 +126,8 @@ const NODE_COLOR: Record<string, string> = {
   // Provenance / batch nodes (Step 25 PR 5)
   source:        '#a3e635',           // lime        — derived_from sources
   batch:         '#94a3b8',           // slate       — same_batch groups
+  // TF-IDF concept bridges (Step 27)
+  concept:       '#fde047',           // soft yellow — distinctive concepts
   // Jira projection
   jira_issue:     '#60a5fa',          // sky blue  — generic issue
   jira_epic:      '#f472b6',          // pink      — epics pop
@@ -146,6 +148,7 @@ const NODE_GLOW: Record<string, string> = {
   place:          'rgba(34, 211, 238, 0.5)',
   source:         'rgba(163, 230, 53, 0.45)',
   batch:          'rgba(148, 163, 184, 0.4)',
+  concept:        'rgba(253, 224, 71, 0.45)',
   jira_issue:     'rgba(96, 165, 250, 0.5)',
   jira_epic:      'rgba(244, 114, 182, 0.6)',
   jira_project:   'rgba(250, 204, 21, 0.55)',
@@ -187,6 +190,8 @@ const EDGE_COLOR: Record<string, string> = {
   mentions: 'rgba(192, 132, 252, 0.7)',
   related:  'rgba(2, 254, 255, 0.65)',
   similar_to: 'rgba(129, 140, 248, 0.6)', // indigo for semantic similarity
+  about_concept: 'rgba(253, 224, 71, 0.55)', // yellow — TF-IDF concept bridges
+  co_mentioned: 'rgba(244, 114, 182, 0.55)', // pink — entities sharing a note
   temporal: 'rgba(250, 204, 21, 0.35)',
   // Jira edges
   in_project:        'rgba(250, 204, 21, 0.55)',  // amber (project)

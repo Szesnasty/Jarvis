@@ -145,6 +145,10 @@ _EDGE_BASE_WEIGHT: Dict[str, float] = {
     # Step 25 PR 5 — source / batch provenance
     "derived_from": 0.45,
     "same_batch": 0.55,
+    # Step 27 — TF-IDF concept bridges
+    "about_concept": 0.7,
+    # Step 27 — co-mention bridges between entities sharing a note
+    "co_mentioned": 0.45,
 }
 
 
@@ -179,8 +183,10 @@ def apply_edge_weights(graph: Graph) -> None:
 
     updated: List[Edge] = []
     for edge in graph.edges:
-        if edge.type == "similar_to":
-            # Keep existing weight and evidence from similarity computation
+        # similar_to and about_concept carry their own per-edge weights
+        # (similarity score / TF-IDF score). Don't clobber them with the
+        # type-base weight.
+        if edge.type in ("similar_to", "about_concept"):
             updated.append(edge)
             continue
         base = _EDGE_BASE_WEIGHT.get(edge.type, 1.0)

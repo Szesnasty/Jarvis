@@ -313,6 +313,41 @@ async def worker_loop(worker_idx: int, workspace_path: Optional[Path] = None) ->
     target = db_path(workspace_path)
     await init_database(target)
 
+    # Outer loop: reopen the connection on fatal connection-level errors
+    # (e.g. a workspace reset that swaps the DB file out from under us, or
+    # an aiosqlite worker thread that died). Without this, the inner loop
+    # would spam ``sqlite3.DatabaseError: file is not a database`` forever
+    # because the broken connection is never replaced.
+    while _worker_running:
+        try:
+            await _run_one_connection(worker_idx, target, workspace_path)
+        except asyncio.CancelledError:
+            raise
+        except (sqlite3.DatabaseError, sqlite3.OperationalError) as exc:
+            if not _worker_running:
+                break
+            logger.warning(
+                "Enrichment worker %d connection lost (%s); reconnecting in 3s",
+                worker_idx, exc,
+            )
+            await asyncio.sleep(3.0)
+        except Exception:
+            if not _worker_running:
+                break
+            logger.exception("Enrichment worker %d crashed; reconnecting in 3s", worker_idx)
+            await asyncio.sleep(3.0)
+
+
+async def _run_one_connection(
+    worker_idx: int,
+    target: Path,
+    workspace_path: Optional[Path],
+) -> None:
+    """Run the worker poll loop against a single aiosqlite connection.
+
+    Raises ``sqlite3.DatabaseError`` / ``sqlite3.OperationalError`` to the
+    caller so the outer loop can reconnect.
+    """
     async with aiosqlite.connect(str(target)) as db:
         # Long busy_timeout + NORMAL fsync. Heavy ingest of large PDFs
         # (200 MB+ → thousands of chunk + embedding writes) holds bursty
@@ -347,8 +382,14 @@ async def worker_loop(worker_idx: int, workspace_path: Optional[Path] = None) ->
                     logger.debug("Enrichment worker %d backing off — DB busy", worker_idx)
                     await asyncio.sleep(3.0)
                 else:
-                    logger.exception("Enrichment worker %d sqlite error", worker_idx)
-                    await asyncio.sleep(1.0)
+                    # Real operational fault (disk full, malformed schema,
+                    # connection torn down by reset). Bubble up so the
+                    # outer loop reopens the connection.
+                    raise
+            except sqlite3.DatabaseError:
+                # 'file is not a database' / corruption / connection died.
+                # Bubble up so worker_loop reopens the connection.
+                raise
             except Exception:
                 logger.exception("Enrichment worker %d loop error", worker_idx)
                 await asyncio.sleep(1.0)

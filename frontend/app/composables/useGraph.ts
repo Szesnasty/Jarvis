@@ -25,9 +25,9 @@ export function useGraph() {
     searchText: '',
     selectedSprints: new Set<string>(),
     glowLevel: 'normal',
-    hideHubs: true,
+    hideHubs: false,
     hubThreshold: 50,
-    bridgesOnly: true,
+    bridgesOnly: false,
   })
 
   const { fetchGraph, fetchGraphStats, fetchGraphNeighbors, fetchOrphans, rebuildGraph: apiRebuild } = useApi()

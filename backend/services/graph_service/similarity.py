@@ -21,33 +21,58 @@ def compute_similarity_edges(graph: Graph, memory_path: Path) -> List[Edge]:
     1. Chunk-level embeddings (most precise, with evidence)
     2. Note-level embeddings (existing fallback)
     3. Keyword Jaccard (legacy fallback)
+
+    Exceptions during the chunk and note paths are logged (not silently
+    swallowed) so quality regressions are observable. The keyword fallback
+    runs only when both embedding paths produce zero edges.
     """
     note_nodes = [n for n in graph.nodes.values() if n.type == "note"]
     if not note_nodes:
         return []
 
-    # Try chunk-level first (step 20c)
     try:
         chunk_edges = _compute_chunk_similarity_edges(graph, memory_path)
-        if chunk_edges:
-            return chunk_edges
     except Exception:
-        pass
+        logger.exception("Chunk similarity edges failed; falling through")
+        chunk_edges = []
+    if chunk_edges:
+        logger.info("Chunk similarity edges produced %d similar_to", len(chunk_edges))
+        return chunk_edges
 
     try:
         embedding_edges = _compute_embedding_similarity_edges(graph, memory_path)
-        if embedding_edges:
-            return embedding_edges
     except Exception:
-        pass
+        logger.exception("Note-level similarity edges failed; falling through")
+        embedding_edges = []
+    if embedding_edges:
+        logger.info("Note-embedding similarity edges produced %d similar_to", len(embedding_edges))
+        return embedding_edges
 
-    return _compute_keyword_similarity_edges(graph, memory_path)
+    keyword_edges = _compute_keyword_similarity_edges(graph, memory_path)
+    if keyword_edges:
+        logger.info("Keyword fallback produced %d similar_to edges", len(keyword_edges))
+    else:
+        logger.info("No similar_to edges produced (no embeddings, no keyword overlap)")
+    return keyword_edges
 
 
 def _compute_chunk_similarity_edges(graph: Graph, memory_path: Path) -> List[Edge]:
-    """Build similar_to edges from chunk-pair cosine similarity with evidence."""
+    """Build similar_to edges from chunk-pair cosine similarity with evidence.
+
+    Pipeline:
+    1. ANN pre-filter — use note-level embeddings to drop pairs whose
+       cosine < ``NOTE_PREFILTER_THRESHOLD``. Without this, cost is
+       O(N²·M_a·M_b) chunk dot products; long ingested papers have
+       thousands of chunks each so the brute-force loop is the reason
+       this pass used to time out and produce zero edges.
+    2. Vectorised chunk-pair cosine via numpy matmul on row-normalised
+       matrices. Each surviving pair yields one (B_a × B_b) similarity
+       matrix; a threshold mask keeps only the highest-quality cells.
+    3. Per-note budget caps the fan-out at ``MAX_EDGES_PER_NODE``.
+    """
     import sqlite3
-    from services.embedding_service import blob_to_vector, cosine_similarity
+    import numpy as np
+    from services.embedding_service import blob_to_vector
 
     ws = memory_path.parent
     db_path = ws / "app" / "jarvis.db"
@@ -56,33 +81,64 @@ def _compute_chunk_similarity_edges(graph: Graph, memory_path: Path) -> List[Edg
 
     conn = sqlite3.connect(str(db_path))
     try:
-        cursor = conn.execute(
-            "SELECT ce.path, ce.chunk_index, ce.embedding "
-            "FROM chunk_embeddings ce"
-        )
-        rows = cursor.fetchall()
-    except sqlite3.OperationalError:
-        conn.close()
-        return []
-    finally:
         try:
-            conn.close()
-        except Exception:
-            pass
+            chunk_rows = list(conn.execute(
+                "SELECT path, chunk_index, embedding FROM chunk_embeddings"
+            ))
+        except sqlite3.OperationalError:
+            return []
 
-    if len(rows) < 2:
+        try:
+            note_emb_rows = list(conn.execute(
+                "SELECT path, embedding FROM note_embeddings"
+            ))
+        except sqlite3.OperationalError:
+            note_emb_rows = []
+    finally:
+        conn.close()
+
+    if len(chunk_rows) < 2:
         return []
 
     graph_paths = {n.id[5:] for n in graph.nodes.values() if n.type == "note"}
-    note_chunks: Dict[str, List[tuple]] = {}
-    for path, idx, blob in rows:
-        if path in graph_paths:
-            vec = blob_to_vector(blob)
-            note_chunks.setdefault(path, []).append((idx, vec))
 
-    paths = list(note_chunks.keys())
+    # --- Build per-note normalised chunk matrices ---
+    # Cap chunks per note: papers ingested from PDFs can produce thousands
+    # of chunks. After ~200 most-distinctive chunks per side, additional
+    # comparisons add noise rather than signal.
+    MAX_CHUNKS_PER_NOTE = 200
+    note_chunks: Dict[str, List[tuple]] = {}
+    for path, idx, blob in chunk_rows:
+        if path in graph_paths:
+            note_chunks.setdefault(path, []).append((idx, blob))
+
+    chunk_matrices: Dict[str, tuple] = {}  # path -> (indices, normalised matrix)
+    for path, items in note_chunks.items():
+        if len(items) > MAX_CHUNKS_PER_NOTE:
+            # Stride-sample so we cover the whole document, not just the head
+            step = len(items) / MAX_CHUNKS_PER_NOTE
+            items = [items[int(i * step)] for i in range(MAX_CHUNKS_PER_NOTE)]
+        indices = [i for i, _ in items]
+        vecs = np.array([blob_to_vector(b) for _, b in items], dtype=np.float32)
+        norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        chunk_matrices[path] = (indices, vecs / norms)
+
+    paths = list(chunk_matrices.keys())
     if len(paths) < 2:
         return []
+
+    # --- ANN pre-filter via note-level embeddings ---
+    # If a workspace has note-level embeddings, drop pairs with
+    # note_cosine below the prefilter threshold. Cuts O(N²·M²) to
+    # O(N²) note sims + chunked work only on the surviving pairs.
+    NOTE_PREFILTER_THRESHOLD = 0.30
+    note_vecs: Dict[str, "np.ndarray"] = {}
+    for path, blob in note_emb_rows:
+        if path in graph_paths:
+            v = np.array(blob_to_vector(blob), dtype=np.float32)
+            n = np.linalg.norm(v)
+            note_vecs[path] = v / n if n > 0 else v
 
     CHUNK_SIM_THRESHOLD = 0.55
     MAX_EDGES_PER_NODE = 5
@@ -91,42 +147,65 @@ def _compute_chunk_similarity_edges(graph: Graph, memory_path: Path) -> List[Edg
     new_edges: List[Edge] = []
     edge_count: Dict[str, int] = {}
 
+    # Score every pair, then emit top-K per note (so the budget keeps
+    # the BEST pairs instead of the first ones we scan).
+    candidate_pairs: List[tuple] = []  # (best_sim, path_a, path_b, evidence_tuple)
+
     for i in range(len(paths)):
         for j in range(i + 1, len(paths)):
             path_a, path_b = paths[i], paths[j]
-            node_a, node_b = f"note:{path_a}", f"note:{path_b}"
 
-            if edge_count.get(node_a, 0) >= MAX_EDGES_PER_NODE:
+            # ANN pre-filter
+            va = note_vecs.get(path_a)
+            vb = note_vecs.get(path_b)
+            if va is not None and vb is not None:
+                if float(va @ vb) < NOTE_PREFILTER_THRESHOLD:
+                    continue
+
+            indices_a, mat_a = chunk_matrices[path_a]
+            indices_b, mat_b = chunk_matrices[path_b]
+
+            sims = mat_a @ mat_b.T   # shape (M_a, M_b), normalised → cosine
+            mask = sims >= CHUNK_SIM_THRESHOLD
+            if not mask.any():
                 continue
-            if edge_count.get(node_b, 0) >= MAX_EDGES_PER_NODE:
-                continue
 
-            chunk_pairs = []
-            for idx_a, vec_a in note_chunks[path_a]:
-                for idx_b, vec_b in note_chunks[path_b]:
-                    sim = cosine_similarity(vec_a, vec_b)
-                    if sim >= CHUNK_SIM_THRESHOLD:
-                        chunk_pairs.append((idx_a, idx_b, sim))
+            # Top-K cells (by similarity) become evidence
+            flat = sims.ravel()
+            keep = max(1, min(MAX_EVIDENCE_PER_EDGE, int(mask.sum())))
+            top_flat_idx = np.argpartition(-flat, keep - 1)[:keep]
+            top_flat_idx = top_flat_idx[np.argsort(-flat[top_flat_idx])]
 
-            if not chunk_pairs:
-                continue
+            evidence = tuple(
+                (
+                    int(indices_a[int(idx // sims.shape[1])]),
+                    int(indices_b[int(idx % sims.shape[1])]),
+                    float(flat[idx]),
+                )
+                for idx in top_flat_idx
+            )
+            best_sim = evidence[0][2]
+            candidate_pairs.append((best_sim, path_a, path_b, evidence))
 
-            chunk_pairs.sort(key=lambda x: x[2], reverse=True)
-            best_sim = chunk_pairs[0][2]
-            evidence = tuple(chunk_pairs[:MAX_EVIDENCE_PER_EDGE])
-
-            # Map [0.55, 1.0] -> [0.3, 1.0]
-            weight = min(round(0.3 + (best_sim - 0.55) * (0.7 / 0.45), 3), 1.0)
-
-            new_edges.append(Edge(
-                source=node_a,
-                target=node_b,
-                type="similar_to",
-                weight=weight,
-                evidence=evidence,
-            ))
-            edge_count[node_a] = edge_count.get(node_a, 0) + 1
-            edge_count[node_b] = edge_count.get(node_b, 0) + 1
+    # Per-note degree cap: keep the pairs that maximise the global best_sim
+    candidate_pairs.sort(key=lambda x: -x[0])
+    for best_sim, path_a, path_b, evidence in candidate_pairs:
+        node_a, node_b = f"note:{path_a}", f"note:{path_b}"
+        if edge_count.get(node_a, 0) >= MAX_EDGES_PER_NODE:
+            continue
+        if edge_count.get(node_b, 0) >= MAX_EDGES_PER_NODE:
+            continue
+        # Map [0.55, 1.0] → [0.3, 1.0]
+        weight = min(round(0.3 + (best_sim - 0.55) * (0.7 / 0.45), 3), 1.0)
+        new_edges.append(Edge(
+            source=node_a,
+            target=node_b,
+            type="similar_to",
+            weight=weight,
+            evidence=evidence,
+        ))
+        edge_count[node_a] = edge_count.get(node_a, 0) + 1
+        edge_count[node_b] = edge_count.get(node_b, 0) + 1
 
     return new_edges
 

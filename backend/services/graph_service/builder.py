@@ -265,6 +265,19 @@ def rebuild_graph(workspace_path: Optional[Path] = None) -> Graph:
     except Exception as exc:
         logger.debug("Cross-source edge rebuild skipped: %s", exc)
 
+    # Pass 12: TF-IDF concept extraction (step 27)
+    # Mines distinctive unigrams + bigrams from note bodies and emits
+    # concept: nodes shared across the corpus. The cheapest mechanism to
+    # produce real cross-document bridges between long-form documents
+    # (papers / articles) that have no shared people/orgs.
+    try:
+        from services.graph_service.concepts import rebuild_concept_edges
+        concept_count = rebuild_concept_edges(ws, graph, memory_path=mem)
+        if concept_count:
+            logger.info("Concept pass: %d about_concept edges added", concept_count)
+    except Exception as exc:
+        logger.debug("Concept pass skipped: %s", exc)
+
     # Pass 9: Embed node labels for semantic anchoring (step 20b)
     if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") != "1":
         try:

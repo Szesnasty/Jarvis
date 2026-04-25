@@ -51,8 +51,8 @@ def _fixed_entities(_text, _existing=None):
     return [
         ExtractedEntity(text="Alice Kowalska", type="person", confidence=0.9),
         ExtractedEntity(text="Anthropic", type="organization", confidence=0.85),
-        ExtractedEntity(text="Jarvis", type="project", confidence=0.7),
-        ExtractedEntity(text="Warszawa", type="place", confidence=0.65),
+        ExtractedEntity(text="Jarvis", type="project", confidence=0.75),
+        ExtractedEntity(text="Warszawa", type="place", confidence=0.75),
         ExtractedEntity(text="2026-04-24", type="date", confidence=0.95),
     ]
 
