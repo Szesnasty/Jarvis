@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/Szesnasty/Jarvis/compare/backend-v0.12.0...backend-v0.12.1) (2026-04-25)
+
+
+### 🐛 Bug Fixes
+
+* **db:** apply busy_timeout to enrichment worker + backfill writers ([45a6d52](https://github.com/Szesnasty/Jarvis/commit/45a6d52f9efa147751331230e4efbffa67e453ad))
+
 ## [0.12.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.11.0...backend-v0.12.0) (2026-04-25)
 
 
