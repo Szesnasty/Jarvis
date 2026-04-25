@@ -6,16 +6,20 @@
     :default-open="false"
   >
     <p class="smart-connect-section__lead">
-      Smart Connect runs automatically when you add new notes.
-      Use <strong>Backfill</strong> to process notes that existed before Smart Connect was enabled.
+      Smart Connect runs automatically when you add new notes — including
+      every section of split documents (PDFs, large Markdown/JSON), which
+      are connected in the background right after ingest.
+      Use <strong>Backfill</strong> to process notes that existed before
+      Smart Connect was enabled, or after a version bump.
       All analysis is <strong>100% local</strong> — BM25, semantic similarity, and alias matching.
       No API key or AI model required.
     </p>
 
     <div class="smart-connect-section__warning" role="alert">
-      <strong>Warning:</strong> "Run on all notes" may add
-      <code>suggested_related</code> to many notes' frontmatter.
-      Run <em>Dry-run preview</em> first to see what would change.
+      <strong>Warning:</strong> "Run on all notes" only rewrites frontmatter
+      where suggestions actually changed (idempotent). Use <em>Dry-run
+      preview</em> first to see what would change, or <em>Force</em> to
+      rewrite every note regardless.
     </div>
 
     <div class="settings-page__actions">
