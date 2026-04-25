@@ -53,9 +53,11 @@ NOTE_DATED_B = "---\ntitle: Day Note B\ntags: []\ndate: 2026-04-14\n---\n\nSecon
 @pytest.mark.anyio
 async def test_tag_idf_rare_beats_common(ws_db):
     """Rare tag should have higher IDF than common tag."""
+    # Both tags need >= 2 notes so they survive the singleton-prune pass.
     await create_note("inbox/a.md", "---\ntitle: A\ntags: [python, rare-topic]\n---\n\n", ws_db)
-    await create_note("inbox/b.md", "---\ntitle: B\ntags: [python]\n---\n\n", ws_db)
+    await create_note("inbox/b.md", "---\ntitle: B\ntags: [python, rare-topic]\n---\n\n", ws_db)
     await create_note("inbox/c.md", "---\ntitle: C\ntags: [python]\n---\n\n", ws_db)
+    await create_note("inbox/d.md", "---\ntitle: D\ntags: [python]\n---\n\n", ws_db)
     graph = rebuild_graph(ws_db)
     idf = compute_tag_idf(graph)
     assert idf.get("tag:rare-topic", 0) > idf.get("tag:python", 0)
@@ -63,12 +65,13 @@ async def test_tag_idf_rare_beats_common(ws_db):
 
 @pytest.mark.anyio
 async def test_tag_idf_single_note(ws_db):
+    # Singleton tags are pruned by the entity cleanup pass — the resulting
+    # graph has no tag:solo node and IDF is empty for it.
     await create_note("inbox/a.md", "---\ntitle: A\ntags: [solo]\n---\n\n", ws_db)
     graph = rebuild_graph(ws_db)
+    assert "tag:solo" not in graph.nodes
     idf = compute_tag_idf(graph)
-    assert "tag:solo" in idf
-    # With only 1 note and 1 tag, IDF = log(2/2)/log(2) = 0.0 (no discrimination)
-    assert idf["tag:solo"] >= 0
+    assert "tag:solo" not in idf
 
 
 # --- Edge weights ---

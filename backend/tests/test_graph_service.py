@@ -107,9 +107,14 @@ async def test_graph_no_edge_different_tags(ws_db):
     await create_note("inbox/note-a.md", NOTE_A, ws_db)
     await create_note("inbox/note-c.md", NOTE_C, ws_db)
     graph = rebuild_graph(ws_db)
-    # "health" tag only on C, "ai" only on A
+    # "health" tag only on C, "ai" only on A — singleton tags get pruned
+    # by the final entity cleanup pass since they bridge nothing.
     health_tagged = [e for e in graph.edges if e.target == "tag:health"]
-    assert len(health_tagged) == 1
+    ai_tagged = [e for e in graph.edges if e.target == "tag:ai"]
+    assert health_tagged == []
+    assert ai_tagged == []
+    assert "tag:health" not in graph.nodes
+    assert "tag:ai" not in graph.nodes
 
 
 @pytest.mark.anyio
@@ -140,7 +145,9 @@ async def test_graph_node_has_metadata(ws_db):
 
 @pytest.mark.anyio
 async def test_graph_edge_has_type(ws_db):
+    # Two notes sharing tags so the tag node survives the singleton-prune pass.
     await create_note("inbox/note-a.md", NOTE_A, ws_db)
+    await create_note("inbox/note-b.md", NOTE_B, ws_db)
     graph = rebuild_graph(ws_db)
     types = {e.type for e in graph.edges}
     assert "tagged" in types

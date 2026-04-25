@@ -225,7 +225,7 @@ async def test_emit_sections_writes_index_and_files(ws_db, tmp_path):
     idx_content = (doc_dir / "index.md").read_text()
     fm, body = parse_frontmatter(idx_content)
     assert fm["document_type"] == "pdf-document"
-    assert "pdf" in fm["tags"]
+    assert fm.get("source_type") == "index/pdf"
     # Body has wiki-links pointing at each section
     assert "[[knowledge/my-long-paper/01-front-matter]]" in body
 

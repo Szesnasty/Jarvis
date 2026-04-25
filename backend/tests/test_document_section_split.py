@@ -134,7 +134,7 @@ async def test_json_ingest_splits_large_dict(ws_db):
     assert len(section_files) == 8
     sample_fm, sample_body = parse_frontmatter(section_files[0].read_text(encoding="utf-8"))
     assert sample_fm.get("section_index") == 1
-    assert "json" in sample_fm.get("tags", [])
+    assert sample_fm.get("source_type") == "section/json"
     assert "```json" in sample_body
 
 
@@ -218,7 +218,7 @@ async def test_xml_ingest_splits_large_doc(ws_db):
     section_files = sorted(index_path.parent.glob("*-*.md"))
     assert len(section_files) == 10
     sample_fm, sample_body = parse_frontmatter(section_files[0].read_text(encoding="utf-8"))
-    assert "xml" in sample_fm.get("tags", [])
+    assert sample_fm.get("source_type") == "section/xml"
     assert "```xml" in sample_body
 
 
