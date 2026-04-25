@@ -6,7 +6,7 @@
 > from the right typed sections of the source documents.
 
 **Parent**: [step-28-document-intelligence.md](step-28-document-intelligence.md)
-**Status**: ⬜ Planned
+**Status**: ✅ Done
 **Depends on**: 28a (trace), 28b (sidebar), 28c (baseline), 28d
 (section types — required for the prefilter approach)
 

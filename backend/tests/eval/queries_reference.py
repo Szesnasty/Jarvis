@@ -1,15 +1,17 @@
 """Reference evaluation queries targeting the four Step 27 reference PDFs.
 
-30 queries split across five types:
-  factual      (8) — direct factual lookup in a single document
-  cross_doc    (6) — require synthesising information across ≥2 documents
-  section_typed(8) — explicitly target content of a known section type
-  polish       (4) — Polish language queries against English documents
-  numerical    (4) — require retrieving specific numbers or statistics
+33 queries split across six types:
+  factual        (8) — direct factual lookup in a single document
+  cross_doc      (6) — require synthesising information across >= 2 documents
+  section_typed  (8) — explicitly target content of a known section type
+  polish         (4) — Polish language queries against English documents
+  numerical      (4) — require retrieving specific numbers or statistics
+  client_estimate(3) — added in step 28e; target section-typed content for
+                       the Client Estimator workflow
 
 Each entry:
   query              — the question as a user would phrase it
-  type               — one of the five types above
+  type               — one of the six types above
   expected_paths     — list of section paths that should be in top-5 results
   min_recall         — per-query recall floor for the CI gate (0.0 = informational only)
   notes              — brief rationale
@@ -319,5 +321,39 @@ REFERENCE_QUERIES: list[dict] = [
         ],
         "min_recall": 1.0,
         "notes": "Technical performance table shows 89.0% AI vs 88.6% human on MMLU.",
+    },
+    # ─────────────────────────────────────────────────
+    # CLIENT_ESTIMATE  (3) — added in step 28e
+    # These target section-typed content across the reference documents.
+    # ─────────────────────────────────────────────────
+    {
+        "query": "summarize the OWASP LLM Top 10 risks in three bullets",
+        "type": "client_estimate",
+        "expected_paths": [
+            "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md",
+            "knowledge/owasp-llm-top-10/01-overview.md",
+        ],
+        "min_recall": 0.5,
+        "notes": "Should surface the OWASP risks sections (section_type=risks).",
+    },
+    {
+        "query": "what are the open questions in the HAI AI Index report?",
+        "type": "client_estimate",
+        "expected_paths": [
+            "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md",
+            "knowledge/hai-ai-index-report-2025/01-executive-summary.md",
+        ],
+        "min_recall": 0.5,
+        "notes": "Policy/governance section contains unresolved items and open questions.",
+    },
+    {
+        "query": "what integrations does the NIST AI RMF require?",
+        "type": "client_estimate",
+        "expected_paths": [
+            "knowledge/nist-ai-rmf/03-map.md",
+            "knowledge/nist-ai-rmf/02-govern.md",
+        ],
+        "min_recall": 0.5,
+        "notes": "MAP and GOVERN sections cover integration requirements for AI risk management.",
     },
 ]

@@ -22,13 +22,14 @@ async def _send_event(ws: WebSocket, event_type: str, **fields) -> None:
     await ws.send_json({"type": event_type, **fields})
 
 
-async def _run_tool(event: StreamEvent, session_id: str = "", api_key: str = "") -> str:
+async def _run_tool(event: StreamEvent, session_id: str = "", api_key: str = "", specialist_id: str = "") -> str:
     try:
         return await execute_tool(
             event.name,
             event.tool_input or {},
             session_id=session_id,
             api_key=api_key or None,
+            specialist_id=specialist_id or None,
         )
     except ToolNotFoundError:
         return f"Unknown tool: {event.name}"
@@ -198,6 +199,7 @@ async def _stream_follow_up(
     usage_acc: list[int],
     depth: int = 1,
     tool_acc: list[int] | None = None,
+    specialist_id: str = "",
 ) -> str:
     """Stream Claude's follow-up after tool execution.
 
@@ -232,7 +234,7 @@ async def _stream_follow_up(
         for tool_event in pending_tools:
             await _send_event(ws, "tool_use", name=tool_event.name, input=tool_event.tool_input)
             session_service.record_tool_use(session_id, tool_event.name)
-            result = await _run_tool(tool_event, session_id=session_id, api_key=api_key)
+            result = await _run_tool(tool_event, session_id=session_id, api_key=api_key, specialist_id=specialist_id)
             await _send_event(ws, "tool_result", name=tool_event.name, content=result)
             await _emit_memory_changed(ws, tool_event.name, tool_event.tool_input or {})
             next_messages = _build_tool_messages(next_messages, tool_event, result)
@@ -245,6 +247,7 @@ async def _stream_follow_up(
         text += await _stream_follow_up(
             ws, claude, next_messages, system_prompt, tools,
             session_id, api_key, usage_acc, depth + 1, tool_acc=tool_acc,
+            specialist_id=specialist_id,
         )
 
     return text
@@ -320,6 +323,9 @@ async def _handle_message(
     assistant_text = ""
     # Specialist attribution: prefix first text_delta with specialist names
     attribution_prefix = ""
+    # Step 28e: pass the active specialist ID to tool execution so client-estimator
+    # can route search_notes through the hybrid pipeline.
+    active_specialist_id = active_specs[0]["id"] if active_specs else ""
     if active_specs:
         names = ", ".join(s["name"] for s in active_specs)
         attribution_prefix = f"**[{names}]** "
@@ -360,7 +366,7 @@ async def _handle_message(
         for tool_event in pending_tools:
             await _send_event(ws, "tool_use", name=tool_event.name, input=tool_event.tool_input)
             session_service.record_tool_use(session_id, tool_event.name)
-            result = await _run_tool(tool_event, session_id=session_id, api_key=api_key)
+            result = await _run_tool(tool_event, session_id=session_id, api_key=api_key, specialist_id=active_specialist_id)
             await _send_event(ws, "tool_result", name=tool_event.name, content=result)
             await _emit_memory_changed(ws, tool_event.name, tool_event.tool_input or {})
             tool_messages = _build_tool_messages(tool_messages, tool_event, result)
@@ -368,6 +374,7 @@ async def _handle_message(
         assistant_text += await _stream_follow_up(
             ws, claude, tool_messages, system_prompt, tools,
             session_id, api_key, usage_acc, tool_acc=tool_acc,
+            specialist_id=active_specialist_id,
         )
 
     if assistant_text:

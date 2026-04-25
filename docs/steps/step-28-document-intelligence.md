@@ -53,10 +53,10 @@ exploits per-section retrieval).
 | Sub-step | Title | Status |
 |----------|-------|--------|
 | [28a](step-28a-retrieval-trace-ui.spec.md) | Retrieval Trace UI — surface `_signals` and graph-expansion provenance per chat answer | ⬜ |
-| [28b](step-28b-memory-document-grouping.spec.md) | Memory document grouping — collapse split documents into one expandable parent in the sidebar | ⬜ |
-| [28c](step-28c-eval-baseline.spec.md) | Eval baseline against the four reference PDFs — frozen query set + reproducible run script | ⬜ |
-| [28d](step-28d-section-classification.spec.md) | Section type classification (heuristic + LLM fallback) and a retrieval filter that exploits it | ⬜ |
-| [28e](step-28e-client-estimate-specialist.spec.md) | Client Estimate specialist — first business workflow on top of section-typed retrieval | ⬜ |
+| [28b](step-28b-memory-document-grouping.spec.md) | Memory document grouping — collapse split documents into one expandable parent in the sidebar | ✅ |
+| [28c](step-28c-eval-baseline.spec.md) | Eval baseline against the four reference PDFs — frozen query set + reproducible run script | ✅ |
+| [28d](step-28d-section-classification.spec.md) | Section type classification (heuristic + LLM fallback) and a retrieval filter that exploits it | ✅ |
+| [28e](step-28e-client-estimate-specialist.spec.md) | Client Estimate specialist — first business workflow on top of section-typed retrieval | ✅ |
 
 **Execution order**: 28a → 28b → 28c → 28d → 28e.
 
