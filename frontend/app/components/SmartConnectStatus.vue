@@ -181,7 +181,10 @@ function onClick() {
   position: absolute;
   z-index: 100;
   top: calc(100% + 6px);
-  right: 0;
+  /* Pin to the left edge of the trigger so the tooltip always opens to the
+     right. The Memory sidebar is narrow and near the viewport edge, so
+     using right:0 was causing the popup to overflow off-screen to the left. */
+  left: 0;
   min-width: 240px;
   max-width: 340px;
   padding: 0.6rem 0.75rem;
