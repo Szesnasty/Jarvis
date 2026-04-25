@@ -64,16 +64,63 @@ def test_save_file_nonexistent_specialist(ws):
         save_specialist_file("nonexistent", "notes.md", b"data", workspace_path=ws)
 
 
-def test_save_file_invalid_filename(ws):
+def test_save_file_path_traversal_is_sanitized(ws):
+    """Path traversal attempts are stripped down to the safe leaf name."""
     create_specialist(SAMPLE_DATA, workspace_path=ws)
-    with pytest.raises(ValueError, match="Invalid filename"):
-        save_specialist_file("health-guide", "../evil.md", b"data", workspace_path=ws)
+    result = save_specialist_file("health-guide", "../evil.md", b"data", workspace_path=ws)
+    # Saved as plain 'evil.md' inside the specialist dir — no traversal possible.
+    assert result["filename"] == "evil.md"
 
 
 def test_save_file_disallowed_extension(ws):
     create_specialist(SAMPLE_DATA, workspace_path=ws)
     with pytest.raises(ValueError, match="Unsupported file type"):
         save_specialist_file("health-guide", "script.exe", b"data", workspace_path=ws)
+
+
+def test_save_file_polish_characters_sanitized(ws):
+    """Filenames with Polish characters no longer 422 — they get sanitized."""
+    create_specialist(SAMPLE_DATA, workspace_path=ws)
+    result = save_specialist_file(
+        "health-guide", "Notatka — szwagier.pdf", b"data", workspace_path=ws
+    )
+    # Polish chars and em-dash replaced with '-'; extension preserved.
+    assert result["filename"].endswith(".pdf")
+    assert "/" not in result["filename"]
+    assert ".." not in result["filename"]
+
+
+def test_save_file_parens_and_commas_sanitized(ws):
+    create_specialist(SAMPLE_DATA, workspace_path=ws)
+    result = save_specialist_file(
+        "health-guide", "report (final), v2.pdf", b"data", workspace_path=ws
+    )
+    assert result["filename"].endswith(".pdf")
+    assert "(" not in result["filename"]
+    assert "," not in result["filename"]
+
+
+def test_save_file_leading_underscore_sanitized(ws):
+    create_specialist(SAMPLE_DATA, workspace_path=ws)
+    result = save_specialist_file(
+        "health-guide", "_internal.txt", b"data", workspace_path=ws
+    )
+    # Stem must start with alphanumeric per validator → fallback prefix added.
+    assert result["filename"].endswith(".txt")
+    import re as _re
+    assert _re.match(r"^[a-zA-Z0-9]", result["filename"])
+
+
+def test_save_file_only_special_chars_falls_back(ws):
+    create_specialist(SAMPLE_DATA, workspace_path=ws)
+    result = save_specialist_file("health-guide", "!!!.md", b"data", workspace_path=ws)
+    assert result["filename"] == "file.md"
+
+
+def test_save_file_empty_filename_rejected(ws):
+    create_specialist(SAMPLE_DATA, workspace_path=ws)
+    with pytest.raises(ValueError, match="Filename is required"):
+        save_specialist_file("health-guide", "", b"data", workspace_path=ws)
 
 
 # --- list_specialist_files ---
