@@ -77,6 +77,15 @@
     </button>
 
     <button
+      class="filter-bar__orphan-btn"
+      :class="{ 'filter-bar__orphan-btn--active': filters.hideHubs }"
+      :title="`Hide nodes with more than ${filters.hubThreshold} edges (folder/index hubs)`"
+      @click="$emit('update:filters', { ...filters, hideHubs: !filters.hideHubs })"
+    >
+      Hide hubs
+    </button>
+
+    <button
       class="filter-bar__glow-btn"
       :title="`Node glow: ${filters.glowLevel}`"
       @click="cycleGlow"
@@ -108,6 +117,10 @@ export interface GraphFilters {
   selectedSprints: Set<string>
   /** Node glow intensity: off (pure perf), normal (current), high (full bloom), mono (elegant b/w). */
   glowLevel: 'off' | 'normal' | 'high' | 'mono'
+  /** Hide nodes whose edge degree exceeds {@link hubThreshold} — kills folder/index hubs that drown real links. */
+  hideHubs: boolean
+  /** Edge-count above which a node is treated as a hub and hidden. */
+  hubThreshold: number
 }
 
 // Canonical display names and colors for known node types.
