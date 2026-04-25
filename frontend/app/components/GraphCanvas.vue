@@ -751,10 +751,10 @@ async function buildGraph() {
     // Faster decay + shorter cooldown in perf mode so the physics sim settles
     // and stops burning CPU on graphs with thousands of edges. Smaller
     // warmup also skips a big block of blocking work at render time.
-    .d3AlphaDecay(perfMode ? 0.05 : 0.035)
-    .d3VelocityDecay(perfMode ? 0.55 : 0.45)
-    .warmupTicks(perfMode ? 40 : 100)
-    .cooldownTime(perfMode ? 1500 : 3000)
+    .d3AlphaDecay(perfMode ? 0.04 : 0.028)
+    .d3VelocityDecay(perfMode ? 0.5 : 0.4)
+    .warmupTicks(perfMode ? 100 : 160)
+    .cooldownTime(perfMode ? 2500 : 4000)
     .onNodeClick((node: any) => {
       const orig = nodeIndex.get(node.id)
       if (orig) emit('nodeClick', orig)
@@ -841,12 +841,12 @@ async function buildGraph() {
   // to the canvas edge. This is the key to balancing center density vs spread.
   graph.d3Force('charge')?.strength((node: any) => {
     const deg = degrees[node.id] || 0
-    if (node.type === 'jira_sprint') return -350 - deg * 5
-    if (node.type === 'area') return -220 - deg * 6
-    if (node.type === 'jira_project' || node.type === 'jira_epic') return -200 - deg * 5
-    if (node.type === 'tag' || node.type === 'jira_label') return -80 - deg * 3
-    return -120 - deg * 4
-  }).distanceMax(450)
+    if (node.type === 'jira_sprint') return -400 - deg * 6
+    if (node.type === 'area') return -280 - deg * 7
+    if (node.type === 'jira_project' || node.type === 'jira_epic') return -250 - deg * 6
+    if (node.type === 'tag' || node.type === 'jira_label') return -100 - deg * 4
+    return -160 - deg * 5
+  }).distanceMax(550)
   graph.d3Force('link')?.distance((link: any) => {
     if (link._type === 'in_sprint') return 28
     if (link._type === 'blocks' || link._type === 'depends_on') return 85
@@ -863,7 +863,7 @@ async function buildGraph() {
     if (link._type === 'relates_to') return 0.15
     return 0.35
   })
-  graph.d3Force('center')?.strength(0.08)
+  graph.d3Force('center')?.strength(0.05)
 
   // Collision force — prevents nodes from overlapping in dense clusters.
   // Uses each node's visual radius + a small padding so labels stay readable.
@@ -873,10 +873,10 @@ async function buildGraph() {
     graph.d3Force('collide', d3.forceCollide()
       .radius((node: any) => {
         const deg = degrees[node.id] || 0
-        return nodeRadius(node.type, deg) + 18
+        return nodeRadius(node.type, deg) + 24
       })
-      .strength(0.6)
-      .iterations(1)
+      .strength(0.82)
+      .iterations(3)
     )
   }
 
