@@ -81,6 +81,7 @@ watch(
       loadGraph()
     }
   },
+  { immediate: true },
 )
 
 function handleNodeClick(node: GraphNode): void {
