@@ -41,11 +41,13 @@
         @dragover.prevent
         @drop.prevent="handleDrop"
       >
-        <p>Drag & drop a file here or</p>
+        <p v-if="mode === 'generic'">Drag &amp; drop one or more files here, or</p>
+        <p v-else>Drag &amp; drop a file here or</p>
         <input
           ref="fileInput"
           type="file"
           :accept="acceptAttr"
+          :multiple="mode === 'generic'"
           class="import-dialog__file-input"
           @change="handleFileSelect"
         />
@@ -54,9 +56,33 @@
         </button>
       </div>
 
-      <div v-if="selectedFile" class="import-dialog__selected">
-        <p>{{ selectedFile.name }} ({{ Math.round(selectedFile.size / 1024) }}KB)</p>
+      <div v-if="selectedFiles.length === 1 && selectedFiles[0]" class="import-dialog__selected">
+        <p>{{ selectedFiles[0].name }} ({{ Math.round(selectedFiles[0].size / 1024) }}KB)</p>
       </div>
+      <ul v-else-if="selectedFiles.length > 1" class="import-dialog__file-list">
+        <li
+          v-for="(f, idx) in selectedFiles"
+          :key="`${f.name}-${idx}`"
+          class="import-dialog__file-row"
+          :class="fileStatuses[idx] ? `import-dialog__file-row--${fileStatuses[idx].state}` : ''"
+        >
+          <span class="import-dialog__file-name" :title="f.name">{{ f.name }}</span>
+          <span class="import-dialog__file-meta">
+            {{ Math.round(f.size / 1024) }}KB
+            <span v-if="fileStatuses[idx]?.state === 'pending'" class="import-dialog__file-status">queued</span>
+            <span v-else-if="fileStatuses[idx]?.state === 'uploading'" class="import-dialog__file-status">…</span>
+            <span v-else-if="fileStatuses[idx]?.state === 'ok'" class="import-dialog__file-status import-dialog__file-status--ok">✓</span>
+            <span v-else-if="fileStatuses[idx]?.state === 'error'" class="import-dialog__file-status import-dialog__file-status--error" :title="fileStatuses[idx]?.error">✗</span>
+            <button
+              v-if="!uploading"
+              type="button"
+              class="import-dialog__file-remove"
+              @click="removeFile(idx)"
+              aria-label="Remove file"
+            >×</button>
+          </span>
+        </li>
+      </ul>
 
       <!-- Generic options -->
       <div v-if="mode === 'generic'" class="import-dialog__options">
@@ -84,7 +110,12 @@
       </div>
 
       <div v-if="uploading" class="import-dialog__progress">
-        Importing{{ mode === 'jira' ? ' (parsing + indexing + embedding)' : '' }}...
+        <template v-if="selectedFiles.length > 1">
+          Importing {{ uploadProgress.done }} of {{ uploadProgress.total }}…
+        </template>
+        <template v-else>
+          Importing{{ mode === 'jira' ? ' (parsing + indexing + embedding)' : '' }}...
+        </template>
       </div>
 
       <div v-if="error" class="import-dialog__error">{{ error }}</div>
@@ -139,10 +170,11 @@
         <button class="import-dialog__cancel-btn" @click="$emit('close')">Cancel</button>
         <button
           class="import-dialog__import-btn"
-          :disabled="!selectedFile || uploading"
+          :disabled="selectedFiles.length === 0 || uploading"
           @click="handleImport"
         >
-          Import
+          <template v-if="selectedFiles.length > 1">Import {{ selectedFiles.length }} files</template>
+          <template v-else>Import</template>
         </button>
       </div>
     </div>
@@ -181,12 +213,17 @@ interface JiraImportRow {
 }
 
 const mode = ref<Mode>('generic')
-const selectedFile = ref<File | null>(null)
+const selectedFiles = ref<File[]>([])
 const targetFolder = ref('knowledge')
 const projectFilter = ref('')
 const uploading = ref(false)
 const error = ref('')
 const success = ref('')
+
+type FileState = 'pending' | 'uploading' | 'ok' | 'error'
+interface FileStatus { state: FileState; error?: string }
+const fileStatuses = ref<FileStatus[]>([])
+const uploadProgress = ref<{ done: number; total: number }>({ done: 0, total: 0 })
 
 const recentImports = ref<JiraImportRow[]>([])
 const recentLoading = ref(false)
@@ -199,8 +236,9 @@ const acceptAttr = computed(() =>
 function setMode(next: Mode) {
   if (mode.value === next) return
   mode.value = next
-  // Reset file when switching modes (extension constraints differ).
-  selectedFile.value = null
+  // Reset files when switching modes (extension constraints differ).
+  selectedFiles.value = []
+  fileStatuses.value = []
   error.value = ''
   success.value = ''
   if (next === 'jira' && recentImports.value.length === 0) {
@@ -208,24 +246,43 @@ function setMode(next: Mode) {
   }
 }
 
+function acceptFiles(list: FileList | null | undefined) {
+  if (!list || list.length === 0) return
+  // In jira mode keep single-file behaviour; in generic mode accept many.
+  const incoming = Array.from(list)
+  if (mode.value === 'jira') {
+    const f = incoming[0]
+    if (!f || !validateFile(f)) return
+    selectedFiles.value = [f]
+    fileStatuses.value = [{ state: 'pending' }]
+  } else {
+    const valid: File[] = []
+    for (const f of incoming) {
+      if (validateFile(f)) valid.push(f)
+      else return
+    }
+    // Append rather than replace so user can drop in batches.
+    selectedFiles.value = [...selectedFiles.value, ...valid]
+    fileStatuses.value = selectedFiles.value.map(() => ({ state: 'pending' }))
+  }
+  error.value = ''
+  success.value = ''
+}
+
 function handleFileSelect(event: Event) {
   const input = event.target as HTMLInputElement
-  if (input.files && input.files[0]) {
-    if (!validateFile(input.files[0])) return
-    selectedFile.value = input.files[0]
-    error.value = ''
-    success.value = ''
-  }
+  acceptFiles(input.files)
+  // Allow re-selecting the same file after a remove.
+  input.value = ''
 }
 
 function handleDrop(event: DragEvent) {
-  const files = event.dataTransfer?.files
-  if (files && files[0]) {
-    if (!validateFile(files[0])) return
-    selectedFile.value = files[0]
-    error.value = ''
-    success.value = ''
-  }
+  acceptFiles(event.dataTransfer?.files)
+}
+
+function removeFile(idx: number) {
+  selectedFiles.value = selectedFiles.value.filter((_, i) => i !== idx)
+  fileStatuses.value = fileStatuses.value.filter((_, i) => i !== idx)
 }
 
 function validateFile(file: File): boolean {
@@ -240,16 +297,17 @@ function validateFile(file: File): boolean {
 }
 
 async function handleImport() {
-  if (!selectedFile.value) return
+  if (selectedFiles.value.length === 0) return
   uploading.value = true
   error.value = ''
   success.value = ''
 
   try {
     if (mode.value === 'jira') {
-      await importJira()
+      // Jira import is single-file by design (one export = one batch).
+      await importJira(selectedFiles.value[0]!)
     } else {
-      await importGeneric()
+      await importGenericBatch()
     }
   } catch (err: unknown) {
     error.value = err instanceof Error ? err.message : 'Import failed'
@@ -258,26 +316,58 @@ async function handleImport() {
   }
 }
 
-async function importGeneric() {
+async function importGenericBatch() {
+  const files = selectedFiles.value
+  uploadProgress.value = { done: 0, total: files.length }
+  let okCount = 0
+  let failCount = 0
+  const lastErrors: string[] = []
+
+  // Sequential upload: each ingest triggers Smart Connect + indexing
+  // server-side; running them in parallel would race on SQLite writes.
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]!
+    fileStatuses.value[i] = { state: 'uploading' }
+    try {
+      const result = await importGeneric(file)
+      fileStatuses.value[i] = { state: 'ok' }
+      okCount += 1
+      // Emit per-file so parent (memory page) can refresh incrementally.
+      emit('imported', result)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Import failed'
+      fileStatuses.value[i] = { state: 'error', error: msg }
+      failCount += 1
+      if (lastErrors.length < 3) lastErrors.push(`${file.name}: ${msg}`)
+    } finally {
+      uploadProgress.value = { done: i + 1, total: files.length }
+    }
+  }
+
+  if (failCount === 0) {
+    success.value = `Imported ${okCount} ${okCount === 1 ? 'file' : 'files'}.`
+  } else if (okCount === 0) {
+    error.value = `All ${failCount} imports failed. ${lastErrors.join('; ')}`
+  } else {
+    success.value = `Imported ${okCount} of ${files.length}.`
+    error.value = `${failCount} failed: ${lastErrors.join('; ')}`
+  }
+}
+
+async function importGeneric(file: File): Promise<Record<string, unknown>> {
   const formData = new FormData()
-  formData.append('file', selectedFile.value as File)
+  formData.append('file', file)
   formData.append('folder', targetFolder.value)
 
-  const result = await $fetch<Record<string, unknown>>('/api/memory/ingest', {
+  return await $fetch<Record<string, unknown>>('/api/memory/ingest', {
     method: 'POST',
     body: formData,
   })
-  if (result.total_notes) {
-    success.value = `Imported ${result.total_notes} notes from ${result.source} (${result.format})`
-  } else {
-    success.value = `Imported: ${result.path}`
-  }
-  emit('imported', result)
 }
 
-async function importJira() {
+async function importJira(file: File) {
   const formData = new FormData()
-  formData.append('file', selectedFile.value as File)
+  formData.append('file', file)
   const filter = projectFilter.value.trim()
   if (filter) formData.append('project_filter', filter)
 
@@ -423,6 +513,74 @@ watch(
   margin-top: 0.75rem;
   font-size: 0.9rem;
   opacity: 0.8;
+}
+.import-dialog__file-list {
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.import-dialog__file-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.82rem;
+}
+.import-dialog__file-row--ok {
+  border-left: 3px solid #22c55e;
+}
+.import-dialog__file-row--error {
+  border-left: 3px solid #ef4444;
+}
+.import-dialog__file-row--uploading {
+  border-left: 3px solid #60a5fa;
+}
+.import-dialog__file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.import-dialog__file-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+.import-dialog__file-status {
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+.import-dialog__file-status--ok {
+  color: #22c55e;
+}
+.import-dialog__file-status--error {
+  color: #ef4444;
+}
+.import-dialog__file-remove {
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.5;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+}
+.import-dialog__file-remove:hover {
+  opacity: 1;
+  color: #ef4444;
 }
 .import-dialog__options {
   margin-top: 1rem;
