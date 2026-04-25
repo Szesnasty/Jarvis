@@ -9,7 +9,8 @@ const MOCK_NOTES = [
     title: 'Hello World',
     folder: 'inbox',
     tags: ['test'],
-    updated_at: '2026-01-01T00:00:00',
+    // More recent date → sorts first after sortNoteTreeByRecency
+    updated_at: '2026-01-02T00:00:00',
     word_count: 42,
   },
   {
@@ -17,7 +18,7 @@ const MOCK_NOTES = [
     title: 'Jarvis Project',
     folder: 'projects',
     tags: ['project', 'ai'],
-    updated_at: '2026-01-02T00:00:00',
+    updated_at: '2026-01-01T00:00:00',
     word_count: 120,
   },
 ]
@@ -34,6 +35,12 @@ function registerNotesEndpoints(notes = MOCK_NOTES) {
   registerEndpoint('/api/memory/notes', () => notes)
   // Path is URL-encoded when fetched via encodeURIComponent(path)
   registerEndpoint('/api/memory/notes/inbox%2Fhello.md', () => MOCK_DETAIL)
+  // Stub coverage so SmartConnectStatus doesn't throw an unhandled 404
+  registerEndpoint('/api/connections/coverage', () => ({
+    notes_total: 2, notes_with_suggestions: 2, notes_pending: 0,
+    sections_total: 0, sections_with_suggestions: 0, sections_pending: 0,
+    documents_pending: 0, active_section_jobs: [],
+  }))
 }
 
 describe('pages/memory.vue', () => {
