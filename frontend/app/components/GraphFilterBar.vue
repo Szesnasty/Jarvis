@@ -117,6 +117,11 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
   tag:            { label: 'Tags',       color: '#34d399' },
   person:         { label: 'People',     color: '#c084fc' },
   area:           { label: 'Areas',      color: '#fb923c' },
+  org:            { label: 'Org',        color: '#facc15' },
+  project:        { label: 'Project',    color: '#f472b6' },
+  place:          { label: 'Places',     color: '#22d3ee' },
+  source:         { label: 'Source',     color: '#a3e635' },
+  batch:          { label: 'Batch',      color: '#94a3b8' },
   jira_issue:     { label: 'Issues',     color: '#60a5fa' },
   jira_epic:      { label: 'Epics',      color: '#f472b6' },
   jira_project:   { label: 'Projects',   color: '#facc15' },
@@ -128,7 +133,7 @@ const TYPE_META: Record<string, { label: string; color: string }> = {
 
 // Preferred display order — types listed first appear first in the bar.
 const TYPE_ORDER: string[] = [
-  'note', 'tag', 'person', 'area',
+  'note', 'tag', 'person', 'area', 'org', 'project', 'place', 'source', 'batch',
   'jira_issue', 'jira_epic', 'jira_sprint', 'jira_project',
   'jira_person', 'jira_label', 'jira_component',
 ]
