@@ -83,6 +83,52 @@ def write_event(
         logger.warning("connection_events write failed: %s", exc)
 
 
+def write_events_batch(
+    db_path: Path,
+    *,
+    event_type: str,
+    rows: list[tuple],
+    smart_connect_version: Optional[int] = None,
+) -> None:
+    """Write multiple connection_events rows in a single transaction.
+
+    ``rows`` is a list of ``(note_path, target_path, confidence, methods, tier)``
+    tuples. Using one connection + executemany avoids the SQLite lock
+    contention that occurs when N individual :func:`write_event` calls race
+    for the same write lock.
+    """
+    if not rows:
+        return
+    now = _now_utc()
+    try:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.execute("PRAGMA busy_timeout = 5000")
+            conn.executescript(CONNECTION_EVENTS_SQL)
+            conn.executemany(
+                "INSERT INTO connection_events"
+                " (event_type, note_path, target_path, confidence,"
+                "  methods_json, tier, smart_connect_version, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        event_type,
+                        note_path,
+                        target_path,
+                        confidence,
+                        json.dumps(methods) if methods is not None else None,
+                        tier,
+                        smart_connect_version,
+                        now,
+                    )
+                    for note_path, target_path, confidence, methods, tier in rows
+                ],
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("connection_events batch write failed: %s", exc)
+
+
 def backfill_suggested_dedup_key_exists(
     db_path: Path,
     *,

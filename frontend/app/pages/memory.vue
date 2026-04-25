@@ -256,21 +256,17 @@ async function onDeleteNote(path: string) {
 
 const _onMemoryChanged = () => { loadNotes(); loadOrphans(); loadCoverage() }
 
-let _coverageTimer: ReturnType<typeof setInterval> | null = null
-
 onMounted(() => {
   loadNotes()
   loadOrphans()
   loadCoverage()
   window.addEventListener('jarvis:memory-changed', _onMemoryChanged)
-  // Light polling so the bulk-promote banner appears as soon as Smart
-  // Connect finishes producing suggestions for a freshly imported document.
-  _coverageTimer = setInterval(loadCoverage, 10_000)
+  // No coverage timer here — SmartConnectStatus.vue already polls /coverage
+  // every 10 s. Adding a second timer doubles the request rate for no gain.
 })
 
 onUnmounted(() => {
   window.removeEventListener('jarvis:memory-changed', _onMemoryChanged)
-  if (_coverageTimer) clearInterval(_coverageTimer)
 })
 </script>
 
