@@ -1,7 +1,10 @@
 <template>
   <section v-if="suggestions.length > 0 || aliasesMatched.length > 0" class="suggestions">
     <header class="suggestions__header">
-      <h3 class="suggestions__title">
+      <h3
+        class="suggestions__title"
+        title="Smart Connect ran automatically when this note was ingested. These are candidate links it found — keep the ones that fit, dismiss the rest. Re-run only if you have changed the note or want fresh suggestions."
+      >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2 L15 8.5 L22 9.5 L17 14.5 L18.5 22 L12 18 L5.5 22 L7 14.5 L2 9.5 L9 8.5 Z"/>
         </svg>

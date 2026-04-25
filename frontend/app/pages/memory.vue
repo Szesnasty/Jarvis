@@ -142,9 +142,21 @@ async function loadNotes() {
   }
 }
 
+// Per-document expansion state lives in NoteList via useState('noteTreeExpanded').
+// We touch it here so that selecting a section (e.g. via the orphan "Review"
+// button or any deep link) auto-expands its parent document — otherwise the
+// section is hidden inside a collapsed row and the user sees nothing change.
+const expandedDocs = useState<Record<string, boolean>>('noteTreeExpanded', () => ({}))
+
 async function onSelectNote(path: string) {
   selectedPath.value = path
   selectedNote.value = await fetchNote(path)
+  // If this note is a section of a split document, ensure its parent row is
+  // expanded so the user can see the selection in the sidebar.
+  const note = notes.value.find((n) => n.path === path)
+  if (note?.parent) {
+    expandedDocs.value = { ...expandedDocs.value, [note.parent]: true }
+  }
 }
 
 async function onFolderChange(folder: string | null) {
