@@ -16,6 +16,7 @@ Aliases, entity overlap and dismissals are added in later PRs of step 25.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -280,7 +281,7 @@ async def generate_suggestions(
     if not full_path.exists():
         raise FileNotFoundError(f"Note not found: {note_path}")
 
-    content = full_path.read_text(encoding="utf-8")
+    content = await asyncio.to_thread(full_path.read_text, encoding="utf-8")
     fm, body = parse_frontmatter(content)
     query = build_connection_query(fm, body)
 
@@ -688,25 +689,30 @@ async def _finalise(
         }
         for s in suggested
     ]
-    full_path.write_text(add_frontmatter(body, fm), encoding="utf-8")
+    new_content = add_frontmatter(body, fm)
 
-    edges_added = 0
-    try:
-        from services.graph_service import ingest_note as graph_ingest_note
+    # All write operations (frontmatter, graph JSON, provenance edges) are
+    # synchronous and CPU/I/O heavy. Run them together in a threadpool so the
+    # FastAPI event loop stays responsive for /status polls during linking.
+    def _sync_write_phase() -> int:
+        full_path.write_text(new_content, encoding="utf-8")
 
-        graph_ingest_note(note_path, workspace_path=ws)
-    except Exception as exc:  # pragma: no cover — defensive
-        logger.warning("connect_note graph ingest failed: %s", exc)
+        try:
+            from services.graph_service import ingest_note as graph_ingest_note
+            graph_ingest_note(note_path, workspace_path=ws)
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("connect_note graph ingest failed: %s", exc)
 
-    # Emit alias_match edges for every suggestion whose alias signal fired.
-    alias_targets = [s.path for s in suggested if "alias" in s.methods]
-    if alias_targets:
-        edges_added += _emit_note_edges(
-            note_path, [(t, "alias_match", "alias") for t in alias_targets], ws,
-        )
+        _edges = 0
+        alias_targets = [s.path for s in suggested if "alias" in s.methods]
+        if alias_targets:
+            _edges += _emit_note_edges(
+                note_path, [(t, "alias_match", "alias") for t in alias_targets], ws,
+            )
+        _edges += _emit_provenance_edges(note_path, fm, ws)
+        return _edges
 
-    # Step 25 PR 5 — provenance edges from the note to its source/batch nodes.
-    edges_added += _emit_provenance_edges(note_path, fm, ws)
+    edges_added = await asyncio.to_thread(_sync_write_phase)
 
     return ConnectionResult(
         note_path=note_path,
