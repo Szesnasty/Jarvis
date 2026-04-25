@@ -193,7 +193,7 @@ const recentLoading = ref(false)
 const recentError = ref('')
 
 const acceptAttr = computed(() =>
-  mode.value === 'jira' ? '.xml,.csv' : '.md,.txt,.pdf,.csv,.xml'
+  mode.value === 'jira' ? '.xml,.csv' : '.md,.txt,.pdf,.csv,.xml,.json'
 )
 
 function setMode(next: Mode) {

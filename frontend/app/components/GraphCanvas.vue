@@ -42,7 +42,7 @@ const props = defineProps<{
   edges: GraphEdge[]
   highlightedNode?: string | null
   searchMatchedIds?: Set<string>
-  glowLevel?: 'off' | 'normal' | 'high'
+  glowLevel?: 'off' | 'normal' | 'high' | 'mono'
 }>()
 
 const emit = defineEmits<{
@@ -142,6 +142,31 @@ const NODE_GLOW: Record<string, string> = {
   jira_label:     'rgba(163, 230, 53, 0.45)',
   jira_component: 'rgba(249, 115, 22, 0.5)',
 }
+
+// --- Monochrome palette ----------------------------------------------------
+// Used when glowLevel === 'mono'. Three tiers of grey/white render the
+// graph as an elegant ink drawing on the dark background. No glows, no
+// halos, no particles — just structure.
+const MONO_NODE_COLOR: Record<string, string> = {
+  // Major anchors — pure white
+  area:           'rgba(255, 255, 255, 0.96)',
+  jira_project:   'rgba(255, 255, 255, 0.96)',
+  jira_epic:      'rgba(255, 255, 255, 0.92)',
+  jira_sprint:    'rgba(255, 255, 255, 0.88)',
+  // Mid tier — light grey
+  note:           'rgba(220, 220, 222, 0.85)',
+  person:         'rgba(220, 220, 222, 0.85)',
+  jira_person:    'rgba(220, 220, 222, 0.85)',
+  jira_component: 'rgba(200, 200, 204, 0.78)',
+  // Minor — dimmer grey
+  jira_issue:     'rgba(170, 172, 178, 0.72)',
+  tag:            'rgba(150, 152, 158, 0.65)',
+  jira_label:     'rgba(150, 152, 158, 0.65)',
+}
+const MONO_DEFAULT_COLOR = 'rgba(170, 172, 178, 0.7)'
+const MONO_EDGE_COLOR = 'rgba(220, 220, 224, 0.18)'
+const MONO_EDGE_FOCUS = 'rgba(255, 255, 255, 0.85)'
+const MONO_EDGE_DIM = 'rgba(220, 220, 224, 0.04)'
 
 const EDGE_COLOR: Record<string, string> = {
   tagged:   'rgba(52, 211, 153, 0.7)',
@@ -391,8 +416,13 @@ async function buildGraph() {
 
       const deg = degrees[node.id] || 0
       const r = nodeRadius(node.type, deg)
-      const color = NODE_COLOR[node.type] ?? '#9ca3af'
-      const glowColor = NODE_GLOW[node.type] ?? 'rgba(156, 163, 175, 0.3)'
+      const isMono = props.glowLevel === 'mono'
+      const color = isMono
+        ? (MONO_NODE_COLOR[node.type] ?? MONO_DEFAULT_COLOR)
+        : (NODE_COLOR[node.type] ?? '#9ca3af')
+      const glowColor = isMono
+        ? 'rgba(255, 255, 255, 0.0)'
+        : (NODE_GLOW[node.type] ?? 'rgba(156, 163, 175, 0.3)')
       const isHighlighted = props.highlightedNode === node.id
       const isHovered = hoveredNode.value?.id === node.id
       // "Focus" = hover takes priority, but when nothing is hovered and a
@@ -420,9 +450,11 @@ async function buildGraph() {
       //  - 'off'    → always flat (fastest)
       //  - 'normal' → perfMode still suppresses glow for non-special nodes
       //  - 'high'   → user explicitly asked for full bloom, ignore perfMode
+      //  - 'mono'   → elegant b/w — always flat, no halos, no shadows
       const glow = props.glowLevel ?? 'normal'
       const lowDetail =
         glow === 'off' ||
+        glow === 'mono' ||
         globalScale < 0.45
       // In normal+perfMode non-special nodes still get the halo gradient
       // but skip the expensive shadowBlur (the real perf killer).
@@ -534,6 +566,16 @@ async function buildGraph() {
       // that don't touch it; boost edges that DO touch it.
       const focusId = hoveredNode.value?.id ?? props.highlightedNode ?? null
       const touchesFocus = !!focusId && (srcId === focusId || tgtId === focusId)
+      const isMono = props.glowLevel === 'mono'
+      if (isMono) {
+        if (focusId && !touchesFocus) return MONO_EDGE_DIM
+        if (props.searchMatchedIds && props.searchMatchedIds.size > 0) {
+          if (!props.searchMatchedIds.has(srcId) && !props.searchMatchedIds.has(tgtId)) {
+            return MONO_EDGE_DIM
+          }
+        }
+        return touchesFocus ? MONO_EDGE_FOCUS : MONO_EDGE_COLOR
+      }
       if (focusId && !touchesFocus) {
         return 'rgba(100, 160, 220, 0.03)'
       }
@@ -594,6 +636,8 @@ async function buildGraph() {
       return touchesFocus ? Math.max(w * 2.5, 2.0) : w
     })
     .linkLineDash((link: any) => {
+      // Mono mode: keep dashes minimal so the diagram stays clean
+      if (props.glowLevel === 'mono') return []
       // Focused edges become solid so they pop visually
       const srcId = typeof link.source === 'object' ? link.source.id : link.source
       const tgtId = typeof link.target === 'object' ? link.target.id : link.target
@@ -611,10 +655,13 @@ async function buildGraph() {
       return []
     })
     .linkDirectionalArrowLength((link: any) => {
+      if (props.glowLevel === 'mono') return 0
       return link._type === 'linked' || link._type === 'related' ? 4 : 0
     })
     .linkDirectionalArrowRelPos(0.85)
     .linkDirectionalParticles((link: any) => {
+      // Mono mode: zero motion — elegance over animation.
+      if (props.glowLevel === 'mono') return 0
       // In perf mode: focused edges get 2 particles, and a wider ambient
       // subset (~15%) gets 1 particle so dots visibly flow across the graph.
       if (perfMode) {
@@ -918,8 +965,13 @@ watch(
 watch(
   () => props.glowLevel,
   () => {
-    // Trigger a repaint — node draw reads props.glowLevel directly.
+    // Trigger a repaint — node and edge draw read props.glowLevel directly.
     graph?.nodeColor(graph.nodeColor())
+    graph?.linkColor(graph.linkColor())
+    graph?.linkWidth(graph.linkWidth())
+    graph?.linkLineDash(graph.linkLineDash())
+    graph?.linkDirectionalParticles(graph.linkDirectionalParticles())
+    graph?.linkDirectionalArrowLength(graph.linkDirectionalArrowLength())
   },
 )
 
