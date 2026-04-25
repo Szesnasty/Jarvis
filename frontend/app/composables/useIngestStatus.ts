@@ -36,7 +36,7 @@ interface IngestStatusResponse {
   recent: IngestJob[]
 }
 
-const POLL_INTERVAL_MS = 1500
+const POLL_INTERVAL_MS = 5000
 
 // Module-level singletons -> shared across all components that call the composable.
 const serverActive = ref<IngestJob[]>([])

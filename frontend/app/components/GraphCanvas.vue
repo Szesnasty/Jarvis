@@ -119,6 +119,13 @@ const NODE_COLOR: Record<string, string> = {
   tag:    '#34d399',                  // emerald
   person: '#c084fc',                  // violet
   area:   '#fb923c',                  // orange
+  // Entity types extracted from notes (Step 25 PR 2)
+  org:           '#facc15',           // amber       — organisations
+  project:       '#f472b6',           // pink        — projects (note-derived)
+  place:         '#22d3ee',           // teal        — places
+  // Provenance / batch nodes (Step 25 PR 5)
+  source:        '#a3e635',           // lime        — derived_from sources
+  batch:         '#94a3b8',           // slate       — same_batch groups
   // Jira projection
   jira_issue:     '#60a5fa',          // sky blue  — generic issue
   jira_epic:      '#f472b6',          // pink      — epics pop
@@ -134,6 +141,11 @@ const NODE_GLOW: Record<string, string> = {
   tag:    'rgba(52, 211, 153, 0.5)',
   person: 'rgba(192, 132, 252, 0.5)',
   area:   'rgba(251, 146, 60, 0.5)',
+  org:            'rgba(250, 204, 21, 0.5)',
+  project:        'rgba(244, 114, 182, 0.5)',
+  place:          'rgba(34, 211, 238, 0.5)',
+  source:         'rgba(163, 230, 53, 0.45)',
+  batch:          'rgba(148, 163, 184, 0.4)',
   jira_issue:     'rgba(96, 165, 250, 0.5)',
   jira_epic:      'rgba(244, 114, 182, 0.6)',
   jira_project:   'rgba(250, 204, 21, 0.55)',
