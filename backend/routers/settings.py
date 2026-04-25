@@ -172,3 +172,57 @@ async def update_privacy_settings(body: dict):
         raise HTTPException(status_code=409, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Retrieval — graph expansion toggles (step 26d)
+# ---------------------------------------------------------------------------
+
+def _read_graph_expansion_config(ws) -> dict:
+    """Read retrieval.graph_expansion from config.json with defaults."""
+    config_path = ws / "app" / "config.json"
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    cfg = data.get("retrieval", {}).get("graph_expansion", {})
+    return {
+        "use_related": bool(cfg.get("use_related", True)),
+        "use_part_of": bool(cfg.get("use_part_of", True)),
+        "use_suggested_strong": bool(cfg.get("use_suggested_strong", False)),
+    }
+
+
+@router.get("/retrieval")
+async def get_retrieval_settings():
+    ws = get_settings().workspace_path
+    return {"graph_expansion": _read_graph_expansion_config(ws)}
+
+
+@router.patch("/retrieval")
+async def update_retrieval_settings(body: dict):
+    ws = get_settings().workspace_path
+    ge = body.get("graph_expansion")
+    if ge is None or not isinstance(ge, dict):
+        raise HTTPException(status_code=422, detail="graph_expansion object required")
+
+    valid_keys = {"use_related", "use_part_of", "use_suggested_strong"}
+    for k, v in ge.items():
+        if k not in valid_keys:
+            raise HTTPException(status_code=422, detail=f"Unknown graph_expansion key: {k}")
+        if not isinstance(v, bool):
+            raise HTTPException(status_code=422, detail=f"{k} must be a boolean")
+
+    config_path = ws / "app" / "config.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    if not isinstance(data.get("retrieval"), dict):
+        data["retrieval"] = {}
+    current = data["retrieval"].get("graph_expansion", {})
+    current.update(ge)
+    data["retrieval"]["graph_expansion"] = current
+    config_path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    return {"graph_expansion": _read_graph_expansion_config(ws)}

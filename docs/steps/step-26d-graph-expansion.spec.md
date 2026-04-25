@@ -5,7 +5,7 @@
 > candidates, and project (`part_of`) edges as bounded extra context — with
 > edge-type-aware weights, fan-out caps, and a token budget.
 
-**Status**: ⬜ Not started
+**Status**: ✅ Implemented
 **Depends on**: Step 26b (edge classification, retrieval guard for
 `suggested_related`, `weak_alias` semantics)
 **Effort**: ~1 day backend + small frontend touch

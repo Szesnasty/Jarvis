@@ -23,6 +23,8 @@
 
     <SmartConnectSection />
 
+    <GraphExpansionSection />
+
     <PrivacySection />
 
     <SharpenSection />
@@ -44,6 +46,7 @@ import McpSection from '~/components/settings/McpSection.vue'
 import VoiceSection from '~/components/settings/VoiceSection.vue'
 import MaintenanceSection from '~/components/settings/MaintenanceSection.vue'
 import SmartConnectSection from '~/components/settings/SmartConnectSection.vue'
+import GraphExpansionSection from '~/components/settings/GraphExpansionSection.vue'
 import PrivacySection from '~/components/settings/PrivacySection.vue'
 import SharpenSection from '~/components/settings/SharpenSection.vue'
 import BudgetSection from '~/components/settings/BudgetSection.vue'

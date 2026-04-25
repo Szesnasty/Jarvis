@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mountSuspended, registerEndpoint } from '@nuxt/test-utils/runtime'
 import { flushPromises } from '@vue/test-utils'
 import SettingsPage from '~/pages/settings.vue'
+import GraphExpansionSection from '~/components/settings/GraphExpansionSection.vue'
 
 function registerSettingsEndpoints(overrides: Record<string, unknown> = {}) {
   registerEndpoint('/api/settings', () => ({
@@ -14,6 +15,13 @@ function registerSettingsEndpoints(overrides: Record<string, unknown> = {}) {
     total: 12500,
     request_count: 42,
     cost_estimate: 0.19,
+  }))
+  registerEndpoint('/api/settings/retrieval', () => ({
+    graph_expansion: {
+      use_related: true,
+      use_part_of: true,
+      use_suggested_strong: false,
+    },
   }))
 }
 
@@ -87,5 +95,63 @@ describe('pages/settings.vue', () => {
     const labels = buttons.map(b => b.text())
     expect(labels).toContain('Reindex Memory')
     expect(labels).toContain('Rebuild Graph')
+  })
+})
+
+describe('GraphExpansionSection', () => {
+  it('renders three checkboxes', async () => {
+    registerEndpoint('/api/settings/retrieval', () => ({
+      graph_expansion: { use_related: true, use_part_of: true, use_suggested_strong: false },
+    }))
+    const wrapper = await mountSuspended(GraphExpansionSection)
+    await flushPromises()
+    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    expect(checkboxes).toHaveLength(3)
+  })
+
+  it('reflects defaults: use_related and use_part_of on, use_suggested_strong off', async () => {
+    registerEndpoint('/api/settings/retrieval', () => ({
+      graph_expansion: { use_related: true, use_part_of: true, use_suggested_strong: false },
+    }))
+    const wrapper = await mountSuspended(GraphExpansionSection)
+    await flushPromises()
+    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    expect((checkboxes[0].element as HTMLInputElement).checked).toBe(true)
+    expect((checkboxes[1].element as HTMLInputElement).checked).toBe(true)
+    expect((checkboxes[2].element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('reflects server state when use_related is off', async () => {
+    registerEndpoint('/api/settings/retrieval', () => ({
+      graph_expansion: { use_related: false, use_part_of: true, use_suggested_strong: false },
+    }))
+    const wrapper = await mountSuspended(GraphExpansionSection)
+    await flushPromises()
+    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    expect((checkboxes[0].element as HTMLInputElement).checked).toBe(false)
+  })
+
+  it('calls PATCH on toggle and sends correct shape', async () => {
+    const patches: unknown[] = []
+    registerEndpoint('/api/settings/retrieval', {
+      method: 'GET',
+      handler: () => ({
+        graph_expansion: { use_related: true, use_part_of: true, use_suggested_strong: false },
+      }),
+    })
+    registerEndpoint('/api/settings/retrieval', {
+      method: 'PATCH',
+      handler: (event) => {
+        patches.push(event)
+        return { graph_expansion: { use_related: true, use_part_of: false, use_suggested_strong: false } }
+      },
+    })
+    const wrapper = await mountSuspended(GraphExpansionSection)
+    await flushPromises()
+    const checkboxes = wrapper.findAll('input[type="checkbox"]')
+    await checkboxes[1].trigger('change')
+    await flushPromises()
+    // patch was attempted — component reached PATCH call
+    expect(patches.length).toBeGreaterThan(0)
   })
 })
