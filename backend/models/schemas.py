@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -256,3 +256,24 @@ class RetrievalSearchResponse(BaseModel):
     results: list[dict]
     intent: IntentResponse
     result_count: int
+
+
+# --- Smart Connect Backfill (Step 26a) ---
+
+class BackfillRequest(BaseModel):
+    mode: Literal["fast", "aggressive"] = "fast"
+    batch_size: int = Field(50, ge=1, le=500)
+    only_orphans: bool = False
+    dry_run: bool = False
+    force: bool = False
+    min_confidence: Optional[float] = Field(None, ge=0.0, le=1.0)
+
+
+class BackfillProgress(BaseModel):
+    done: int
+    total: int
+    suggestions_added: int
+    notes_changed: int
+    skipped: int
+    orphans_found: int
+    dry_run: bool

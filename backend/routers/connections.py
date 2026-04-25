@@ -1,21 +1,28 @@
-"""Connections API — Smart Connect (Step 25 PR 4 + PR 5).
+"""Connections API — Smart Connect (Step 25 PR 4 + PR 5, Step 26a).
 
 Endpoints:
   * ``GET  /orphans``               — list semantic-orphan notes
   * ``POST /run/{path}``            — re-run Smart Connect for a note
   * ``POST /dismiss``               — dismiss a suggestion pair
   * ``POST /promote``               — promote a suggestion to ``related``
+  * ``POST /backfill``              — run Smart Connect on all (or orphan) notes (SSE)
 """
 
 from __future__ import annotations
 
+import json
+import logging
 from pathlib import Path
-from typing import List, Optional
+from typing import AsyncGenerator, List, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from models.schemas import BackfillRequest
 from services.connection_service import ConnectionResult, connect_note
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/connections", tags=["connections"])
 
@@ -122,3 +129,122 @@ async def promote_suggestion(payload: SuggestionPair) -> PromoteResponse:
         target_path=payload.target_path,
         related=related,
     )
+
+
+@router.post("/backfill")
+async def backfill_connections(payload: BackfillRequest) -> StreamingResponse:
+    """Run Smart Connect on all (or orphan-only) notes, streaming JSON progress.
+
+    Returns ``Content-Type: text/event-stream``. The frontend MUST consume
+    this via ``fetch()`` + ``ReadableStream`` — NOT via native ``EventSource``
+    (which only supports GET). Each emitted line is a JSON-encoded
+    ``BackfillProgress`` object.
+    """
+    ws = _workspace()
+
+    async def _stream() -> AsyncGenerator[str, None]:
+        import aiosqlite
+
+        from services.connection_service import (
+            CURRENT_SMART_CONNECT_VERSION,
+            connect_note as _connect,
+        )
+        from services.graph_service import find_semantic_orphans, is_semantic_orphan
+        from services.memory_service import _db_path
+        from utils.markdown import parse_frontmatter
+
+        db_p = _db_path(ws)
+
+        # ── Collect note paths ────────────────────────────────────────────
+        try:
+            if payload.only_orphans:
+                orphan_nodes = find_semantic_orphans(workspace_path=ws)
+                paths = [
+                    o["id"][len("note:"):]
+                    for o in orphan_nodes
+                    if o["id"].startswith("note:")
+                ]
+            else:
+                async with aiosqlite.connect(str(db_p)) as db:
+                    cursor = await db.execute("SELECT path FROM notes ORDER BY path")
+                    rows = await cursor.fetchall()
+                    paths = [row[0] for row in rows]
+        except Exception as exc:
+            logger.warning("backfill path collection failed: %s", exc)
+            yield json.dumps({
+                "done": 0, "total": 0, "suggestions_added": 0,
+                "notes_changed": 0, "skipped": 0, "orphans_found": 0,
+                "dry_run": payload.dry_run, "error": str(exc),
+            }) + "\n"
+            return
+
+        total = len(paths)
+        done = 0
+        suggestions_added = 0
+        notes_changed = 0
+        skipped_count = 0
+        orphans_found = 0
+
+        for batch_start in range(0, max(total, 1), payload.batch_size):
+            batch = paths[batch_start: batch_start + payload.batch_size]
+
+            for note_path in batch:
+                full_path = ws / "memory" / note_path
+                if not full_path.exists():
+                    done += 1
+                    continue
+
+                # ── Per-note skip logic ───────────────────────────────────
+                if not payload.force:
+                    try:
+                        raw = full_path.read_text(encoding="utf-8")
+                        fm, _ = parse_frontmatter(raw)
+                        sc = fm.get("smart_connect")
+                        version = sc.get("version", 0) if isinstance(sc, dict) else 0
+                        has_suggestions = "suggested_related" in fm
+
+                        if version >= CURRENT_SMART_CONNECT_VERSION and has_suggestions:
+                            try:
+                                orphan = is_semantic_orphan(note_path, workspace_path=ws)
+                            except Exception:
+                                orphan = False
+
+                            if not orphan:
+                                skipped_count += 1
+                                done += 1
+                                continue
+                            else:
+                                orphans_found += 1
+                    except Exception:
+                        pass  # Unreadable note — fall through and process it
+
+                # ── Run Smart Connect ─────────────────────────────────────
+                try:
+                    result = await _connect(
+                        note_path,
+                        workspace_path=ws,
+                        mode=payload.mode,
+                        dry_run=payload.dry_run,
+                        min_confidence=payload.min_confidence,
+                    )
+                    added = len(result.suggested)
+                    suggestions_added += added
+                    if added > 0:
+                        notes_changed += 1
+                except Exception as exc:
+                    logger.warning("backfill failed for %s: %s", note_path, exc)
+
+                done += 1
+
+            # ── Emit batch progress ───────────────────────────────────────
+            yield json.dumps({
+                "done": done,
+                "total": total,
+                "suggestions_added": suggestions_added,
+                "notes_changed": notes_changed,
+                "skipped": skipped_count,
+                "orphans_found": orphans_found,
+                "dry_run": payload.dry_run,
+            }) + "\n"
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")

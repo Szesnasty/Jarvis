@@ -140,6 +140,11 @@ Retrieval scorer: `suggested_related` edges contribute at most
 `min(weight, 0.35)` to a node's graph score. They provide a soft
 discovery signal but cannot dominate retrieval ranking before user review.
 
+The value `0.35` is exposed as a module-level constant
+`SUGGESTED_RELATED_MAX_WEIGHT` in `graph_service/queries.py` so that
+Step 26d (Controlled Graph Expansion) can import the same value and the
+two paths cannot drift.
+
 ---
 
 ## API surface
