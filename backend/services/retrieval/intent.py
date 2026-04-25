@@ -41,6 +41,7 @@ class QueryIntent:
     business_area_hint: Optional[str] = None
     risk_hint: Optional[str] = None
     keys_in_query: List[str] = field(default_factory=list)
+    preferred_section_types: List[str] = field(default_factory=list)
 
     @property
     def has_jira_signals(self) -> bool:

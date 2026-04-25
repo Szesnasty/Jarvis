@@ -7,7 +7,7 @@
 > mention?"*) instead of relying purely on text similarity.
 
 **Parent**: [step-28-document-intelligence.md](step-28-document-intelligence.md)
-**Status**: ⬜ Planned
+**Status**: ✅ Done
 **Depends on**: 28a (visibility), 28c (baseline numbers must exist
 *before* this lands)
 

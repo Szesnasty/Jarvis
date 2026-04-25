@@ -223,6 +223,7 @@ async def list_notes(
                 "document_type": fm.get("document_type"),
                 "parent": fm.get("parent"),
                 "section_index": section_index,
+                "section_type": fm.get("section_type"),
             }
             # Include BM25 score for downstream retrieval scoring
             if search:
