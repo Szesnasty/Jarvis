@@ -10,16 +10,50 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _query_name(q: dict, idx: int) -> str:
+    """Stable key for a query, suitable for JSON diffing across runs."""
+    raw = q.get("query", f"query_{idx}")
+    # Truncate at 60 chars, replace whitespace with underscores for readability
+    return raw[:60].replace(" ", "_").replace("/", "-").lower()
+
+
+def _token_budget_for(retrieved: list[dict], workspace_path: Path) -> int:
+    """
+    Estimate the approximate token budget consumed by the assembled prompt context
+    for the given retrieved notes.  Uses the same ``len(text) // 4`` heuristic that
+    ``context_builder.build_context`` applies internally so the value is consistent
+    with what Claude actually receives.
+    """
+    total_chars = 0
+    for item in retrieved:
+        path = item.get("path", "")
+        if not path:
+            continue
+        note_file = workspace_path / "memory" / path
+        try:
+            total_chars += len(note_file.read_text(encoding="utf-8"))
+        except OSError:
+            total_chars += item.get("word_count", 0) * 5  # rough fallback
+    return total_chars // 4
+
+
 async def run_eval(
     workspace_path: Path,
     queries: list[dict],
     limit: int = 5,
 ) -> dict:
-    """Run all queries against the current retrieval pipeline and compute metrics."""
+    """Run all queries against the current retrieval pipeline and compute metrics.
+
+    Returns a dict with keys:
+      overall     — aggregate recall/mrr/precision across all queries
+      by_type     — same metrics broken down by query ``type``
+      per_query   — stable-key dict for baseline floor comparison (one entry per query)
+      details     — full list of per-query result objects
+    """
     from services import retrieval
 
     results = []
-    for q in queries:
+    for idx, q in enumerate(queries):
         try:
             retrieved = await retrieval.retrieve(
                 q["query"], limit=limit, workspace_path=workspace_path,
@@ -44,13 +78,18 @@ async def run_eval(
         # Precision@K
         precision = len(found) / len(retrieved_paths) if retrieved_paths else 0.0
 
+        # Token budget estimate for the assembled prompt context
+        token_budget = _token_budget_for(retrieved, workspace_path)
+
         results.append({
+            "name": _query_name(q, idx),
             "query": q["query"],
             "type": q["type"],
             "recall": recall,
             "mrr": mrr,
             "precision": precision,
-            "expected": list(expected),
+            "token_budget": token_budget,
+            "expected": sorted(expected),
             "retrieved": retrieved_paths,
         })
 
@@ -70,7 +109,19 @@ async def run_eval(
             "avg_precision": sum(r["precision"] for r in rs) / len(rs),
             "count": len(rs),
         }
-        for t, rs in by_type.items()
+        for t, rs in sorted(by_type.items())  # stable key order
+    }
+
+    # Stable per-query dict for baseline comparison — sorted by name for git-diffable JSON
+    per_query = {
+        r["name"]: {
+            "recall": r["recall"],
+            "mrr": r["mrr"],
+            "precision": r["precision"],
+            "token_budget": r["token_budget"],
+            "type": r["type"],
+        }
+        for r in sorted(results, key=lambda x: x["name"])
     }
 
     return {
@@ -81,6 +132,7 @@ async def run_eval(
             "total": len(results),
         },
         "by_type": type_metrics,
+        "per_query": per_query,
         "details": results,
     }
 

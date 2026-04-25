@@ -1,0 +1,831 @@
+{
+  "step": "step-28c",
+  "overall": {
+    "avg_recall": 0.7333333333333333,
+    "avg_mrr": 0.7333333333333333,
+    "avg_precision": 0.18166666666666667,
+    "total": 30
+  },
+  "by_type": {
+    "cross_doc": {
+      "avg_recall": 0.8333333333333334,
+      "avg_mrr": 0.9166666666666666,
+      "avg_precision": 0.3333333333333333,
+      "count": 6
+    },
+    "factual": {
+      "avg_recall": 1.0,
+      "avg_mrr": 1.0,
+      "avg_precision": 0.20625000000000002,
+      "count": 8
+    },
+    "numerical": {
+      "avg_recall": 0.5,
+      "avg_mrr": 0.5,
+      "avg_precision": 0.1,
+      "count": 4
+    },
+    "polish": {
+      "avg_recall": 0.5,
+      "avg_mrr": 0.5,
+      "avg_precision": 0.1,
+      "count": 4
+    },
+    "section_typed": {
+      "avg_recall": 0.625,
+      "avg_mrr": 0.5625,
+      "avg_precision": 0.125,
+      "count": 8
+    }
+  },
+  "per_query": {
+    "ai_benchmark_performance_evaluation_saturation": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2868,
+      "type": "section_typed"
+    },
+    "ai_compute_growth_investment_2024_global_trends": {
+      "recall": 0.5,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3326,
+      "type": "cross_doc"
+    },
+    "ai_governance_policies_and_organizational_risk_tolerance": {
+      "recall": 1.0,
+      "mrr": 0.5,
+      "precision": 0.2,
+      "token_budget": 2550,
+      "type": "section_typed"
+    },
+    "ai_incident_response_handling_decommissioning": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2288,
+      "type": "section_typed"
+    },
+    "ai_workforce_demand_skills_job_market_2024": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2925,
+      "type": "section_typed"
+    },
+    "chain-of-thought_prompting_technique_steps": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3111,
+      "type": "factual"
+    },
+    "co_owasp_mówi_o_prompt_injection?": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3813,
+      "type": "polish"
+    },
+    "emergent_abilities_in_large_language_models_threshold": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2516,
+      "type": "factual"
+    },
+    "global_private_ai_investment_total_2024_amount": {
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 2806,
+      "type": "numerical"
+    },
+    "gpt_model_architecture_parameters_training": {
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 2955,
+      "type": "section_typed"
+    },
+    "how_do_nist_rmf_and_owasp_overlap_on_data_poisoning?": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.4,
+      "token_budget": 3442,
+      "type": "cross_doc"
+    },
+    "how_many_ai-related_incidents_were_tracked_in_2024?": {
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 3216,
+      "type": "numerical"
+    },
+    "jak_nist_definiuje_zaufane_systemy_ai?": {
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 2923,
+      "type": "polish"
+    },
+    "jakie_modele_llm_są_open_source?": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3418,
+      "type": "polish"
+    },
+    "llm_safety_risks_alignment_techniques_comparison": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.4,
+      "token_budget": 3096,
+      "type": "cross_doc"
+    },
+    "mitigations_for_training_data_poisoning_in_llms": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3449,
+      "type": "section_typed"
+    },
+    "mmlu_benchmark_score_ai_versus_human_2024": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3243,
+      "type": "numerical"
+    },
+    "nist_ai_rmf_govern_function_responsibilities": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3401,
+      "type": "factual"
+    },
+    "nist_ai_rmf_red-teaming_and_bias_measurement": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2525,
+      "type": "factual"
+    },
+    "open-source_llm_models_ecosystem_releases": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.4,
+      "token_budget": 3418,
+      "type": "cross_doc"
+    },
+    "prompt_injection_and_nist_ai_risk_management_mitigation": {
+      "recall": 1.0,
+      "mrr": 0.5,
+      "precision": 0.4,
+      "token_budget": 3187,
+      "type": "cross_doc"
+    },
+    "rag_retrieval_augmented_generation_prompting": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.25,
+      "token_budget": 2968,
+      "type": "factual"
+    },
+    "rlhf_reinforcement_learning_human_feedback_steps": {
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 3120,
+      "type": "section_typed"
+    },
+    "sensitive_information_disclosure_llm_system_prompt_extractio": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3704,
+      "type": "factual"
+    },
+    "trustworthy_ai_requirements_governance_accountability_transp": {
+      "recall": 0.5,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2550,
+      "type": "cross_doc"
+    },
+    "what_does_the_owasp_top_10_say_about_prompt_injection?": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3615,
+      "type": "factual"
+    },
+    "what_is_excessive_agency_in_llm_applications?": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3399,
+      "type": "factual"
+    },
+    "what_risks_are_listed_for_llm_deployments?": {
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 3598,
+      "type": "section_typed"
+    },
+    "what_was_the_ai_training_compute_growth_in_2024_per_hai?": {
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3427,
+      "type": "numerical"
+    },
+    "wzrost_inwestycji_w_ai_w_2024_roku": {
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 3645,
+      "type": "polish"
+    }
+  },
+  "details": [
+    {
+      "name": "what_does_the_owasp_top_10_say_about_prompt_injection?",
+      "query": "what does the OWASP top 10 say about prompt injection?",
+      "type": "factual",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3615,
+      "expected": [
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md"
+      ],
+      "retrieved": [
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md",
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/survey-large-language-models/05-prompting-techniques.md",
+        "knowledge/nist-ai-rmf/05-manage.md",
+        "knowledge/nist-ai-rmf/01-introduction.md"
+      ]
+    },
+    {
+      "name": "what_is_excessive_agency_in_llm_applications?",
+      "query": "what is excessive agency in LLM applications?",
+      "type": "factual",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3399,
+      "expected": [
+        "knowledge/owasp-llm-top-10/06-llm08-excessive-agency.md"
+      ],
+      "retrieved": [
+        "knowledge/owasp-llm-top-10/06-llm08-excessive-agency.md",
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/survey-large-language-models/01-introduction.md",
+        "knowledge/survey-large-language-models/04-alignment.md",
+        "knowledge/nist-ai-rmf/05-manage.md"
+      ]
+    },
+    {
+      "name": "nist_ai_rmf_govern_function_responsibilities",
+      "query": "NIST AI RMF Govern function responsibilities",
+      "type": "factual",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3401,
+      "expected": [
+        "knowledge/nist-ai-rmf/02-govern.md"
+      ],
+      "retrieved": [
+        "knowledge/nist-ai-rmf/02-govern.md",
+        "knowledge/nist-ai-rmf/05-manage.md",
+        "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md",
+        "knowledge/hai-ai-index-report-2025/01-executive-summary.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md"
+      ]
+    },
+    {
+      "name": "emergent_abilities_in_large_language_models_threshold",
+      "query": "emergent abilities in large language models threshold",
+      "type": "factual",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2516,
+      "expected": [
+        "knowledge/survey-large-language-models/03-emergent-abilities.md"
+      ],
+      "retrieved": [
+        "knowledge/survey-large-language-models/03-emergent-abilities.md",
+        "knowledge/survey-large-language-models/index.md",
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md",
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/hai-ai-index-report-2025/index.md"
+      ]
+    },
+    {
+      "name": "chain-of-thought_prompting_technique_steps",
+      "query": "chain-of-thought prompting technique steps",
+      "type": "factual",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3111,
+      "expected": [
+        "knowledge/survey-large-language-models/05-prompting-techniques.md"
+      ],
+      "retrieved": [
+        "knowledge/survey-large-language-models/05-prompting-techniques.md",
+        "knowledge/survey-large-language-models/index.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/nist-ai-rmf/04-measure.md"
+      ]
+    },
+    {
+      "name": "sensitive_information_disclosure_llm_system_prompt_extractio",
+      "query": "sensitive information disclosure LLM system prompt extraction",
+      "type": "factual",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3704,
+      "expected": [
+        "knowledge/owasp-llm-top-10/05-llm06-sensitive-information-disclosure.md"
+      ],
+      "retrieved": [
+        "knowledge/owasp-llm-top-10/05-llm06-sensitive-information-disclosure.md",
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md",
+        "knowledge/survey-large-language-models/05-prompting-techniques.md",
+        "knowledge/survey-large-language-models/01-introduction.md",
+        "knowledge/nist-ai-rmf/04-measure.md"
+      ]
+    },
+    {
+      "name": "nist_ai_rmf_red-teaming_and_bias_measurement",
+      "query": "NIST AI RMF red-teaming and bias measurement",
+      "type": "factual",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2525,
+      "expected": [
+        "knowledge/nist-ai-rmf/04-measure.md"
+      ],
+      "retrieved": [
+        "knowledge/nist-ai-rmf/04-measure.md",
+        "knowledge/nist-ai-rmf/index.md",
+        "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md",
+        "knowledge/hai-ai-index-report-2025/index.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md"
+      ]
+    },
+    {
+      "name": "rag_retrieval_augmented_generation_prompting",
+      "query": "RAG retrieval augmented generation prompting",
+      "type": "factual",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.25,
+      "token_budget": 2968,
+      "expected": [
+        "knowledge/survey-large-language-models/05-prompting-techniques.md"
+      ],
+      "retrieved": [
+        "knowledge/survey-large-language-models/05-prompting-techniques.md",
+        "knowledge/owasp-llm-top-10/05-llm06-sensitive-information-disclosure.md",
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md",
+        "knowledge/survey-large-language-models/01-introduction.md"
+      ]
+    },
+    {
+      "name": "how_do_nist_rmf_and_owasp_overlap_on_data_poisoning?",
+      "query": "how do NIST RMF and OWASP overlap on data poisoning?",
+      "type": "cross_doc",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.4,
+      "token_budget": 3442,
+      "expected": [
+        "knowledge/nist-ai-rmf/02-govern.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md"
+      ],
+      "retrieved": [
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/nist-ai-rmf/05-manage.md",
+        "knowledge/nist-ai-rmf/02-govern.md",
+        "knowledge/owasp-llm-top-10/03-llm02-insecure-output-handling.md",
+        "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md"
+      ]
+    },
+    {
+      "name": "prompt_injection_and_nist_ai_risk_management_mitigation",
+      "query": "prompt injection and NIST AI risk management mitigation",
+      "type": "cross_doc",
+      "recall": 1.0,
+      "mrr": 0.5,
+      "precision": 0.4,
+      "token_budget": 3187,
+      "expected": [
+        "knowledge/nist-ai-rmf/05-manage.md",
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md"
+      ],
+      "retrieved": [
+        "knowledge/nist-ai-rmf/index.md",
+        "knowledge/nist-ai-rmf/05-manage.md",
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md"
+      ]
+    },
+    {
+      "name": "llm_safety_risks_alignment_techniques_comparison",
+      "query": "LLM safety risks alignment techniques comparison",
+      "type": "cross_doc",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.4,
+      "token_budget": 3096,
+      "expected": [
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/survey-large-language-models/04-alignment.md"
+      ],
+      "retrieved": [
+        "knowledge/survey-large-language-models/04-alignment.md",
+        "knowledge/survey-large-language-models/05-prompting-techniques.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/nist-ai-rmf/index.md"
+      ]
+    },
+    {
+      "name": "ai_compute_growth_investment_2024_global_trends",
+      "query": "AI compute growth investment 2024 global trends",
+      "type": "cross_doc",
+      "recall": 0.5,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3326,
+      "expected": [
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md",
+        "knowledge/hai-ai-index-report-2025/04-economy-and-workforce.md"
+      ],
+      "retrieved": [
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md",
+        "knowledge/hai-ai-index-report-2025/01-executive-summary.md",
+        "knowledge/nist-ai-rmf/01-introduction.md",
+        "knowledge/nist-ai-rmf/04-measure.md",
+        "knowledge/survey-large-language-models/03-emergent-abilities.md"
+      ]
+    },
+    {
+      "name": "trustworthy_ai_requirements_governance_accountability_transp",
+      "query": "trustworthy AI requirements governance accountability transparency",
+      "type": "cross_doc",
+      "recall": 0.5,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2550,
+      "expected": [
+        "knowledge/nist-ai-rmf/01-introduction.md",
+        "knowledge/nist-ai-rmf/02-govern.md"
+      ],
+      "retrieved": [
+        "knowledge/nist-ai-rmf/02-govern.md",
+        "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md",
+        "knowledge/nist-ai-rmf/index.md",
+        "knowledge/hai-ai-index-report-2025/index.md",
+        "knowledge/owasp-llm-top-10/06-llm08-excessive-agency.md"
+      ]
+    },
+    {
+      "name": "open-source_llm_models_ecosystem_releases",
+      "query": "open-source LLM models ecosystem releases",
+      "type": "cross_doc",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.4,
+      "token_budget": 3418,
+      "expected": [
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md",
+        "knowledge/survey-large-language-models/02-llm-families.md"
+      ],
+      "retrieved": [
+        "knowledge/survey-large-language-models/02-llm-families.md",
+        "knowledge/survey-large-language-models/01-introduction.md",
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md"
+      ]
+    },
+    {
+      "name": "what_risks_are_listed_for_llm_deployments?",
+      "query": "what risks are listed for LLM deployments?",
+      "type": "section_typed",
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 3598,
+      "expected": [
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md"
+      ],
+      "retrieved": [
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/owasp-llm-top-10/06-llm08-excessive-agency.md",
+        "knowledge/survey-large-language-models/03-emergent-abilities.md",
+        "knowledge/survey-large-language-models/04-alignment.md",
+        "knowledge/nist-ai-rmf/03-map.md"
+      ]
+    },
+    {
+      "name": "mitigations_for_training_data_poisoning_in_llms",
+      "query": "mitigations for training data poisoning in LLMs",
+      "type": "section_typed",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3449,
+      "expected": [
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md"
+      ],
+      "retrieved": [
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/survey-large-language-models/01-introduction.md",
+        "knowledge/survey-large-language-models/04-alignment.md",
+        "knowledge/nist-ai-rmf/05-manage.md"
+      ]
+    },
+    {
+      "name": "ai_governance_policies_and_organizational_risk_tolerance",
+      "query": "AI governance policies and organizational risk tolerance",
+      "type": "section_typed",
+      "recall": 1.0,
+      "mrr": 0.5,
+      "precision": 0.2,
+      "token_budget": 2550,
+      "expected": [
+        "knowledge/nist-ai-rmf/02-govern.md"
+      ],
+      "retrieved": [
+        "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md",
+        "knowledge/nist-ai-rmf/02-govern.md",
+        "knowledge/nist-ai-rmf/index.md",
+        "knowledge/hai-ai-index-report-2025/index.md",
+        "knowledge/owasp-llm-top-10/06-llm08-excessive-agency.md"
+      ]
+    },
+    {
+      "name": "gpt_model_architecture_parameters_training",
+      "query": "GPT model architecture parameters training",
+      "type": "section_typed",
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 2955,
+      "expected": [
+        "knowledge/survey-large-language-models/02-llm-families.md"
+      ],
+      "retrieved": [
+        "knowledge/survey-large-language-models/01-introduction.md",
+        "knowledge/survey-large-language-models/index.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md",
+        "knowledge/owasp-llm-top-10/01-overview.md"
+      ]
+    },
+    {
+      "name": "ai_benchmark_performance_evaluation_saturation",
+      "query": "AI benchmark performance evaluation saturation",
+      "type": "section_typed",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2868,
+      "expected": [
+        "knowledge/hai-ai-index-report-2025/03-technical-performance.md"
+      ],
+      "retrieved": [
+        "knowledge/hai-ai-index-report-2025/03-technical-performance.md",
+        "knowledge/hai-ai-index-report-2025/index.md",
+        "knowledge/nist-ai-rmf/04-measure.md",
+        "knowledge/nist-ai-rmf/01-introduction.md",
+        "knowledge/survey-large-language-models/03-emergent-abilities.md"
+      ]
+    },
+    {
+      "name": "ai_incident_response_handling_decommissioning",
+      "query": "AI incident response handling decommissioning",
+      "type": "section_typed",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2288,
+      "expected": [
+        "knowledge/nist-ai-rmf/05-manage.md"
+      ],
+      "retrieved": [
+        "knowledge/nist-ai-rmf/05-manage.md",
+        "knowledge/nist-ai-rmf/index.md",
+        "knowledge/hai-ai-index-report-2025/index.md",
+        "knowledge/hai-ai-index-report-2025/01-executive-summary.md",
+        "knowledge/owasp-llm-top-10/03-llm02-insecure-output-handling.md"
+      ]
+    },
+    {
+      "name": "rlhf_reinforcement_learning_human_feedback_steps",
+      "query": "RLHF reinforcement learning human feedback steps",
+      "type": "section_typed",
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 3120,
+      "expected": [
+        "knowledge/survey-large-language-models/04-alignment.md"
+      ],
+      "retrieved": [
+        "knowledge/survey-large-language-models/01-introduction.md",
+        "knowledge/survey-large-language-models/05-prompting-techniques.md",
+        "knowledge/hai-ai-index-report-2025/01-executive-summary.md",
+        "knowledge/hai-ai-index-report-2025/03-technical-performance.md",
+        "knowledge/nist-ai-rmf/01-introduction.md"
+      ]
+    },
+    {
+      "name": "ai_workforce_demand_skills_job_market_2024",
+      "query": "AI workforce demand skills job market 2024",
+      "type": "section_typed",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 2925,
+      "expected": [
+        "knowledge/hai-ai-index-report-2025/04-economy-and-workforce.md"
+      ],
+      "retrieved": [
+        "knowledge/hai-ai-index-report-2025/04-economy-and-workforce.md",
+        "knowledge/hai-ai-index-report-2025/01-executive-summary.md",
+        "knowledge/survey-large-language-models/03-emergent-abilities.md",
+        "knowledge/survey-large-language-models/01-introduction.md",
+        "knowledge/nist-ai-rmf/01-introduction.md"
+      ]
+    },
+    {
+      "name": "co_owasp_mówi_o_prompt_injection?",
+      "query": "co OWASP mówi o prompt injection?",
+      "type": "polish",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3813,
+      "expected": [
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md"
+      ],
+      "retrieved": [
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md",
+        "knowledge/owasp-llm-top-10/03-llm02-insecure-output-handling.md",
+        "knowledge/survey-large-language-models/05-prompting-techniques.md",
+        "knowledge/nist-ai-rmf/05-manage.md",
+        "knowledge/nist-ai-rmf/02-govern.md"
+      ]
+    },
+    {
+      "name": "jak_nist_definiuje_zaufane_systemy_ai?",
+      "query": "jak NIST definiuje zaufane systemy AI?",
+      "type": "polish",
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 2923,
+      "expected": [
+        "knowledge/nist-ai-rmf/01-introduction.md"
+      ],
+      "retrieved": [
+        "knowledge/nist-ai-rmf/02-govern.md",
+        "knowledge/nist-ai-rmf/index.md",
+        "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/hai-ai-index-report-2025/03-technical-performance.md"
+      ]
+    },
+    {
+      "name": "jakie_modele_llm_są_open_source?",
+      "query": "jakie modele LLM są open source?",
+      "type": "polish",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3418,
+      "expected": [
+        "knowledge/survey-large-language-models/02-llm-families.md"
+      ],
+      "retrieved": [
+        "knowledge/survey-large-language-models/02-llm-families.md",
+        "knowledge/survey-large-language-models/01-introduction.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md",
+        "knowledge/owasp-llm-top-10/01-overview.md",
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md"
+      ]
+    },
+    {
+      "name": "wzrost_inwestycji_w_ai_w_2024_roku",
+      "query": "wzrost inwestycji w AI w 2024 roku",
+      "type": "polish",
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 3645,
+      "expected": [
+        "knowledge/hai-ai-index-report-2025/04-economy-and-workforce.md"
+      ],
+      "retrieved": [
+        "knowledge/hai-ai-index-report-2025/03-technical-performance.md",
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md",
+        "knowledge/survey-large-language-models/02-llm-families.md",
+        "knowledge/survey-large-language-models/03-emergent-abilities.md",
+        "knowledge/owasp-llm-top-10/02-llm01-prompt-injection.md"
+      ]
+    },
+    {
+      "name": "what_was_the_ai_training_compute_growth_in_2024_per_hai?",
+      "query": "what was the AI training compute growth in 2024 per HAI?",
+      "type": "numerical",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3427,
+      "expected": [
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md"
+      ],
+      "retrieved": [
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md",
+        "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md",
+        "knowledge/nist-ai-rmf/01-introduction.md",
+        "knowledge/survey-large-language-models/03-emergent-abilities.md",
+        "knowledge/survey-large-language-models/05-prompting-techniques.md"
+      ]
+    },
+    {
+      "name": "how_many_ai-related_incidents_were_tracked_in_2024?",
+      "query": "how many AI-related incidents were tracked in 2024?",
+      "type": "numerical",
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 3216,
+      "expected": [
+        "knowledge/hai-ai-index-report-2025/05-policy-and-governance.md"
+      ],
+      "retrieved": [
+        "knowledge/hai-ai-index-report-2025/01-executive-summary.md",
+        "knowledge/hai-ai-index-report-2025/03-technical-performance.md",
+        "knowledge/nist-ai-rmf/05-manage.md",
+        "knowledge/nist-ai-rmf/01-introduction.md",
+        "knowledge/owasp-llm-top-10/04-llm03-training-data-poisoning.md"
+      ]
+    },
+    {
+      "name": "global_private_ai_investment_total_2024_amount",
+      "query": "global private AI investment total 2024 amount",
+      "type": "numerical",
+      "recall": 0.0,
+      "mrr": 0.0,
+      "precision": 0.0,
+      "token_budget": 2806,
+      "expected": [
+        "knowledge/hai-ai-index-report-2025/04-economy-and-workforce.md"
+      ],
+      "retrieved": [
+        "knowledge/hai-ai-index-report-2025/01-executive-summary.md",
+        "knowledge/hai-ai-index-report-2025/02-research-and-development.md",
+        "knowledge/survey-large-language-models/03-emergent-abilities.md",
+        "knowledge/nist-ai-rmf/index.md",
+        "knowledge/nist-ai-rmf/01-introduction.md"
+      ]
+    },
+    {
+      "name": "mmlu_benchmark_score_ai_versus_human_2024",
+      "query": "MMLU benchmark score AI versus human 2024",
+      "type": "numerical",
+      "recall": 1.0,
+      "mrr": 1.0,
+      "precision": 0.2,
+      "token_budget": 3243,
+      "expected": [
+        "knowledge/hai-ai-index-report-2025/03-technical-performance.md"
+      ],
+      "retrieved": [
+        "knowledge/hai-ai-index-report-2025/03-technical-performance.md",
+        "knowledge/hai-ai-index-report-2025/01-executive-summary.md",
+        "knowledge/survey-large-language-models/03-emergent-abilities.md",
+        "knowledge/nist-ai-rmf/04-measure.md",
+        "knowledge/survey-large-language-models/02-llm-families.md"
+      ]
+    }
+  ]
+}
