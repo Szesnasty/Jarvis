@@ -2,6 +2,7 @@ import re
 import tempfile
 from pathlib import Path
 from typing import List, Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, status
 
@@ -206,7 +207,12 @@ async def ingest_url_endpoint(body: UrlIngestRequest):
     if body.summarize and not api_key:
         raise HTTPException(status_code=400, detail="API key not configured")
 
-    kind = "youtube" if "youtube.com" in body.url or "youtu.be" in body.url else "url"
+    _parsed_host = (urlparse(body.url).hostname or "").lower()
+    _is_youtube = (
+        _parsed_host in {"youtube.com", "www.youtube.com", "youtu.be"}
+        or _parsed_host.endswith(".youtube.com")
+    )
+    kind = "youtube" if _is_youtube else "url"
     job_id = ingest_jobs.start_job(body.url, kind=kind)
     error_for_job: Optional[str] = None
     try:
