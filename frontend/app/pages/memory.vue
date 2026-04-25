@@ -31,6 +31,12 @@
           </div>
         </div>
       </div>
+      <div v-if="orphans.length > 0" class="memory-page__orphans">
+        <span class="memory-page__orphans-text">
+          <strong>{{ orphans.length }}</strong> note{{ orphans.length === 1 ? '' : 's' }} need linking.
+        </span>
+        <button class="memory-page__orphans-link" @click="onShowFirstOrphan">Review</button>
+      </div>
       <NoteList
         :notes="notes"
         :selected-path="selectedPath"
@@ -42,10 +48,6 @@
         @folder="onFolderChange"
         @search="(q, mode) => onSearch(q, mode)"
       />
-      <div v-if="orphans.length > 0" class="memory-page__orphans">
-        <strong>{{ orphans.length }}</strong> note{{ orphans.length === 1 ? '' : 's' }} need linking.
-        <button class="memory-page__orphans-link" @click="onShowFirstOrphan">Review</button>
-      </div>
     </aside>
     <section class="memory-page__viewer">
       <NoteViewer
@@ -244,30 +246,37 @@ onUnmounted(() => {
 }
 
 .memory-page__orphans {
-  padding: 0.6rem 1rem;
-  border-top: 1px solid var(--border-subtle);
-  font-size: 0.78rem;
-  color: var(--text-secondary);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--neon-cyan-20, rgba(0, 200, 255, 0.2));
+  font-size: 0.82rem;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  background: var(--neon-cyan-04, rgba(0, 200, 255, 0.04));
+  gap: 0.75rem;
+  background: var(--neon-cyan-08, rgba(0, 200, 255, 0.08));
+  flex-shrink: 0;
+}
+
+.memory-page__orphans-text {
+  line-height: 1.3;
 }
 
 .memory-page__orphans-link {
   background: none;
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--neon-cyan, #00c8ff);
   color: var(--neon-cyan, #00c8ff);
-  font-size: 0.75rem;
-  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  padding: 0.3rem 0.75rem;
   border-radius: 5px;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .memory-page__orphans-link:hover {
   border-color: var(--neon-cyan, #00c8ff);
-  background: var(--neon-cyan-08, rgba(0, 200, 255, 0.08));
+  background: var(--neon-cyan-16, rgba(0, 200, 255, 0.16));
 }
 
 .memory-page__title {
