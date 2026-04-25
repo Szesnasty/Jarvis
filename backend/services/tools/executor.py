@@ -27,15 +27,26 @@ async def execute_tool(
     workspace_path: Optional[Path] = None,
     session_id: Optional[str] = None,
     api_key: Optional[str] = None,
+    specialist_id: Optional[str] = None,
 ) -> str:
     """Execute a tool by name and return string result."""
     if name == "search_notes":
-        results = await memory_service.list_notes(
-            folder=tool_input.get("folder"),
-            search=tool_input["query"],
-            limit=tool_input.get("limit", 10),
-            workspace_path=workspace_path,
-        )
+        # Step 28e: when the active specialist is client-estimator, use the
+        # hybrid retrieval pipeline so section-type boosts (28d) are applied.
+        if specialist_id == "client-estimator":
+            from services.retrieval.pipeline import retrieve as _retrieve
+            results = await _retrieve(
+                tool_input["query"],
+                limit=tool_input.get("limit", 10),
+                workspace_path=workspace_path,
+            )
+        else:
+            results = await memory_service.list_notes(
+                folder=tool_input.get("folder"),
+                search=tool_input["query"],
+                limit=tool_input.get("limit", 10),
+                workspace_path=workspace_path,
+            )
         if session_id:
             for r in results:
                 session_service.record_note_access(session_id, r.get("path", ""))

@@ -177,6 +177,16 @@ def delete_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> No
     if files_dir.is_dir():
         shutil.rmtree(str(files_dir))
 
+    # Track deletion of built-in specialists so seed_builtin_specialists
+    # does not re-create them on next workspace init (respect user intent).
+    spec = None
+    for s in _BUILTIN_SPECIALISTS:
+        if s["id"] == spec_id:
+            spec = s
+            break
+    if spec is not None:
+        _mark_specialist_dismissed(spec_id, workspace_path)
+
 
 def activate_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> Dict:
     global _active_specialists
@@ -706,6 +716,29 @@ Prioritize in this order:
 7. sensible split if needed
 """
 
+_CLIENT_ESTIMATOR_SYSTEM_PROMPT = """You are Client Estimator. Your job is to read the user's client documents \
+in workspace memory and produce one Markdown brief with these sections, in this order:
+
+  # {ClientName} — Estimate Brief
+
+  ## Executive Summary           (3-5 sentences, business-level)
+  ## Business Goal               (from section_type=business_goals)
+  ## Functional Scope            (from section_type=requirements)
+  ## Technical Scope             (from section_type=technical_constraints)
+  ## Integrations                (from section_type=integrations)
+  ## Risks                       (from section_type=risks)
+  ## Assumptions                 (explicit; mark each "(Assumption)")
+  ## Open Questions              (from section_type=open_questions + anything you cannot answer)
+  ## Suggested MVP               (your synthesis — 5 bullet items max)
+  ## Estimate Buckets            (S / M / L / XL per work area; no day estimates unless source says so)
+  ## Recommended Next Step       (one paragraph)
+
+For each section: cite source paths in [[wiki-link]] form. If no source covers a topic, \
+write "NOT IN SOURCES" — do NOT fabricate. \
+Final output must be saved via write_note to memory/plans/<slug>-estimate.md.
+
+Use Polish if the source materials are predominantly Polish."""
+
 
 _BUILTIN_SPECIALISTS: List[Dict] = [
     {
@@ -773,22 +806,68 @@ _BUILTIN_SPECIALISTS: List[Dict] = [
             },
         ],
     },
+    {
+        "id": "client-estimator",
+        "name": "Client Estimator",
+        "icon": "📋",
+        "role": "Turns client RFPs and discovery materials into a structured estimate brief.",
+        "system_prompt": _CLIENT_ESTIMATOR_SYSTEM_PROMPT,
+        "sources": [],
+        "tools": ["search_notes", "read_note", "query_graph", "write_note"],
+        "rules": [
+            "Always cite the section path you draw from in [[wiki-link]] form.",
+            "If a section of the brief has no source material, write 'NOT IN SOURCES' — never invent.",
+            "Use Polish if the source materials are predominantly Polish.",
+        ],
+        "examples": [],
+    },
 ]
+
+
+def _config_path(workspace_path: Optional[Path] = None) -> Path:
+    return (workspace_path or get_settings().workspace_path) / "app" / "config.json"
+
+
+def _get_dismissed_specialists(workspace_path: Optional[Path] = None) -> set:
+    """Return set of specialist IDs that the user explicitly deleted."""
+    try:
+        cfg = json.loads(_config_path(workspace_path).read_text(encoding="utf-8"))
+        return set(cfg.get("dismissed_specialists", []))
+    except (OSError, json.JSONDecodeError):
+        return set()
+
+
+def _mark_specialist_dismissed(spec_id: str, workspace_path: Optional[Path] = None) -> None:
+    """Record a specialist deletion so seed_builtin_specialists skips re-creation."""
+    cfg_path = _config_path(workspace_path)
+    try:
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        cfg = {}
+    dismissed = cfg.get("dismissed_specialists", [])
+    if spec_id not in dismissed:
+        dismissed = dismissed + [spec_id]
+        cfg["dismissed_specialists"] = dismissed
+        cfg_path.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 
 def seed_builtin_specialists(workspace_path: Optional[Path] = None) -> List[str]:
     """Ensure all built-in specialists exist in the agents directory.
 
-    Creates missing specialists. For existing built-in specialists, merges in
-    any NEW keys that were added to the built-in definition (e.g. system_prompt)
-    without overwriting user edits on pre-existing fields.
+    Creates missing specialists. Skips specialists that the user explicitly
+    deleted (tracked in ``app/config.json`` under ``dismissed_specialists``).
+    For existing built-in specialists, merges in any NEW keys that were added
+    to the built-in definition without overwriting user edits.
 
     Returns list of specialist IDs that were created or updated.
     """
     touched: List[str] = []
     agents = _agents_dir(workspace_path)
+    dismissed = _get_dismissed_specialists(workspace_path)
 
     for spec in _BUILTIN_SPECIALISTS:
+        if spec["id"] in dismissed:
+            continue  # User explicitly removed this specialist — do not re-create.
         filepath = agents / ("%s.json" % spec["id"])
         if not filepath.exists():
             now = datetime.now(timezone.utc).isoformat()
