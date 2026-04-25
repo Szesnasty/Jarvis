@@ -163,7 +163,13 @@ def _compute_graph_score(
     """Combined graph score: edge connectivity + path distance + cluster bonus.
 
     Returns a value in the [0, 1] range.
+
+    ``suggested_related`` edges are capped at SUGGESTED_RELATED_MAX_WEIGHT
+    (Step 26b retrieval guard) so unconfirmed suggestions cannot dominate
+    retrieval ranking before the user has reviewed them.
     """
+    from services.graph_service.queries import SUGGESTED_RELATED_MAX_WEIGHT
+
     if node_id not in graph.nodes:
         return 0.0
 
@@ -180,7 +186,11 @@ def _compute_graph_score(
         if other is None:
             continue
         if other in candidate_ids:
-            edge_score += edge.weight
+            # Cap unconfirmed suggestion edges so they don't dominate ranking.
+            effective_weight = edge.weight
+            if edge.type == "suggested_related":
+                effective_weight = min(edge.weight, SUGGESTED_RELATED_MAX_WEIGHT)
+            edge_score += effective_weight
             neighbor_ids.add(other)
             if edge.type == "similar_to":
                 cluster_count += 1

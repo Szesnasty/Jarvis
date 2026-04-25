@@ -46,6 +46,7 @@ from services.graph_service.queries import (  # noqa: F401
     get_node_detail,
     ingest_note,
     query_entity,
+    SUGGESTED_RELATED_MAX_WEIGHT,
 )
 
 # --- Jira Projection (step 22b) ---
