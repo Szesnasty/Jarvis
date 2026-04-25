@@ -14,15 +14,25 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".csv", ".xml", ".json"}
 
-# ── PDF section split (step 27a) ─────────────────────────────────────────────
-# When a PDF's extracted text is long enough AND contains enough top-level
-# headings, split it into one Markdown note per section plus an index note.
-# Below either threshold the existing single-file path is used unchanged.
+# ── Document section split (steps 27a / 27d) ─────────────────────────────────
+# When a document is long enough AND has enough natural break points, split
+# it into one Markdown note per section plus an index note. Below either
+# threshold the existing single-file path is used unchanged.
+#
+# Step 27a covered PDF only. Step 27d extends the same machinery to plain
+# text, Markdown, JSON and large XML so the graph density gain isn't limited
+# to a single format.
 SECTION_SPLIT_MIN_CHARS = 30_000
 SECTION_SPLIT_MIN_HEADINGS = 4
 # Hard ceiling: very long papers can produce hundreds of false-positive
 # headings; cap to avoid runaway file creation.
 SECTION_SPLIT_MAX_SECTIONS = 60
+# JSON list chunking: when the top-level is a list, group N items per
+# section to avoid one note per item on huge arrays.
+JSON_LIST_CHUNK_SIZE = 50
+# Cap on inline rendered length per JSON section body (longer values get
+# truncated with a marker so a single huge value can't blow up a note).
+JSON_BODY_TRUNCATE = 60_000
 
 
 class IngestError(Exception):
@@ -135,13 +145,22 @@ def _is_heading_line(line: str) -> bool:
 
 
 @dataclass
-class _PdfSection:
-    """Single section extracted from a PDF body."""
+class _DocumentSection:
+    """Single section extracted from a long document.
+
+    ``body`` is the ready-to-write Markdown body (no frontmatter). For
+    plain-text/PDF extracts this is prose; for JSON/XML it's a fenced
+    code block so the original structure stays readable.
+    """
     title: str
     body: str
 
 
-def _detect_pdf_sections(text: str) -> List["_PdfSection"]:
+# Backwards-compatible alias used by the older PDF-only code paths and tests.
+_PdfSection = _DocumentSection
+
+
+def _detect_pdf_sections(text: str) -> List["_DocumentSection"]:
     """Detect top-level sections in PDF-extracted plain text.
 
     Returns a list of (title, body) sections in document order. Always
@@ -184,12 +203,12 @@ def _detect_pdf_sections(text: str) -> List["_PdfSection"]:
     if not top_level:
         return []
 
-    sections: List[_PdfSection] = []
+    sections: List[_DocumentSection] = []
 
     # Front matter: everything before the first heading
     pre_text = "\n".join(lines[: top_level[0]]).strip()
     if pre_text:
-        sections.append(_PdfSection(title="Front Matter", body=pre_text))
+        sections.append(_DocumentSection(title="Front Matter", body=pre_text))
 
     # Walk top-level headings, body = text up to next top-level heading
     for j, start in enumerate(top_level):
@@ -197,9 +216,120 @@ def _detect_pdf_sections(text: str) -> List["_PdfSection"]:
         end = top_level[j + 1] if j + 1 < len(top_level) else n
         body_lines = lines[start + 1 : end]
         body = "\n".join(body_lines).strip()
-        sections.append(_PdfSection(title=title, body=body))
+        sections.append(_DocumentSection(title=title, body=body))
 
     # Hard cap to prevent runaway false-positive heading explosions.
+    if len(sections) > SECTION_SPLIT_MAX_SECTIONS:
+        sections = sections[:SECTION_SPLIT_MAX_SECTIONS]
+    return sections
+
+
+# ── Markdown section detector ────────────────────────────────────────────────
+
+# Top-level (#) and second-level (##) ATX headings. We avoid splitting on
+# deeper levels because those are usually subsections inside a larger topic.
+_MD_HEADING_RE = re.compile(r"^(#{1,2})\s+(.+?)\s*#*\s*$")
+
+
+def _detect_markdown_sections(text: str) -> List["_DocumentSection"]:
+    """Split a Markdown document on its top-level (#, ##) headings.
+
+    Front matter (text before the first heading) is preserved as a leading
+    "Front Matter" section if non-empty. Sections retain their original
+    Markdown body so headings, lists, code blocks and tables stay intact.
+    """
+    if not text or not text.strip():
+        return []
+
+    lines = text.split("\n")
+    in_fence = False
+    heading_indices: List[int] = []
+    for i, raw in enumerate(lines):
+        stripped = raw.lstrip()
+        # Track fenced code blocks so headings inside ``` aren't picked up.
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        m = _MD_HEADING_RE.match(raw)
+        if m:
+            heading_indices.append(i)
+
+    if not heading_indices:
+        return []
+
+    sections: List[_DocumentSection] = []
+    pre_text = "\n".join(lines[: heading_indices[0]]).strip()
+    if pre_text:
+        sections.append(_DocumentSection(title="Front Matter", body=pre_text))
+
+    for j, start in enumerate(heading_indices):
+        m = _MD_HEADING_RE.match(lines[start])
+        title = (m.group(2) if m else lines[start]).strip() or f"Section {j + 1}"
+        end = heading_indices[j + 1] if j + 1 < len(heading_indices) else len(lines)
+        body = "\n".join(lines[start + 1 : end]).strip()
+        sections.append(_DocumentSection(title=title, body=body))
+
+    if len(sections) > SECTION_SPLIT_MAX_SECTIONS:
+        sections = sections[:SECTION_SPLIT_MAX_SECTIONS]
+    return sections
+
+
+# ── JSON section detector ────────────────────────────────────────────────────
+
+
+def _json_dump(value) -> str:
+    """Pretty-print a JSON-compatible value, with hard-cap truncation."""
+    text = json.dumps(value, indent=2, ensure_ascii=False, default=str)
+    if len(text) > JSON_BODY_TRUNCATE:
+        text = text[:JSON_BODY_TRUNCATE] + "\n… (truncated)"
+    return text
+
+
+def _json_section_title(key: str, value) -> str:
+    """Compose a readable section title for a top-level JSON key."""
+    kind = type(value).__name__
+    return f"{key} ({kind})"
+
+
+def _detect_json_sections(parsed) -> List["_DocumentSection"]:
+    """Produce one section per top-level key (dict) or per chunk (list).
+
+    Returns an empty list when the structure is too small or scalar — the
+    caller falls back to the single-note path. Bodies are wrapped in a
+    fenced ```json``` block so the viewer keeps syntax highlighting and
+    the original shape is preserved.
+    """
+    sections: List[_DocumentSection] = []
+
+    if isinstance(parsed, dict):
+        keys = list(parsed.keys())
+        if len(keys) < SECTION_SPLIT_MIN_HEADINGS:
+            return []
+        for key in keys:
+            value = parsed[key]
+            body = "```json\n" + _json_dump(value) + "\n```"
+            sections.append(_DocumentSection(
+                title=_json_section_title(str(key), value),
+                body=body,
+            ))
+    elif isinstance(parsed, list):
+        if len(parsed) < SECTION_SPLIT_MIN_HEADINGS:
+            return []
+        chunk = JSON_LIST_CHUNK_SIZE
+        for start in range(0, len(parsed), chunk):
+            end = min(start + chunk, len(parsed))
+            body = "```json\n" + _json_dump(parsed[start:end]) + "\n```"
+            sections.append(_DocumentSection(
+                title=f"Items {start + 1}–{end}",
+                body=body,
+            ))
+        # If the list was too short to produce ≥ MIN_HEADINGS chunks fall
+        # back to single-note path (caller checks the length).
+    else:
+        return []
+
     if len(sections) > SECTION_SPLIT_MAX_SECTIONS:
         sections = sections[:SECTION_SPLIT_MAX_SECTIONS]
     return sections
@@ -219,9 +349,10 @@ def _make_section_frontmatter(
     source: str,
     parent_path: str,
     section_index: int,
+    doc_type: str = "pdf",
     tags: Optional[list] = None,
 ) -> str:
-    """Frontmatter for a per-section note created by PDF section split."""
+    """Frontmatter for a per-section note created by document section split."""
     from utils.markdown import add_frontmatter
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     fm = {
@@ -230,12 +361,12 @@ def _make_section_frontmatter(
         "source": source,
         "parent": parent_path,
         "section_index": section_index,
-        "tags": tags or ["imported", "pdf", "section"],
+        "tags": tags or ["imported", doc_type, "section"],
     }
     return add_frontmatter("", fm)
 
 
-def _make_index_frontmatter(title: str, source: str) -> str:
+def _make_index_frontmatter(title: str, source: str, doc_type: str = "pdf") -> str:
     """Frontmatter for the index note that links all sections."""
     from utils.markdown import add_frontmatter
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -243,8 +374,8 @@ def _make_index_frontmatter(title: str, source: str) -> str:
         "title": title,
         "date": now,
         "source": source,
-        "tags": ["imported", "pdf", "document"],
-        "document_type": "pdf-document",
+        "tags": ["imported", doc_type, "document"],
+        "document_type": f"{doc_type}-document",
     }
     return add_frontmatter("", fm)
 
@@ -264,22 +395,27 @@ def _extract_pdf_text(file_path: Path) -> str:
         raise IngestError("pdfplumber not installed. Install with: pip install pdfplumber")
 
 
-async def _emit_pdf_sections(
+async def _emit_document_sections(
     *,
+    doc_type: str,
     title: str,
     source_path: Path,
     target_folder: str,
     workspace_path: Optional[Path],
-    sections: List[_PdfSection],
+    sections: List[_DocumentSection],
     job_id: Optional[str],
 ) -> Dict:
-    """Write index + per-section notes for a long PDF and wire them up.
+    """Write index + per-section notes for a long document and wire them up.
 
-    Step 27a. The index note links each section via ``[[wiki-link]]`` so
-    the bidirectional resolver in ``graph_service/builder.py`` produces
+    Steps 27a / 27d. The index note links each section via ``[[wiki-link]]``
+    so the bidirectional resolver in ``graph_service/builder.py`` produces
     forward and reverse edges. Smart Connect runs ONCE on the index;
     sections are reachable through the index hub, which keeps ingest
     cost roughly the same as a single file.
+
+    ``doc_type`` ("pdf", "json", "xml", "markdown", "text") drives only
+    the tags / document_type metadata — the file emission logic is the
+    same for every supported format.
     """
     from services import ingest_jobs
     from services.memory_service import index_note_file
@@ -312,6 +448,7 @@ async def _emit_pdf_sections(
             source=str(source_path),
             parent_path=index_rel_path,
             section_index=i,
+            doc_type=doc_type,
         )
         await asyncio.to_thread(
             target.write_text, section_fm + section.body + "\n", encoding="utf-8"
@@ -326,15 +463,15 @@ async def _emit_pdf_sections(
         rel = sf.relative_to(mem).with_suffix("").as_posix()
         index_lines.append(f"{i}. [[{rel}]] — {section_titles[i - 1]}")
     index_body = "\n".join(index_lines) + "\n"
-    index_fm = _make_index_frontmatter(title, str(source_path))
+    index_fm = _make_index_frontmatter(title, str(source_path), doc_type=doc_type)
     index_path = doc_dir / "index.md"
     await asyncio.to_thread(
         index_path.write_text, index_fm + index_body, encoding="utf-8"
     )
 
     logger.info(
-        "PDF section split: %s -> %d sections under %s",
-        source_path.name, len(sections), rel_doc_dir,
+        "%s section split: %s -> %d sections under %s",
+        doc_type.upper(), source_path.name, len(sections), rel_doc_dir,
     )
 
     total_size = 0
@@ -383,6 +520,27 @@ async def _emit_pdf_sections(
     }
 
 
+# Backwards-compatible thin wrapper kept so existing tests/imports work.
+async def _emit_pdf_sections(
+    *,
+    title: str,
+    source_path: Path,
+    target_folder: str,
+    workspace_path: Optional[Path],
+    sections: List[_DocumentSection],
+    job_id: Optional[str],
+) -> Dict:
+    return await _emit_document_sections(
+        doc_type="pdf",
+        title=title,
+        source_path=source_path,
+        target_folder=target_folder,
+        workspace_path=workspace_path,
+        sections=sections,
+        job_id=job_id,
+    )
+
+
 async def fast_ingest(
     file_path: Path,
     target_folder: str = "knowledge",
@@ -414,11 +572,48 @@ async def fast_ingest(
         content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
         if not content.strip().startswith("---"):
             content = _make_frontmatter(title, str(file_path)) + content
+
+        # Step 27d — split long markdown documents on top-level headings.
+        # Only the body (after frontmatter) is fed into the detector so we
+        # don't pick up pseudo-headings inside YAML.
+        from utils.markdown import parse_frontmatter
+        _fm, md_body = parse_frontmatter(content)
+        if len(md_body) >= SECTION_SPLIT_MIN_CHARS:
+            md_sections = _detect_markdown_sections(md_body)
+            if len(md_sections) >= SECTION_SPLIT_MIN_HEADINGS:
+                _stage("splitting")
+                return await _emit_document_sections(
+                    doc_type="markdown",
+                    title=title,
+                    source_path=file_path,
+                    target_folder=target_folder,
+                    workspace_path=workspace_path,
+                    sections=md_sections,
+                    job_id=job_id,
+                )
+
         target = _unique_path(folder / display_name)
         await asyncio.to_thread(target.write_text, content, encoding="utf-8")
 
     elif ext == ".txt":
         content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")
+
+        # Step 27d — long plain-text imports get the same heading-based
+        # split as PDFs (notes, reports, copy-pasted papers).
+        if len(content) >= SECTION_SPLIT_MIN_CHARS:
+            txt_sections = _detect_pdf_sections(content)
+            if len(txt_sections) >= SECTION_SPLIT_MIN_HEADINGS:
+                _stage("splitting")
+                return await _emit_document_sections(
+                    doc_type="text",
+                    title=title,
+                    source_path=file_path,
+                    target_folder=target_folder,
+                    workspace_path=workspace_path,
+                    sections=txt_sections,
+                    job_id=job_id,
+                )
+
         md_name = f"{_slugify(title)}.md"
         fm = _make_frontmatter(title, str(file_path))
         target = _unique_path(folder / md_name)
@@ -438,7 +633,8 @@ async def fast_ingest(
         sections = _detect_pdf_sections(text) if len(text) >= SECTION_SPLIT_MIN_CHARS else []
         if len(sections) >= SECTION_SPLIT_MIN_HEADINGS:
             _stage("splitting")
-            return await _emit_pdf_sections(
+            return await _emit_document_sections(
+                doc_type="pdf",
                 title=title,
                 source_path=file_path,
                 target_folder=target_folder,
@@ -462,7 +658,26 @@ async def fast_ingest(
             body = json.dumps(parsed, indent=2, ensure_ascii=False)
         except json.JSONDecodeError as exc:
             logger.warning("JSON ingest: invalid JSON in %s (%s) — keeping raw text", file_path.name, exc)
+            parsed = None
             body = raw
+
+        # Step 27d — split large JSON files into per-key (dict) or per-chunk
+        # (list) sections. Each section keeps its original structure inside
+        # a fenced ```json``` block so values remain valid and greppable.
+        if parsed is not None and len(raw) >= SECTION_SPLIT_MIN_CHARS:
+            json_sections = _detect_json_sections(parsed)
+            if len(json_sections) >= SECTION_SPLIT_MIN_HEADINGS:
+                _stage("splitting")
+                return await _emit_document_sections(
+                    doc_type="json",
+                    title=title,
+                    source_path=file_path,
+                    target_folder=target_folder,
+                    workspace_path=workspace_path,
+                    sections=json_sections,
+                    job_id=job_id,
+                )
+
         md_name = f"{_slugify(title)}.md"
         fm = _make_frontmatter(title, str(file_path), tags=["imported", "json"])
         content = f"{fm}```json\n{body}\n```\n"

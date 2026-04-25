@@ -886,6 +886,101 @@ def _build_generic_xml_note(file_path: Path, source_name: str) -> Tuple[str, str
     return filename, content
 
 
+    total = sum(child_counts.values())
+    if total > max_items:
+        body_lines.append(f"*(Showing first {max_items} of {total} elements)*")
+
+    content = add_frontmatter("\n".join(body_lines), fm)
+    filename = _slugify(source_name) + ".md"
+    return filename, content
+
+
+# ── Step 27d — large XML section split ───────────────────────────────────────
+
+# Cap on the rendered size of any single XML section body so a single huge
+# child element can't blow up a note. Anything beyond this is truncated
+# with a marker.
+_XML_SECTION_TRUNCATE = 60_000
+
+
+def _build_xml_sections(file_path: Path, source_name: str):
+    """Stream a non-Jira XML file into per-top-level-child sections.
+
+    Returns a list of ``_DocumentSection`` (imported lazily to avoid a
+    circular import with ``services.ingest``). Same-tag children are
+    grouped into chunks of up to 50 to keep section count bounded.
+    Returns an empty list if the document has fewer than the minimum
+    number of top-level children — caller falls back to single-note path.
+    """
+    from services.ingest import (
+        _DocumentSection,
+        SECTION_SPLIT_MIN_HEADINGS,
+        SECTION_SPLIT_MAX_SECTIONS,
+    )
+
+    def _local(tag: str) -> str:
+        return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+    try:
+        context = ET.iterparse(str(file_path), events=("start", "end"))
+    except ET.ParseError as e:
+        raise ValueError(f"Invalid XML: {e}")
+
+    grouped: Dict[str, List[str]] = {}
+    root_tag: Optional[str] = None
+    depth = 0
+    total_children = 0
+
+    for event, elem in context:
+        if event == "start":
+            if root_tag is None:
+                root_tag = _local(elem.tag)
+            depth += 1
+            continue
+
+        depth -= 1
+        if depth == 1:
+            tag = _local(elem.tag)
+            try:
+                serialized = ET.tostring(elem, encoding="unicode")
+            except Exception:
+                serialized = f"<{tag}/>"
+            if len(serialized) > _XML_SECTION_TRUNCATE:
+                serialized = serialized[:_XML_SECTION_TRUNCATE] + "\n<!-- truncated -->"
+            grouped.setdefault(tag, []).append(serialized)
+            total_children += 1
+            elem.clear()
+        elif depth == 0:
+            elem.clear()
+            break
+
+    if total_children < SECTION_SPLIT_MIN_HEADINGS:
+        return []
+
+    chunk = 50
+    sections: List["_DocumentSection"] = []
+    for tag, items in grouped.items():
+        if len(items) <= chunk:
+            for idx, item in enumerate(items, start=1):
+                title = f"{tag} {idx}" if len(items) > 1 else tag
+                body = "```xml\n" + item + "\n```"
+                sections.append(_DocumentSection(title=title, body=body))
+        else:
+            for start in range(0, len(items), chunk):
+                end = min(start + chunk, len(items))
+                joined = "\n\n".join(items[start:end])
+                if len(joined) > _XML_SECTION_TRUNCATE:
+                    joined = joined[:_XML_SECTION_TRUNCATE] + "\n<!-- truncated -->"
+                title = f"{tag} {start + 1}–{end}"
+                body = "```xml\n" + joined + "\n```"
+                sections.append(_DocumentSection(title=title, body=body))
+
+    if len(sections) > SECTION_SPLIT_MAX_SECTIONS:
+        sections = sections[:SECTION_SPLIT_MAX_SECTIONS]
+
+    return sections
+
+
 # ---------------------------------------------------------------------------
 # Main entry points
 # ---------------------------------------------------------------------------
@@ -945,6 +1040,52 @@ async def ingest_structured_file(
                 issues, source_name, folder, mem, _write_note, workspace_path
             )
         else:
+            # Step 27d — large generic XML files get split into per-top-level
+            # child sections so the graph sees a cluster of related notes
+            # rather than one mega-note.
+            from services.ingest import (
+                SECTION_SPLIT_MIN_CHARS,
+                SECTION_SPLIT_MIN_HEADINGS,
+                _emit_document_sections,
+            )
+
+            try:
+                file_size = file_path.stat().st_size
+            except OSError:
+                file_size = 0
+
+            xml_sections: List = []
+            if file_size >= SECTION_SPLIT_MIN_CHARS:
+                try:
+                    xml_sections = _build_xml_sections(file_path, source_name)
+                except ValueError as exc:
+                    logger.warning("XML section split skipped (%s): %s", file_path.name, exc)
+                    xml_sections = []
+
+            if len(xml_sections) >= SECTION_SPLIT_MIN_HEADINGS:
+                result = await _emit_document_sections(
+                    doc_type="xml",
+                    title=source_name,
+                    source_path=file_path,
+                    target_folder=target_folder,
+                    workspace_path=workspace_path,
+                    sections=xml_sections,
+                    job_id=None,
+                )
+                # Skip the global rebuild_graph below — _emit_document_sections
+                # already runs Smart Connect on the index note.
+                return {
+                    "notes": [{
+                        "path": result["path"],
+                        "title": result["title"],
+                    }],
+                    "total_notes": 1,
+                    "sections": result.get("sections", len(xml_sections)),
+                    "source": display_name,
+                    "format": "generic",
+                    "folder": target_folder,
+                }
+
             filename, content = _build_generic_xml_note(file_path, source_name)
             target = _write_note(filename, content)
             rel_path = target.relative_to(mem).as_posix()
