@@ -52,6 +52,19 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     return [e.tolist() for e in model.embed(texts)]
 
 
+async def aembed_text(text: str) -> List[float]:
+    """Async wrapper: run sync ONNX inference in a threadpool so the
+    FastAPI event loop stays responsive (status endpoints, websockets)."""
+    import asyncio
+    return await asyncio.to_thread(embed_text, text)
+
+
+async def aembed_texts(texts: List[str]) -> List[List[float]]:
+    """Async batch wrapper -- runs the sync model in one threadpool call."""
+    import asyncio
+    return await asyncio.to_thread(embed_texts, texts)
+
+
 def content_hash(content: str) -> str:
     """SHA-256 hash of note content for change detection."""
     return hashlib.sha256(content.encode("utf-8")).hexdigest()
@@ -99,6 +112,8 @@ async def embed_note(
     new_hash = content_hash(content)
 
     async with aiosqlite.connect(str(db_path)) as db:
+        from services._db import apply_pragmas
+        await apply_pragmas(db)
         # Check if already embedded with same content
         cursor = await db.execute(
             "SELECT content_hash FROM note_embeddings WHERE path = ?",
@@ -108,7 +123,7 @@ async def embed_note(
         if row and row[0] == new_hash:
             return False  # Skip — content unchanged
 
-        vec = embed_text(embed_input)
+        vec = await aembed_text(embed_input)
         blob = vector_to_blob(vec)
 
         # Get note_id
@@ -145,7 +160,7 @@ async def search_similar(
     if not db_path.exists():
         return []
 
-    query_vec = embed_query(query)
+    query_vec = await aembed_text(query)
 
     async with aiosqlite.connect(str(db_path)) as db:
         cursor = await db.execute(
@@ -199,6 +214,8 @@ async def delete_embedding(note_path: str, db_path: Path) -> None:
     """Remove embedding for a deleted note."""
     import aiosqlite
     async with aiosqlite.connect(str(db_path)) as db:
+        from services._db import apply_pragmas
+        await apply_pragmas(db)
         await db.execute("DELETE FROM note_embeddings WHERE path = ?", (note_path,))
         await db.execute("DELETE FROM chunk_embeddings WHERE path = ?", (note_path,))
         await db.execute("DELETE FROM note_chunks WHERE path = ?", (note_path,))
@@ -236,6 +253,8 @@ async def embed_note_chunks(
     )
 
     async with aiosqlite.connect(str(db_path)) as db:
+        from services._db import apply_pragmas
+        await apply_pragmas(db)
         # Get note_id
         cursor = await db.execute("SELECT id FROM notes WHERE path = ?", (note_path,))
         row = await cursor.fetchone()
@@ -249,17 +268,22 @@ async def embed_note_chunks(
 
         now = datetime.now(timezone.utc).isoformat()
         count = 0
-        for chunk in chunks:
-            # Insert chunk record
+
+        # Batch-embed ALL chunks in a single threadpool call (one model.embed
+        # batch is much faster than N sequential calls AND it keeps the event
+        # loop responsive for /status polls + websockets during ingest).
+        if not chunks:
+            await db.commit()
+            return 0
+        vectors = await aembed_texts([c.text for c in chunks])
+
+        for chunk, vec in zip(chunks, vectors):
             cursor = await db.execute(
                 "INSERT INTO note_chunks (note_id, path, chunk_index, section_title, chunk_text, token_count, subject_type, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (note_id, note_path, chunk.index, chunk.section_title, chunk.text, chunk.token_count, subject_type, now),
             )
             chunk_id = cursor.lastrowid
-
-            # Embed and store
-            vec = embed_text(chunk.text)
             blob = vector_to_blob(vec)
             c_hash = content_hash(chunk.text)
             await db.execute(
@@ -290,7 +314,7 @@ async def search_similar_chunks(
     if not db_path.exists():
         return []
 
-    query_vec = embed_query(query)
+    query_vec = await aembed_text(query)
 
     async with aiosqlite.connect(str(db_path)) as db:
         try:
@@ -377,9 +401,10 @@ async def embed_graph_nodes(
     if not embeddable:
         return 0
 
-    # Batch embed all labels
+    # Batch embed all labels (offloaded to threadpool so we don't block
+    # the event loop while ONNX runs).
     texts = [n["label"] for n in embeddable]
-    vectors = embed_texts(texts)
+    vectors = await aembed_texts(texts)
 
     async with aiosqlite.connect(str(db_path)) as db:
         count = 0
@@ -425,7 +450,7 @@ async def find_similar_nodes(
     if not db_path.exists():
         return []
 
-    query_vec = embed_query(query)
+    query_vec = await aembed_text(query)
 
     async with aiosqlite.connect(str(db_path)) as db:
         try:

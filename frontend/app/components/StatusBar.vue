@@ -18,6 +18,27 @@
     />
 
     <span
+      v-if="ingest.hasActivity.value"
+      class="status-bar__ingest"
+      :class="{ 'status-bar__ingest--idle': ingest.activeCount.value === 0 }"
+      :title="ingestTooltip"
+    >
+      <span class="status-bar__ingest-spinner" v-if="ingest.activeCount.value > 0" />
+      <span class="status-bar__ingest-check" v-else>✓</span>
+      <span class="status-bar__ingest-text">{{ ingestText }}</span>
+      <span
+        v-if="ingest.activeCount.value > 0 && ingest.totalBytes.value > 0"
+        class="status-bar__ingest-bar"
+        :aria-label="`Upload progress ${ingest.overallPercent.value}%`"
+      >
+        <span
+          class="status-bar__ingest-bar-fill"
+          :style="{ width: ingest.overallPercent.value + '%' }"
+        />
+      </span>
+    </span>
+
+    <span
       class="status-bar__indicator"
       :class="backendStatus"
     >
@@ -40,11 +61,13 @@
 <script setup lang="ts">
 import { useLocalModels } from '~/composables/useLocalModels'
 import { useApiKeys } from '~/composables/useApiKeys'
+import { useIngestStatus } from '~/composables/useIngestStatus'
 
 const { backendStatus, chatActive } = useAppState()
 const menuOpen = ref(false)
 const { activeProvider } = useApiKeys()
 const localModels = useLocalModels()
+const ingest = useIngestStatus()
 
 const route = useRoute()
 watch(() => route.path, () => {
@@ -59,6 +82,39 @@ const statusText = computed(() => {
     return `${base} · ${modelName} (local) · ${ollamaOk ? '🟢' : '🔴'}`
   }
   return base
+})
+
+const ingestText = computed(() => {
+  if (ingest.activeCount.value > 0) return ingest.label.value
+  if (ingest.recent.value.length > 0) {
+    const failed = ingest.recent.value.filter((r) => r.status === 'failed').length
+    if (failed > 0) return `${failed} failed`
+    return 'Done'
+  }
+  return ''
+})
+
+const ingestTooltip = computed(() => {
+  const parts: string[] = []
+  for (const u of ingest.activeUploads.value) {
+    const pct = u.size > 0 ? Math.floor((u.uploaded / u.size) * 100) : 0
+    if (u.state === 'uploading') {
+      parts.push(`• ${u.name} — uploading ${pct}%`)
+    } else {
+      parts.push(`• ${u.name} — ${u.stage || 'processing'}`)
+    }
+  }
+  // Server-only jobs (started elsewhere)
+  const localNames = new Set(ingest.activeUploads.value.map(u => u.name))
+  for (const j of ingest.active.value) {
+    if (localNames.has(j.name)) continue
+    parts.push(`• ${j.name} — ${j.stage || 'running'}`)
+  }
+  for (const j of ingest.recent.value) {
+    const tag = j.status === 'failed' ? `failed: ${j.error || 'error'}` : 'done'
+    parts.push(`• ${j.name} (${tag})`)
+  }
+  return parts.join('\n')
 })
 </script>
 
@@ -198,6 +254,78 @@ const statusText = computed(() => {
   color: var(--neon-yellow);
   background-color: rgba(234, 179, 8, 0.08);
   border-color: rgba(234, 179, 8, 0.2);
+}
+
+/* ── Ingest progress badge ── */
+.status-bar__ingest {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: 0.5rem;
+  padding: 0.18rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--neon-cyan);
+  background-color: var(--neon-cyan-08);
+  border: 1px solid var(--neon-cyan-30);
+  border-radius: 9999px;
+  white-space: nowrap;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 0 6px var(--neon-cyan-30);
+}
+
+.status-bar__ingest-bar {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 4px;
+  background-color: var(--neon-cyan-08);
+  border: 1px solid var(--neon-cyan-30);
+  border-radius: 9999px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.status-bar__ingest-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-cyan));
+  box-shadow: 0 0 8px var(--neon-cyan);
+  transition: width 0.25s ease-out;
+}
+
+.status-bar__ingest--idle {
+  color: var(--neon-green);
+  background-color: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.25);
+  text-shadow: 0 0 6px rgba(34, 197, 94, 0.3);
+}
+
+.status-bar__ingest-spinner {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--neon-cyan-30);
+  border-top-color: var(--neon-cyan);
+  border-radius: 50%;
+  animation: status-bar__spin 0.9s linear infinite;
+}
+
+.status-bar__ingest-check {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.status-bar__ingest-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes status-bar__spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ── MCP toggle pill ── */

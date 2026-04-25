@@ -17,7 +17,14 @@
     "start": "node scripts/wake-up-jarvis.mjs",
     "dev:backend": "node scripts/dev-backend.mjs",
     "dev:frontend": "npm --prefix frontend run dev",
-    "dev": "npm run preflight && npm run install:all && node scripts/dev.mjs"
+    "dev": "npm run preflight && npm run install:all && node scripts/dev.mjs",
+    "reset:all": "node scripts/reset-workspace.mjs all",
+    "reset:db": "node scripts/reset-workspace.mjs db",
+    "reset:memory": "node scripts/reset-workspace.mjs memory",
+    "reset:sessions": "node scripts/reset-workspace.mjs sessions",
+    "reset:graph": "node scripts/reset-workspace.mjs graph",
+    "reset:agents": "node scripts/reset-workspace.mjs agents",
+    "reset:cache": "node scripts/reset-workspace.mjs cache"
   },
   "devDependencies": {
     "codument": "0.3.0"
