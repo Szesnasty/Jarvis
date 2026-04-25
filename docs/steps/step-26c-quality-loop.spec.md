@@ -261,4 +261,4 @@ Frontend (`frontend/tests/components/`):
    as specified).
 6. "Why?" tooltip in `SuggestionsPanel` when `score_breakdown` present.
 7. All tests above pass.
-8. `docs/.registry.json` updated for all three 26a/26b/26c specs.
+8. `docs/.registry.json` updated for all 26a/26b/26c/26d specs.

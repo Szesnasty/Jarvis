@@ -20,6 +20,8 @@ import logging
 import os
 import re
 from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -57,6 +59,10 @@ W_ENTITY = 0.10
 W_ALIAS = 0.07
 W_SOURCE = 0.03
 
+# Bumping this constant causes the next backfill to re-visit notes that were
+# processed at a lower version, without requiring force=True.
+CURRENT_SMART_CONNECT_VERSION = 2
+
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -69,6 +75,7 @@ class SuggestedLink(BaseModel):
     methods: List[str]
     tier: str = "normal"  # "strong" | "normal" | "weak"
     evidence: Optional[str] = None
+    suggested_by: Optional[str] = None
 
 
 class EntityCounts(BaseModel):
@@ -85,6 +92,19 @@ class ConnectionResult(BaseModel):
     aliases_matched: List[str] = Field(default_factory=list)
     entities: EntityCounts = Field(default_factory=EntityCounts)
     graph_edges_added: int = 0
+
+
+@dataclass
+class _SuggestContext:
+    """Intermediate result passed from generate_suggestions to apply_suggestions."""
+    note_path: str
+    ws: "Path"
+    fm: Dict
+    body: str
+    full_path: "Path"
+    suggestions: List[SuggestedLink]
+    aliases_matched: List[str]
+    mode: str
 
 
 # ---------------------------------------------------------------------------
@@ -193,27 +213,20 @@ def enforce_caps(
 
 
 # ---------------------------------------------------------------------------
-# Orchestrator
+# Orchestrator — public API
 # ---------------------------------------------------------------------------
 
 
-async def connect_note(
+async def generate_suggestions(
     note_path: str,
     workspace_path: Optional[Path] = None,
     mode: str = "fast",
-) -> ConnectionResult:
-    """Run the per-note Smart Connect pipeline.
+) -> "_SuggestContext":
+    """Pure read: load note, compute all signals, return candidates without writing.
 
-    Steps:
-      1. Read note + build connection query.
-      2. Generate candidates from BM25 + note/chunk embeddings.
-      3. Score, prune, cap.
-      4. Write ``suggested_related`` to frontmatter.
-      5. Incrementally update the graph (no full rebuild).
-
-    ``mode`` is currently advisory — ``"aggressive"`` keeps weak
-    suggestions; ``"fast"`` (default) drops them. Aggressive mode is
-    used by the semantic-orphan repair path (PR 5).
+    Strictly read-only — does NOT mutate frontmatter, graph JSON, alias_index,
+    dismissed_suggestions, connection_events, related, or suggested_related.
+    Must NOT lazily create missing embeddings.
     """
     from config import get_settings
     from services.memory_service import _validate_path, list_notes
@@ -230,8 +243,10 @@ async def connect_note(
     query = build_connection_query(fm, body)
 
     if not query:
-        # Empty notes get an empty suggestion block but still update the graph.
-        return await _finalise(note_path, ws, fm, body, full_path, [], aliases_matched=[])
+        return _SuggestContext(
+            note_path=note_path, ws=ws, fm=fm, body=body,
+            full_path=full_path, suggestions=[], aliases_matched=[], mode=mode,
+        )
 
     bm25_scores = await _bm25_signal(query, note_path, ws, list_notes)
     note_emb_scores: Dict[str, float] = {}
@@ -242,8 +257,7 @@ async def connect_note(
 
     alias_scores, aliases_matched = _alias_signal(note_path, fm, body, ws)
 
-    # Step 25 PR 5 — drop dismissed pairs from every signal source so they
-    # never participate in scoring or capping.
+    # Drop dismissed pairs so they never participate in scoring or capping.
     dismissed = _dismissed_targets_for(note_path, ws)
     if dismissed:
         for d in dismissed:
@@ -261,13 +275,7 @@ async def connect_note(
     )
     kept = enforce_caps(merged, _folder_of(note_path))
 
-    # Step 25 PR 4 — semantic orphan repair.
-    #
-    # If a fast-mode pass produced no suggestion at the normal tier and the
-    # note is a semantic orphan in the current graph, retry once in
-    # aggressive mode (which keeps the weak tier 0.45–0.59). This is the
-    # only place that lowers the bar — everywhere else, weak suggestions
-    # are dropped.
+    # Semantic orphan repair: retry in aggressive mode to surface weak suggestions.
     if (
         mode == "fast"
         and not any(item[4] in ("strong", "normal") for item in kept)
@@ -282,20 +290,67 @@ async def connect_note(
         )
         kept = enforce_caps(merged, _folder_of(note_path))
 
-    suggested = [
+    suggested_by = f"smart_connect_v{CURRENT_SMART_CONNECT_VERSION}"
+    suggestions = [
         SuggestedLink(
             path=p,
             confidence=score,
             methods=methods,
             tier=tier,
             evidence=evidence,
+            suggested_by=suggested_by,
         )
         for (p, score, methods, evidence, tier) in kept
     ]
-    return await _finalise(
-        note_path, ws, fm, body, full_path, suggested,
-        aliases_matched=aliases_matched,
+    return _SuggestContext(
+        note_path=note_path, ws=ws, fm=fm, body=body,
+        full_path=full_path, suggestions=suggestions,
+        aliases_matched=aliases_matched, mode=mode,
     )
+
+
+async def apply_suggestions(
+    ctx: "_SuggestContext",
+    min_confidence: Optional[float] = None,
+) -> ConnectionResult:
+    """Write suggestions to frontmatter, update graph, emit edges.
+
+    Filters by ``min_confidence`` when provided: only suggestions at or above
+    the threshold are written to the note. Useful for conservative bulk runs.
+    """
+    to_write = ctx.suggestions
+    if min_confidence is not None:
+        to_write = [s for s in to_write if s.confidence >= min_confidence]
+    return await _finalise(
+        ctx.note_path, ctx.ws, ctx.fm, ctx.body, ctx.full_path, to_write,
+        aliases_matched=ctx.aliases_matched,
+        mode=ctx.mode,
+    )
+
+
+async def connect_note(
+    note_path: str,
+    workspace_path: Optional[Path] = None,
+    mode: str = "fast",
+    *,
+    dry_run: bool = False,
+    min_confidence: Optional[float] = None,
+) -> ConnectionResult:
+    """Run the per-note Smart Connect pipeline.
+
+    When ``dry_run=True``, returns suggestions but does NOT write frontmatter,
+    graph JSON, alias_index, dismissed_suggestions, or connection_events.
+    """
+    ctx = await generate_suggestions(note_path, workspace_path=workspace_path, mode=mode)
+    if dry_run:
+        return ConnectionResult(
+            note_path=ctx.note_path,
+            suggested=ctx.suggestions,
+            strong_count=sum(1 for s in ctx.suggestions if s.tier == "strong"),
+            aliases_matched=ctx.aliases_matched,
+            graph_edges_added=0,
+        )
+    return await apply_suggestions(ctx, min_confidence=min_confidence)
 
 
 def _is_semantic_orphan_safe(note_path: str, ws: Path) -> bool:
@@ -530,13 +585,21 @@ async def _finalise(
     full_path: Path,
     suggested: List[SuggestedLink],
     aliases_matched: Optional[List[str]] = None,
+    mode: str = "fast",
 ) -> ConnectionResult:
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fm["smart_connect"] = {
+        "version": CURRENT_SMART_CONNECT_VERSION,
+        "last_run_at": now_utc,
+        "last_mode": mode,
+    }
     fm["suggested_related"] = [
         {
             "path": s.path,
             "confidence": s.confidence,
             "methods": s.methods,
             **({"evidence": s.evidence} if s.evidence else {}),
+            **({"suggested_by": s.suggested_by} if s.suggested_by else {}),
         }
         for s in suggested
     ]

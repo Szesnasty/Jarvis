@@ -4,7 +4,7 @@
 > with versioned skip-logic so re-runs after algorithm changes work cleanly,
 > and a strict dry-run mode that is safe by construction.
 
-**Status**: ⬜ Not started
+**Status**: ✅ Implemented
 **Depends on**: Step 25 (Smart Connect, all 6 PRs)
 **Effort**: ~1 day backend
 
