@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.12.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.11.0...jarvis-v0.12.0) (2026-04-25)
+
+
+### ✨ Features
+
+* JSON ingest, monochromatic graph mode, CodeQL info-exposure fix ([6d93c0e](https://github.com/Szesnasty/Jarvis/commit/6d93c0e92f98fa39ee93c0c39347417d35a20391))
+* **step-26a:** Smart Connect backfill, versioning & dry-run ([425e807](https://github.com/Szesnasty/Jarvis/commit/425e8071bd434e4cd674510dc24eec8230090c2c))
+* **step-26b:** alias guardrails, weak_aliases, retrieval guard ([395452f](https://github.com/Szesnasty/Jarvis/commit/395452f4dd2d7d6c2f87d71baa4cb2890d5ddc79))
+* **step-26c:** score breakdown, event log, stats, keep-all UI ([88c42f4](https://github.com/Szesnasty/Jarvis/commit/88c42f43025746e231118c33974908b102b68870))
+* **step-26d:** controlled graph expansion in chat retrieval ([82581e9](https://github.com/Szesnasty/Jarvis/commit/82581e9b64a47a3b671f52667b46dead86771583))
+
+
+### 🐛 Bug Fixes
+
+* **specialists:** sanitize uploaded filenames instead of 422-rejecting ([b8d47e4](https://github.com/Szesnasty/Jarvis/commit/b8d47e46a13baec10642593b667e0da3c776fa9c))
+* **ui:** clarify Smart Connect backfill description — auto-run, no AI ([1632fca](https://github.com/Szesnasty/Jarvis/commit/1632fca17162d9c47d11d1ee8953c96987b89915))
+
+
+### 📝 Documentation
+
+* **readme:** surface step-26 Smart Connect quality features ([c6df007](https://github.com/Szesnasty/Jarvis/commit/c6df007d7cd225a85e875d61b28b204529a7d236))
+
+
+### 🧪 Tests
+
+* **frontend:** update ImportDialog accept attr to include .json ([ac0153f](https://github.com/Szesnasty/Jarvis/commit/ac0153f5713435fcb0975531984bb980e6e451ef))
+
 ## [0.11.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.10.0...jarvis-v0.11.0) (2026-04-24)
 
 
