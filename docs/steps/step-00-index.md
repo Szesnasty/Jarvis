@@ -222,12 +222,12 @@
 
 | Step | Title | Status | Order |
 |------|-------|--------|-------|
-| [28](step-28-document-intelligence.md) | Document intelligence & retrieval trust — overview | ⬜ | — |
+| [28](step-28-document-intelligence.md) | Document intelligence & retrieval trust — overview | ✅ | — |
 | [28a](step-28a-retrieval-trace-ui.spec.md) | Retrieval Trace UI — surface `_signals` and graph-expansion provenance per chat answer | ✅ | → 1st |
-| [28b](step-28b-memory-document-grouping.spec.md) | Memory document grouping — collapsible parent + sections in the sidebar | ⬜ | → 2nd |
-| [28c](step-28c-eval-baseline.spec.md) | Eval baseline against the four reference PDFs (frozen query set + diff runner) | ⬜ | → 3rd |
-| [28d](step-28d-section-classification.spec.md) | Section type classification (heuristic + LLM fallback) + retrieval prefilter | ⬜ | → 4th |
-| [28e](step-28e-client-estimate-specialist.spec.md) | Client Estimate specialist — first business workflow on top of typed sections | ⬜ | → 5th |
+| [28b](step-28b-memory-document-grouping.spec.md) | Memory document grouping — collapsible parent + sections in the sidebar | ✅ | → 2nd |
+| [28c](step-28c-eval-baseline.spec.md) | Eval baseline against the four reference PDFs (frozen query set + diff runner) | ✅ | → 3rd |
+| [28d](step-28d-section-classification.spec.md) | Section type classification (heuristic + LLM fallback) + retrieval prefilter | ✅ | → 4th |
+| [28e](step-28e-client-estimate-specialist.spec.md) | Client Estimate specialist — first business workflow on top of typed sections | ✅ | → 5th |
 
 ---
 
