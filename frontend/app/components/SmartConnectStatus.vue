@@ -112,6 +112,15 @@ async function fetchCoverage() {
 }
 
 function onSmartConnectFinished() {
+  // Broadcast so other views (memory.vue NoteList badges, orphans, etc.)
+  // refresh their coverage-derived state without waiting for a user action.
+  // This is independent of the per-page completion popover guard below.
+  try {
+    window.dispatchEvent(new CustomEvent('jarvis:memory-changed'))
+  } catch {
+    // CustomEvent / window unavailable in non-browser contexts — no-op.
+  }
+
   // Sticky guard: if we already showed completion for this exact moment, skip.
   // We use a coarse 30s window — if user reloads within 30s, we still suppress.
   try {
