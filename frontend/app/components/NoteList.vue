@@ -552,19 +552,27 @@ function onClearSearch() {
   white-space: nowrap;
 }
 
-/* Smart Connect pending-review badge — small sparkle dot after title */
+/* Smart Connect pending-review badge — sparkle after title.
+   Sized to be obvious in the sidebar without competing with the title text. */
 .note-list__sc-dot {
   flex-shrink: 0;
-  font-size: 0.65rem;
+  font-size: 0.95rem;
   line-height: 1;
   color: #60a5fa;   /* blue-400 — calm, noticeable without being alarming */
-  opacity: 0.85;
+  opacity: 0.95;
   cursor: default;
   user-select: none;
+  text-shadow: 0 0 6px rgba(96, 165, 250, 0.5);
+  margin-left: 0.15rem;
 }
 
 .note-list__item--active .note-list__sc-dot {
   color: #93c5fd;   /* slightly lighter on active (dark) background */
+}
+
+/* Section rows (under expanded documents) — slightly smaller to keep hierarchy */
+.note-list__item--section .note-list__sc-dot {
+  font-size: 0.85rem;
 }
 
 .note-list__item--document .note-list__item-title {
