@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.17.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.16.1...frontend-v0.17.0) (2026-04-26)
+
+
+### ✨ Features
+
+* SC review badges in NoteList + clearer BulkPromoteBanner ([494f12b](https://github.com/Szesnasty/Jarvis/commit/494f12bfc21685f19fa36c093431211f5b9219f6))
+
+
+### 🐛 Bug Fixes
+
+* **note-list:** replace ✦ glyph with CSS circle dot matching specialist card ([d11ca0c](https://github.com/Szesnasty/Jarvis/commit/d11ca0c6adad62414f1889a0342f1818f9c21eaf))
+* **note-list:** use explicit span open/close tags — self-closing broke SSR ([2af1579](https://github.com/Szesnasty/Jarvis/commit/2af157937bc5858e2c2ebc74a98fa4fc3f7f8bae))
+* **smart-connect:** bigger badge + auto-refresh NoteList after background SC ([17b3af0](https://github.com/Szesnasty/Jarvis/commit/17b3af011ac389eb964643ffc5e01f90a0f535c3))
+* **smart-connect:** clear done signal, visible progress, UX clarity ([649a288](https://github.com/Szesnasty/Jarvis/commit/649a288fecd9dc51820f5d57a912983eddb09471))
+
 ## [0.16.1](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.16.0...frontend-v0.16.1) (2026-04-25)
 
 
