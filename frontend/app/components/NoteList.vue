@@ -66,7 +66,7 @@
               v-if="hasPending(node.note.path)"
               class="note-list__sc-dot"
               title="Smart Connect suggestions pending review"
-            />
+            ></span>
             <button
               class="note-list__delete"
               title="Delete note"
@@ -102,7 +102,7 @@
                 v-if="documentHasPending(node)"
                 class="note-list__sc-dot"
                 title="Smart Connect suggestions pending review"
-              />
+              ></span>
               <button
                 class="note-list__open-index"
                 title="Open document index"
@@ -142,7 +142,7 @@
                 v-if="hasPending(section.path)"
                 class="note-list__sc-dot"
                 title="Smart Connect suggestions pending review"
-              />
+              ></span>
             </div>
           </li>
         </template>
