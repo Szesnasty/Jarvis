@@ -563,6 +563,8 @@ async def connection_coverage() -> dict:
     notes_with_suggestions = 0
     sections_total = 0
     sections_with_suggestions = 0
+    sections_unprocessed = 0       # SC has never run on this section
+    sections_no_match = 0          # SC ran but found no candidates (final state)
     sections_pending_by_parent: dict[str, int] = {}
     pending_strong_suggestions = 0
     pending_strong_notes: set[str] = set()
@@ -599,6 +601,13 @@ async def connection_coverage() -> dict:
                 if has_suggestions:
                     sections_with_suggestions += 1
                 else:
+                    # Distinguish: SC ran and found nothing vs SC never ran.
+                    sc = fm.get("smart_connect")
+                    sc_ran = bool(sc and isinstance(sc, dict) and sc.get("version"))
+                    if sc_ran:
+                        sections_no_match += 1
+                    else:
+                        sections_unprocessed += 1
                     sections_pending_by_parent[parent] = (
                         sections_pending_by_parent.get(parent, 0) + 1
                     )
@@ -619,7 +628,11 @@ async def connection_coverage() -> dict:
         "notes_pending": notes_total - notes_with_suggestions,
         "sections_total": sections_total,
         "sections_with_suggestions": sections_with_suggestions,
+        # sections_pending = unprocessed + no_match (backward compat)
         "sections_pending": sections_pending,
+        # Fine-grained split for smarter UI messaging:
+        "sections_unprocessed": sections_unprocessed,  # SC never ran → needs backfill
+        "sections_no_match": sections_no_match,        # SC ran, no candidates → final state
         "documents_pending": documents_pending,
         "pending_strong_suggestions": pending_strong_suggestions,
         "pending_strong_notes": len(pending_strong_notes),

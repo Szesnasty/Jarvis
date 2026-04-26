@@ -176,6 +176,8 @@ export function useApi() {
       sections_total: number
       sections_with_suggestions: number
       sections_pending: number
+      sections_unprocessed: number     // SC never ran → needs backfill
+      sections_no_match: number        // SC ran, found nothing → final state
       documents_pending: number
       pending_strong_suggestions: number
       pending_strong_notes: number
