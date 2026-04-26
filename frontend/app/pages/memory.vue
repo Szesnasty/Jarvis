@@ -55,6 +55,7 @@
         :active-folder="activeFolder"
         :loading="loadingNotes"
         :on-delete="onDeleteNote"
+        :pending-paths="pendingSuggestionPaths"
         @select="onSelectNote"
         @folder="onFolderChange"
         @search="(q, mode) => onSearch(q, mode)"
@@ -91,6 +92,12 @@ type Coverage = Awaited<ReturnType<typeof fetchConnectionsCoverage>>
 const notes = ref<NoteMetadata[]>([])
 const orphans = ref<SemanticOrphan[]>([])
 const coverage = ref<Coverage | null>(null)
+
+// Set of note paths (relative to memory/) that have pending Smart Connect suggestions.
+// Derived from coverage so it updates whenever coverage refreshes.
+const pendingSuggestionPaths = computed<Set<string>>(
+  () => new Set(coverage.value?.pending_note_paths ?? [])
+)
 const selectedPath = ref<string | null>(null)
 const selectedNote = ref<NoteDetail | null>(null)
 const activeFolder = ref<string | null>(null)

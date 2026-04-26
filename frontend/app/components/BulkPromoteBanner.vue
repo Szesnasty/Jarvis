@@ -4,8 +4,9 @@
       <span class="bulk-promote__icon" aria-hidden="true">✨</span>
       <span class="bulk-promote__text">
         <strong>{{ pendingStrong }}</strong>
-        strong suggestion{{ pendingStrong === 1 ? '' : 's' }} ready to link
-        <span class="bulk-promote__muted">across {{ pendingNotes }} note{{ pendingNotes === 1 ? '' : 's' }}</span>
+        high-confidence link{{ pendingStrong === 1 ? '' : 's' }} found
+        <span class="bulk-promote__muted">in {{ pendingNotes }} note{{ pendingNotes === 1 ? '' : 's' }}</span>
+        <span class="bulk-promote__hint"> — accept all in one click, no review needed</span>
       </span>
       <button
         v-if="!confirming"
@@ -13,7 +14,7 @@
         :disabled="busy"
         @click="confirming = true"
       >
-        Keep all
+        Link all
       </button>
       <button
         v-if="!confirming"
@@ -21,7 +22,7 @@
         :disabled="busy"
         @click="$emit('review')"
       >
-        Review one by one
+        Review
       </button>
     </div>
 
@@ -35,16 +36,16 @@
         </select>
       </label>
       <span class="bulk-promote__confirm-text">
-        This will move every suggestion at or above the threshold into
-        <code>related</code>. Dismissed pairs are skipped. You can re-run
-        Smart Connect later if you want fresh suggestions.
+        Every suggestion at or above the threshold will be added to
+        <code>related</code> in one step. Dismissed pairs are skipped.
+        Notes with weaker suggestions will keep the ✦ badge for manual review.
       </span>
       <div class="bulk-promote__actions">
         <button class="bulk-promote__btn bulk-promote__btn--ghost" :disabled="busy" @click="confirming = false">
           Cancel
         </button>
         <button class="bulk-promote__btn bulk-promote__btn--primary" :disabled="busy" @click="onConfirm">
-          {{ busy ? 'Linking…' : `Keep all ≥ ${Math.round(threshold * 100)}%` }}
+          {{ busy ? 'Linking…' : `Link all ≥ ${Math.round(threshold * 100)}%` }}
         </button>
       </div>
     </div>
@@ -137,6 +138,12 @@ async function onConfirm() {
   color: var(--text-secondary, #a8aab2);
   font-size: 0.74rem;
   margin-left: 0.25rem;
+}
+.bulk-promote__hint {
+  color: var(--text-muted, #6b7280);
+  font-size: 0.72rem;
+  font-style: italic;
+  margin-left: 0.15rem;
 }
 .bulk-promote__btn {
   padding: 0.3rem 0.65rem;
