@@ -34,7 +34,9 @@
           </div>
         </div>
       </div>
-      <div v-if="orphans.length > 0" class="memory-page__orphans">
+      <!-- Hide orphan banner when SC has processed every section (sections_unprocessed=0)
+           because remaining orphans are in a final state and no user action is available. -->
+      <div v-if="orphans.length > 0 && (coverage?.sections_unprocessed ?? 1) > 0" class="memory-page__orphans">
         <span class="memory-page__orphans-text">
           <strong>{{ orphans.length }}</strong> note{{ orphans.length === 1 ? '' : 's' }} need linking.
         </span>
