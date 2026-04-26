@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.15.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.14.1...backend-v0.15.0) (2026-04-26)
+
+
+### ✨ Features
+
+* SC review badges in NoteList + clearer BulkPromoteBanner ([494f12b](https://github.com/Szesnasty/Jarvis/commit/494f12bfc21685f19fa36c093431211f5b9219f6))
+
+
+### 🐛 Bug Fixes
+
+* **smart-connect:** clear done signal, visible progress, UX clarity ([649a288](https://github.com/Szesnasty/Jarvis/commit/649a288fecd9dc51820f5d57a912983eddb09471))
+
 ## [0.14.1](https://github.com/Szesnasty/Jarvis/compare/backend-v0.14.0...backend-v0.14.1) (2026-04-25)
 
 
