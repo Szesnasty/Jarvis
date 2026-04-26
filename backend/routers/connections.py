@@ -568,6 +568,7 @@ async def connection_coverage() -> dict:
     sections_pending_by_parent: dict[str, int] = {}
     pending_strong_suggestions = 0
     pending_strong_notes: set[str] = set()
+    pending_note_paths: list[str] = []   # paths with at least one suggested_related entry
     STRONG_THRESHOLD = 0.8
 
     if mem.exists():
@@ -584,6 +585,7 @@ async def connection_coverage() -> dict:
             has_suggestions = bool(suggestions)
             if has_suggestions:
                 notes_with_suggestions += 1
+                pending_note_paths.append(note_path)
 
             for s in suggestions:
                 if isinstance(s, dict):
@@ -638,6 +640,9 @@ async def connection_coverage() -> dict:
         "pending_strong_notes": len(pending_strong_notes),
         "strong_threshold": STRONG_THRESHOLD,
         "active_section_jobs": active_section_jobs,
+        # Paths (relative to memory/) that have at least one suggested_related entry
+        # awaiting user review. Used by the NoteList sidebar to show review badges.
+        "pending_note_paths": pending_note_paths,
     }
 
 

@@ -62,6 +62,11 @@
         >
           <div class="note-list__item-row">
             <span class="note-list__item-title">{{ node.note.title || node.note.path }}</span>
+            <span
+              v-if="hasPending(node.note.path)"
+              class="note-list__sc-dot"
+              title="Smart Connect suggestions pending review"
+            >✦</span>
             <button
               class="note-list__delete"
               title="Delete note"
@@ -93,6 +98,11 @@
               >▸</span>
               <span class="note-list__item-title">{{ node.index.title || node.index.path }}</span>
               <span class="note-list__section-count">{{ node.sections.length }} {{ node.sections.length === 1 ? 'section' : 'sections' }}</span>
+              <span
+                v-if="documentHasPending(node)"
+                class="note-list__sc-dot"
+                title="Smart Connect suggestions pending review"
+              >✦</span>
               <button
                 class="note-list__open-index"
                 title="Open document index"
@@ -128,6 +138,11 @@
             <div class="note-list__item-row">
               <span class="note-list__section-num">{{ String(section.section_index ?? '').padStart(2, '0') }}</span>
               <span class="note-list__item-title">{{ section.title || section.path }}</span>
+              <span
+                v-if="hasPending(section.path)"
+                class="note-list__sc-dot"
+                title="Smart Connect suggestions pending review"
+              >✦</span>
             </div>
           </li>
         </template>
@@ -169,6 +184,8 @@ const props = defineProps<{
   activeFolder: string | null
   loading?: boolean
   onDelete: (path: string) => Promise<void>
+  /** Relative paths (inside memory/) that have pending Smart Connect suggestions. */
+  pendingPaths?: Set<string>
 }>()
 
 const emit = defineEmits<{
@@ -268,6 +285,19 @@ function onFolderClick(folder: string) {
 
 function onSearch() {
   emit('search', searchQuery.value, searchMode.value)
+}
+
+/** Returns true if a note (or any section of a document) has pending SC suggestions. */
+function hasPending(path: string): boolean {
+  return props.pendingPaths?.has(path) ?? false
+}
+
+/** For document nodes: badge if any section OR the index note has suggestions. */
+function documentHasPending(node: Extract<NoteTreeNode, { kind: 'document' }>): boolean {
+  const pending = props.pendingPaths
+  if (!pending) return false
+  if (pending.has(node.index.path)) return true
+  return node.sections.some(s => pending.has(s.path))
 }
 
 function onClearSearch() {
@@ -520,6 +550,21 @@ function onClearSearch() {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Smart Connect pending-review badge — small sparkle dot after title */
+.note-list__sc-dot {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  line-height: 1;
+  color: #60a5fa;   /* blue-400 — calm, noticeable without being alarming */
+  opacity: 0.85;
+  cursor: default;
+  user-select: none;
+}
+
+.note-list__item--active .note-list__sc-dot {
+  color: #93c5fd;   /* slightly lighter on active (dark) background */
 }
 
 .note-list__item--document .note-list__item-title {

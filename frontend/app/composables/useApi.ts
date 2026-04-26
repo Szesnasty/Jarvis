@@ -183,6 +183,7 @@ export function useApi() {
       pending_strong_notes: number
       strong_threshold: number
       active_section_jobs: Array<{ id: string; name: string; kind: string; stage?: string }>
+      pending_note_paths: string[]     // relative paths in memory/ with suggested_related awaiting review
     }>('/api/connections/coverage')
 
   return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile, fetchJarvisConfig, updateJarvisConfig, fetchSemanticOrphans, rerunConnect, dismissSuggestion, promoteSuggestion, promoteBulk, fetchConnectionsCoverage }
