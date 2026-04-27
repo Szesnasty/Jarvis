@@ -496,6 +496,69 @@ def schedule_section_connect(
     return job_id
 
 
+def schedule_notes_connect(
+    note_paths: List[str],
+    *,
+    workspace_path: Optional[Path] = None,
+    name: str = "Smart Connect",
+    kind: str = "notes_connect",
+    mode: str = "fast",
+) -> Optional[str]:
+    """Run Smart Connect on an arbitrary list of notes in the background.
+
+    Generic variant of :func:`schedule_section_connect` used by ingest
+    pipelines (Jira, URL, files) that want to bridge their notes into the
+    rest of the workspace without blocking the HTTP request.
+
+    Each note is processed sequentially to bound embedding-service load.
+    Failures on a single note are logged and skipped so a bad path never
+    aborts the whole batch.
+
+    Returns the job id, or ``None`` if nothing was queued.
+    """
+    if not note_paths:
+        return None
+
+    try:
+        from services.ingest_jobs import start_job, finish_job, update_stage
+    except Exception:  # pragma: no cover
+        return None
+
+    job_id = start_job(name, kind=kind)
+
+    async def _run() -> None:
+        done = 0
+        total = len(note_paths)
+        try:
+            for path in note_paths:
+                update_stage(job_id, f"linking {done + 1}/{total}")
+                try:
+                    await connect_note(path, workspace_path=workspace_path, mode=mode)
+                except Exception as exc:
+                    logger.warning("auto connect_note failed for %s: %s", path, exc)
+                done += 1
+            finish_job(job_id)
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("notes_connect job %s failed: %s", job_id, exc)
+            finish_job(job_id, error=str(exc))
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        import threading
+
+        def _thread_target() -> None:
+            asyncio.run(_run())
+
+        threading.Thread(
+            target=_thread_target, daemon=True, name="notes-connect"
+        ).start()
+        return job_id
+
+    loop.create_task(_run())
+    return job_id
+
+
 def _is_semantic_orphan_safe(note_path: str, ws: Path) -> bool:
     """Best-effort orphan check; never raises into the ingest path."""
     try:

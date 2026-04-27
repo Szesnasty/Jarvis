@@ -156,9 +156,11 @@ async def enqueue_item(
         await _write(db)
         return
 
+    from services._db import apply_pragmas
     target = db_path(workspace_path)
     await init_database(target)
     async with aiosqlite.connect(str(target)) as own_db:
+        await apply_pragmas(own_db)
         await _write(own_db)
         await own_db.commit()
 
@@ -220,9 +222,11 @@ async def queue_status(workspace_path: Optional[Path] = None) -> dict[str, Any]:
     target = db_path(workspace_path)
     await init_database(target)
 
+    from services._db import apply_pragmas
     failed_cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     async with aiosqlite.connect(str(target)) as db:
+        await apply_pragmas(db)
         pending = (await (await db.execute(
             "SELECT COUNT(1) FROM enrichment_queue WHERE status='pending'"
         )).fetchone())[0]
@@ -248,10 +252,13 @@ async def queue_status(workspace_path: Optional[Path] = None) -> dict[str, Any]:
 
 async def cancel_queue(*, workspace_path: Optional[Path] = None) -> int:
     """Delete all pending items from the enrichment queue. Returns count removed."""
+    from services._db import apply_pragmas
+
     target = db_path(workspace_path)
     await init_database(target)
 
     async with aiosqlite.connect(str(target)) as db:
+        await apply_pragmas(db)
         cursor = await db.execute(
             "DELETE FROM enrichment_queue WHERE status='pending'"
         )
@@ -269,7 +276,9 @@ async def get_latest_enrichment(
     target = db_path(workspace_path)
     await init_database(target)
 
+    from services._db import apply_pragmas
     async with aiosqlite.connect(str(target)) as db:
+        await apply_pragmas(db)
         db.row_factory = aiosqlite.Row
         row = await (
             await db.execute(
@@ -313,8 +322,10 @@ async def rerun(
     target = db_path(workspace_path)
     await init_database(target)
 
+    from services._db import apply_pragmas
     queued = 0
     async with aiosqlite.connect(str(target)) as db:
+        await apply_pragmas(db)
         if subject_ids:
             if not subject_type:
                 raise ValueError("subject_type is required when subject_ids are provided")
@@ -380,11 +391,13 @@ async def sharpen_all(
     target = db_path(workspace_path)
     await init_database(target)
 
+    from services._db import apply_pragmas
     queued_notes = 0
     queued_jira = 0
     skipped = 0
 
     async with aiosqlite.connect(str(target)) as db:
+        await apply_pragmas(db)
         if include_notes:
             mem = ws / "memory"
             if mem.exists():

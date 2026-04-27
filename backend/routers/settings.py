@@ -103,8 +103,9 @@ async def get_usage_by_day():
 async def get_enrichment_settings():
     ws = get_settings().workspace_path
     prefs = preference_service.load_preferences(workspace_path=ws)
-    from services.enrichment.runtime import is_on_battery_power, select_model_id
+    from services.enrichment.runtime import is_enrichment_enabled, is_on_battery_power, select_model_id
     return {
+        "enabled": is_enrichment_enabled(ws),
         "allow_on_battery": prefs.get("enrichment_allow_on_battery", "false") == "true",
         "on_battery": is_on_battery_power(),
         "model_id": select_model_id(ws),
@@ -135,8 +136,16 @@ async def update_enrichment_settings(body: dict):
         data["enrichment"]["model_id"] = str(model_id).strip()
         config_path.write_text(_json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
     prefs = preference_service.load_preferences(workspace_path=ws)
-    from services.enrichment.runtime import select_model_id
+    from services.enrichment.runtime import is_enrichment_enabled, select_model_id
+    enabled = body.get("enabled")
+    if enabled is not None:
+        preference_service.save_preference(
+            "enrichment_enabled",
+            "true" if enabled else "false",
+            workspace_path=ws,
+        )
     return {
+        "enabled": is_enrichment_enabled(ws),
         "allow_on_battery": prefs.get("enrichment_allow_on_battery", "false") == "true",
         "model_id": select_model_id(ws),
     }

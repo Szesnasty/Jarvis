@@ -38,6 +38,7 @@ from .repository import (
 )
 from .runtime import (
     db_path,
+    is_enrichment_enabled,
     is_on_battery_power,
     load_business_areas,
     select_base_url,
@@ -356,6 +357,13 @@ async def _run_one_connection(
         await apply_pragmas(db)
         while _worker_running:
             try:
+                if not is_enrichment_enabled(workspace_path):
+                    # User hasn't opted in to local-AI processing yet.
+                    # Sleep and retry — the worker will start processing as
+                    # soon as the user enables Sharpen in Settings.
+                    await asyncio.sleep(5.0)
+                    continue
+
                 if should_pause_for_battery(workspace_path):
                     await asyncio.sleep(5.0)
                     continue

@@ -54,6 +54,11 @@ class SharpenAllRequest(BaseModel):
 async def sharpen_all_endpoint(body: SharpenAllRequest | None = None) -> dict:
     """Enqueue every note and Jira issue for local-AI enrichment in one click."""
     payload = body or SharpenAllRequest()
+    # Clicking Sharpen is explicit opt-in — enable the worker if it wasn't already.
+    from config import get_settings
+    from services import preference_service
+    preference_service.save_preference("enrichment_enabled", "true",
+                                       workspace_path=get_settings().workspace_path)
     return await sharpen_all(
         reason=payload.reason,
         include_notes=payload.include_notes,
@@ -64,6 +69,13 @@ async def sharpen_all_endpoint(body: SharpenAllRequest | None = None) -> dict:
 @router.delete("/queue", status_code=200)
 async def cancel_enrichment_queue() -> dict:
     """Cancel all pending enrichment items and unload the model from memory."""
+    # Disable the worker too — without this, any later enqueue (e.g. next
+    # Jira import) would immediately resume processing because the user
+    # had previously clicked Sharpen. Cancel = "stop AND don't restart".
+    from config import get_settings
+    from services import preference_service
+    preference_service.save_preference("enrichment_enabled", "false",
+                                       workspace_path=get_settings().workspace_path)
     removed = await cancel_queue()
     # Unload the enrichment model from Ollama to stop GPU heat immediately
     try:

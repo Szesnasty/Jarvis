@@ -150,6 +150,19 @@ def is_on_battery_power() -> bool:
     return False
 
 
+def is_enrichment_enabled(workspace_path: Optional[Path] = None) -> bool:
+    """Return True only if the user explicitly opted in to local-AI enrichment.
+
+    Defaults to False so fresh imports never start the Sharpen worker without
+    the user clicking "Sharpen all notes & issues" (or toggling the switch in
+    Settings → Sharpen).  The preference is persisted as
+    ``enrichment_enabled = "true"`` by the settings endpoint.
+    """
+    ws = workspace(workspace_path)
+    prefs = preference_service.load_preferences(workspace_path=ws)
+    return prefs.get("enrichment_enabled", "false").lower() == "true"
+
+
 def should_pause_for_battery(workspace_path: Optional[Path] = None) -> bool:
     """Return True if enrichment should pause due to battery power.
 
