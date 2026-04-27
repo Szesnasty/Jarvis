@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.1](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.17.0...frontend-v0.17.1) (2026-04-27)
+
+
+### 🐛 Bug Fixes
+
+* finalize Smart Connect and Sharpen state handling ([42dc706](https://github.com/Szesnasty/Jarvis/commit/42dc7064c83c0e92942fd9d364ef00ad0da218e8))
+
 ## [0.17.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.16.1...frontend-v0.17.0) (2026-04-26)
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/Szesnasty/Jarvis/compare/backend-v0.15.0...backend-v0.15.1) (2026-04-27)
+
+
+### 🐛 Bug Fixes
+
+* Smart Connect and Sharpen UX for Jira imports ([ddfb6af](https://github.com/Szesnasty/Jarvis/commit/ddfb6af3112e3cea415bbc526b5031590fd78326))
+
 ## [0.15.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.14.1...backend-v0.15.0) (2026-04-26)
 
 

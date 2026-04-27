@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.1](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.16.0...jarvis-v0.16.1) (2026-04-27)
+
+
+### 🐛 Bug Fixes
+
+* finalize Smart Connect and Sharpen state handling ([42dc706](https://github.com/Szesnasty/Jarvis/commit/42dc7064c83c0e92942fd9d364ef00ad0da218e8))
+* Smart Connect and Sharpen UX for Jira imports ([ddfb6af](https://github.com/Szesnasty/Jarvis/commit/ddfb6af3112e3cea415bbc526b5031590fd78326))
+
 ## [0.16.0](https://github.com/Szesnasty/Jarvis/compare/jarvis-v0.15.1...jarvis-v0.16.0) (2026-04-26)
 
 
