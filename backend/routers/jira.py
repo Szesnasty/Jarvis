@@ -159,6 +159,7 @@ async def import_jira(
                 filename=file.filename or tmp_path.name,
                 fmt=fmt,
                 project_filter=projects,
+                defer_post_processing=True,
             )
         except JiraImportError as exc:
             raise HTTPException(status_code=400, detail=str(exc))

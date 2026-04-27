@@ -168,6 +168,102 @@ async def promote_suggestion(payload: SuggestionPair) -> PromoteResponse:
     )
 
 
+@router.post("/resume-pending")
+async def resume_pending_connections() -> dict:
+    """Fire Smart Connect on every section that hasn't been processed yet.
+
+    Replaces the manual "go to Settings → Smart Connect → Backfill" flow for
+    the common case after an import: the badge shows "N pending" because
+    sections from previously-ingested documents (or large multi-section
+    imports) never had ``connect_note`` run on them. This endpoint collects
+    those paths and schedules a single background ``section_connect`` job
+    so the badge starts ticking down immediately.
+
+    Idempotent: if a section_connect/notes_connect/jira_connect job is
+    already active, returns ``{"job_id": null, "queued": 0, "active": True}``
+    without doing anything. The frontend uses that signal to avoid stacking
+    duplicate jobs on rapid clicks.
+    """
+    from services.connection_service import schedule_section_connect
+    from services.ingest_jobs import snapshot as jobs_snapshot
+    from services.memory_service import _db_path
+    from utils.markdown import parse_frontmatter
+
+    active = [
+        j for j in jobs_snapshot().get("active", [])
+        if j.get("kind") in ("section_connect", "jira_connect", "notes_connect")
+    ]
+    if active:
+        return {"job_id": None, "queued": 0, "active": True}
+
+    ws = _workspace()
+    db_p = _db_path(ws)
+    mem = ws / "memory"
+    if not mem.exists():
+        return {"job_id": None, "queued": 0, "active": False}
+
+    pending_sections: list[str] = []
+    pending_jira: list[str] = []
+    for note_path in _iter_note_paths(db_p, mem):
+        full_path = mem / note_path
+        if not full_path.exists():
+            continue
+        try:
+            fm, _ = parse_frontmatter(full_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+
+        note_type = fm.get("type")
+
+        # Jira issues: collect those that have never had Smart Connect run.
+        if note_type == "jira_issue":
+            if not fm.get("suggested_related"):
+                sc = fm.get("smart_connect")
+                if not (isinstance(sc, dict) and sc.get("version")):
+                    pending_jira.append(note_path)
+            continue
+
+        # Split-document sections: collect unprocessed ones.
+        if not fm.get("parent"):
+            continue
+        if fm.get("suggested_related"):
+            continue
+        sc = fm.get("smart_connect")
+        if isinstance(sc, dict) and sc.get("version"):
+            continue
+        pending_sections.append(note_path)
+
+    if not pending_sections and not pending_jira:
+        return {"job_id": None, "queued": 0, "active": False}
+
+    job_id: str | None = None
+    queued = 0
+
+    if pending_jira:
+        from services.connection_service import schedule_notes_connect
+        job_id = schedule_notes_connect(
+            pending_jira,
+            workspace_path=ws,
+            name=f"Smart Connect: Jira ({len(pending_jira)} issues)",
+            kind="jira_connect",
+            mode="fast",
+        )
+        queued += len(pending_jira)
+
+    if pending_sections:
+        from services.connection_service import schedule_section_connect
+        sec_job = schedule_section_connect(
+            pending_sections,
+            workspace_path=ws,
+            doc_title=f"{len(pending_sections)} pending sections",
+        )
+        if not job_id:
+            job_id = sec_job
+        queued += len(pending_sections)
+
+    return {"job_id": job_id, "queued": queued, "active": False}
+
+
 @router.post("/backfill")
 async def backfill_connections(payload: BackfillRequest) -> StreamingResponse:
     """Run Smart Connect on all (or orphan-only) notes, streaming JSON progress.
@@ -561,6 +657,8 @@ async def connection_coverage() -> dict:
 
     notes_total = 0
     notes_with_suggestions = 0
+    notes_unprocessed = 0          # SC has never run on this note
+    notes_no_match = 0             # SC ran but found no candidates (final state)
     sections_total = 0
     sections_with_suggestions = 0
     sections_unprocessed = 0       # SC has never run on this section
@@ -581,11 +679,29 @@ async def connection_coverage() -> dict:
                 fm, _ = parse_frontmatter(full_path.read_text(encoding="utf-8"))
             except Exception:
                 continue
+
+            # Jira issues use the `parent` frontmatter field for the parent
+            # *issue key* (sub-task → story → epic), not for split-document
+            # sections. They have their own graph topology via project_jira
+            # and must not inflate the "pending sections" counter — otherwise
+            # every imported sub-task looks like an unprocessed section.
+            note_type = fm.get("type")
+            is_jira = note_type == "jira_issue"
+
             suggestions = fm.get("suggested_related") or []
             has_suggestions = bool(suggestions)
             if has_suggestions:
                 notes_with_suggestions += 1
                 pending_note_paths.append(note_path)
+            else:
+                # Distinguish: SC ran on this note and found nothing (final
+                # state, e.g. niche Jira issue with no good neighbours) vs
+                # SC never ran (still needs processing).
+                sc = fm.get("smart_connect")
+                if isinstance(sc, dict) and sc.get("version"):
+                    notes_no_match += 1
+                else:
+                    notes_unprocessed += 1
 
             for s in suggestions:
                 if isinstance(s, dict):
@@ -598,7 +714,7 @@ async def connection_coverage() -> dict:
                         pending_strong_notes.add(note_path)
 
             parent = fm.get("parent")
-            if parent:
+            if parent and not is_jira:
                 sections_total += 1
                 if has_suggestions:
                     sections_with_suggestions += 1
@@ -621,13 +737,16 @@ async def connection_coverage() -> dict:
     # right after a fresh ingest instead of a stale "X pending" number.
     active_section_jobs = [
         j for j in jobs_snapshot().get("active", [])
-        if j.get("kind") == "section_connect"
+        if j.get("kind") in ("section_connect", "jira_connect", "notes_connect")
     ]
 
     return {
         "notes_total": notes_total,
         "notes_with_suggestions": notes_with_suggestions,
         "notes_pending": notes_total - notes_with_suggestions,
+        # Fine-grained split for note-level state (parallels sections_*):
+        "notes_unprocessed": notes_unprocessed,  # SC never ran on these notes
+        "notes_no_match": notes_no_match,        # SC ran, no candidates (final)
         "sections_total": sections_total,
         "sections_with_suggestions": sections_with_suggestions,
         # sections_pending = unprocessed + no_match (backward compat)

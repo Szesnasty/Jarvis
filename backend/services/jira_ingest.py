@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,6 +33,13 @@ from services.enrichment_service import enqueue_jira_issue
 from utils.markdown import add_frontmatter
 
 logger = logging.getLogger(__name__)
+
+# Module-level strong references to background post-import tasks. Without
+# this, asyncio.create_task() returns a task whose only reference is the
+# event loop's weak set — Python's GC can collect it mid-run, silently
+# killing the Smart Connect scheduling. Bug seen in production: Jira
+# import returned 200 OK but post-processing never executed.
+_BACKGROUND_TASKS: set = set()
 
 
 class JiraImportError(Exception):
@@ -814,6 +822,178 @@ async def _embed_jira_note(note_path: str, content: str, db_path: Path) -> None:
         logger.warning("embed_note_chunks failed for %s: %s", note_path, exc)
 
 
+async def _bulk_enqueue_jira(
+    db: aiosqlite.Connection, items: List[Tuple[str, str]]
+) -> None:
+    """Bulk-insert Jira enrichment-queue rows.
+
+    Replaces the per-issue ``enqueue_jira_issue`` call (which did 2 SELECTs
+    + 1 INSERT each) with a single ``executemany``.  Idempotency relies on
+    the ``UNIQUE(subject_type, subject_id, content_hash)`` constraint on
+    ``enrichment_queue``.  Honours ``QUEUE_MAX_ITEMS`` with one bulk
+    capacity check instead of N per-row checks.
+    """
+    if not items:
+        return
+
+    from services.enrichment.repository import QUEUE_MAX_ITEMS
+    from services.enrichment.models import SUBJECT_JIRA
+
+    cursor = await db.execute(
+        "SELECT COUNT(1) FROM enrichment_queue WHERE status IN ('pending','processing')"
+    )
+    row = await cursor.fetchone()
+    queued = int(row[0]) if row else 0
+    free_slots = max(0, QUEUE_MAX_ITEMS - queued)
+    if free_slots <= 0:
+        logger.warning(
+            "Enrichment queue at capacity; dropping %d Jira enqueues", len(items)
+        )
+        return
+    if len(items) > free_slots:
+        logger.warning(
+            "Enrichment queue near capacity; trimming %d → %d Jira enqueues",
+            len(items),
+            free_slots,
+        )
+        items = items[:free_slots]
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = [
+        (SUBJECT_JIRA, key, hsh, "jira_import", now)
+        for (key, hsh) in items
+    ]
+    await db.executemany(
+        """
+        INSERT INTO enrichment_queue(
+            subject_type, subject_id, content_hash, reason, created_at, status
+        ) VALUES (?, ?, ?, ?, ?, 'pending')
+        ON CONFLICT(subject_type, subject_id, content_hash)
+        DO UPDATE SET
+            reason=excluded.reason,
+            created_at=excluded.created_at,
+            status='pending',
+            started_at=NULL
+        """,
+        rows,
+    )
+    await db.commit()
+
+
+async def _embed_jira_batch(
+    embed_queue: List[Tuple[str, str]], db_path: Path
+) -> None:
+    """Batched note-level embedding for a Jira import.
+
+    Big imports (10k+ issues) used to call ``embed_note`` once per issue,
+    which meant N separate fastembed inferences and N short-lived SQLite
+    connections.  This variant:
+
+    1. Opens **one** SQLite connection.
+    2. Skips issues whose ``note_embeddings.content_hash`` already matches.
+    3. Runs **one** fastembed batch over every note that needs (re)embedding.
+    4. Bulk-inserts all rows in a single transaction.
+
+    Chunk embeddings are still done per-note via ``embed_note_chunks``
+    because chunks within a single note are already batched and the
+    chunk count varies wildly across issues. We just open one short
+    connection per note for that step instead of bundling note + chunks.
+    """
+    if not embed_queue:
+        return
+    if os.environ.get("JARVIS_DISABLE_EMBEDDINGS") == "1":
+        return
+    try:
+        from services.embedding_service import (
+            aembed_texts,
+            content_hash,
+            vector_to_blob,
+            _MODEL_NAME,
+            _DIMENSIONS,
+            embed_note_chunks,
+        )
+        from services._db import apply_pragmas
+        from utils.markdown import parse_frontmatter
+    except ImportError:
+        return
+
+    # ── Step 1: figure out which notes actually need re-embedding.
+    candidates: List[Tuple[str, str, str, int]] = []  # (path, embed_input, hash, note_id)
+    async with aiosqlite.connect(str(db_path)) as db:
+        await apply_pragmas(db)
+
+        # Pre-fetch existing hashes + note_ids in one round-trip each.
+        existing_hashes: Dict[str, str] = {}
+        cursor = await db.execute("SELECT path, content_hash FROM note_embeddings")
+        for row in await cursor.fetchall():
+            existing_hashes[row[0]] = row[1]
+
+        note_ids: Dict[str, int] = {}
+        cursor = await db.execute("SELECT path, id FROM notes")
+        for row in await cursor.fetchall():
+            note_ids[row[0]] = row[1]
+
+        for note_path, content in embed_queue:
+            new_hash = content_hash(content)
+            if existing_hashes.get(note_path) == new_hash:
+                continue  # unchanged — skip
+            note_id = note_ids.get(note_path)
+            if note_id is None:
+                continue  # _index_jira_note didn't insert? skip silently
+            try:
+                fm, body = parse_frontmatter(content)
+            except Exception:
+                fm, body = {}, content
+            title = str(fm.get("title", "") or "")
+            tags = " ".join(str(t) for t in fm.get("tags", []) or [])
+            embed_input = f"{title}. {title}. {tags}. {body}"
+            candidates.append((note_path, embed_input, new_hash, note_id))
+
+        if not candidates:
+            return
+
+        # ── Step 2: one fastembed batch.
+        try:
+            vectors = await aembed_texts([c[1] for c in candidates])
+        except Exception as exc:
+            logger.warning("Jira batch embed failed: %s", exc)
+            return
+
+        # ── Step 3: bulk insert. SQLite likes `executemany` here.
+        now = datetime.now(timezone.utc).isoformat()
+        rows = [
+            (
+                note_id,
+                path,
+                vector_to_blob(vec),
+                hsh,
+                _MODEL_NAME,
+                _DIMENSIONS,
+                now,
+            )
+            for (path, _embed_input, hsh, note_id), vec in zip(candidates, vectors)
+        ]
+        await db.executemany(
+            """
+            INSERT OR REPLACE INTO note_embeddings
+            (note_id, path, embedding, content_hash, model_name, dimensions, embedded_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        await db.commit()
+
+    # ── Step 4: chunk embeddings — sequentially per note (chunks already
+    # batch internally inside embed_note_chunks). Failures are logged.
+    for note_path, content in embed_queue:
+        try:
+            await embed_note_chunks(
+                note_path, content, db_path, subject_type="jira_issue"
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("embed_note_chunks failed for %s: %s", note_path, exc)
+
+
 # ────────────────────────────────────────────────────────────────────
 # Persistence
 # ────────────────────────────────────────────────────────────────────
@@ -982,6 +1162,66 @@ def iter_issues(path: Path, fmt: str) -> Iterator[Issue]:
     raise JiraImportError(f"Unsupported format: {fmt}")
 
 
+async def _run_post_import(
+    workspace: Path,
+    db_path: Path,
+    embed_queue: List[Tuple[str, str]],
+    touched_paths: List[str],
+    stats: "ImportStats",
+    *,
+    enable_smart_connect: bool = True,
+) -> None:
+    """Embeddings + graph projection + Smart Connect for a finished import.
+
+    Extracted so the HTTP route can run this in the background while the
+    request returns immediately. Each step is best-effort: failures are
+    logged but never raised — the user's Markdown source of truth is
+    already on disk by the time we get here.
+    """
+    # Embed full-note + chunks for every touched issue. Batched note-level
+    # embedding makes 10k-issue imports feasible (single fastembed batch +
+    # one SQLite transaction instead of N round-trips).
+    try:
+        await _embed_jira_batch(embed_queue, db_path)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("post-import batch embed failed: %s", exc)
+
+    if stats.inserted > 0 or stats.updated > 0:
+        try:
+            from services.graph_service.builder import load_graph, _save_and_cache
+            from services.graph_service.jira_projection import project_jira
+            from services.graph_service.models import Graph
+
+            graph = load_graph(workspace) or Graph()
+            project_jira(workspace, graph)
+            _save_and_cache(graph, workspace)
+            logger.info(
+                "Jira graph projection completed for %d issues", stats.issue_count
+            )
+        except Exception as exc:
+            logger.warning("Jira graph projection failed (non-fatal): %s", exc)
+
+    # Smart Connect — bridges Jira issues into the rest of the workspace.
+    # Without this, every imported issue lives in an isolated jira:* graph
+    # cluster with no edges back to user notes, projects, or people.
+    # Gated so test_reimport_idempotent (and other programmatic callers
+    # that compare mtimes / frontmatter) don't see suggested_related
+    # appearing asynchronously after run_import returns.
+    if enable_smart_connect and touched_paths:
+        try:
+            from services.connection_service import schedule_notes_connect
+
+            schedule_notes_connect(
+                touched_paths,
+                workspace_path=workspace,
+                name=f"Smart Connect: Jira ({len(touched_paths)} issues)",
+                kind="jira_connect",
+                mode="fast",
+            )
+        except Exception as exc:
+            logger.warning("Jira Smart Connect scheduling failed: %s", exc)
+
+
 async def run_import(
     file_path: Path,
     *,
@@ -989,10 +1229,17 @@ async def run_import(
     fmt: Optional[str] = None,
     project_filter: Optional[List[str]] = None,
     workspace_path: Optional[Path] = None,
+    defer_post_processing: bool = False,
 ) -> ImportStats:
     """Import a Jira export. Idempotent by (issue_key, content_hash).
 
     Yields-free variant used for tests and programmatic calls.
+
+    When ``defer_post_processing`` is True, embeddings + graph projection +
+    Smart Connect are scheduled as a background task and the function
+    returns as soon as Markdown + SQLite ingest finishes. The HTTP route
+    sets this so a 10k-issue import doesn't keep the request open for
+    minutes while the user has nothing to look at.
     """
     workspace, db_path = _workspace_paths(workspace_path)
     memory_dir = workspace / "memory"
@@ -1022,11 +1269,36 @@ async def run_import(
     # (note_path, markdown) pairs for post-commit embedding. Deferred so we don't
     # nest connections and so a crash mid-loop doesn't leave partial embeddings.
     embed_queue: List[Tuple[str, str]] = []
+    # Bulk-enqueue accumulator for the enrichment queue. We INSERT all rows at
+    # once after the loop instead of running 3 queries per issue (existing-check
+    # + count + insert), which dominates a 10k-issue import.
+    enrichment_inbox: List[Tuple[str, str]] = []  # (issue_key, content_hash)
 
     try:
         async with aiosqlite.connect(str(db_path)) as db:
+            # Enable WAL + synchronous=NORMAL for the ingest connection.
+            # synchronous=NORMAL is safe under WAL and reduces fsync from
+            # one-per-commit to one-per-checkpoint, which is the single
+            # biggest win for big sequential ingests.
+            try:
+                from services._db import apply_pragmas
+
+                await apply_pragmas(db)
+            except Exception:  # pragma: no cover — defensive
+                pass
             await db.execute("PRAGMA foreign_keys = ON")
             now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            # Pre-fetch every existing (issue_key → content_hash) in one
+            # round-trip. The naive per-issue lookup was N×SELECT, which on
+            # a re-import of a 10k-issue export translated to 10k blocking
+            # queries. Memory cost is trivial: ~64 bytes/issue.
+            existing_hashes: Dict[str, str] = {}
+            cursor = await db.execute("SELECT issue_key, content_hash FROM issues")
+            for row in await cursor.fetchall():
+                existing_hashes[row[0]] = row[1]
+
+            COMMIT_BATCH = 500  # was 50 — bigger batches → fewer fsyncs
 
             for issue in iter_issues(file_path, resolved_fmt):
                 if allowed_projects and issue.project_key.upper() not in allowed_projects:
@@ -1035,13 +1307,9 @@ async def run_import(
                 project_keys_seen.add(issue.project_key)
 
                 new_hash = issue.content_hash()
-                cursor = await db.execute(
-                    "SELECT content_hash FROM issues WHERE issue_key = ?",
-                    (issue.issue_key,),
-                )
-                row = await cursor.fetchone()
+                prev_hash = existing_hashes.get(issue.issue_key)
                 md_path = workspace / "memory" / issue.note_path
-                if row and row[0] == new_hash:
+                if prev_hash == new_hash:
                     # Ensure the Markdown file still exists (user may have deleted it).
                     if md_path.exists():
                         stats.skipped += 1
@@ -1062,42 +1330,52 @@ async def run_import(
                 await _index_jira_note(db, issue, issue_md, now_iso)
                 embed_queue.append((issue.note_path, issue_md))
 
-                # Step 22c: async enrichment queue (cache key includes content_hash).
-                await enqueue_jira_issue(
-                    issue.issue_key,
-                    new_hash,
-                    reason="jira_import",
-                    workspace_path=workspace,
-                    db=db,
-                )
+                # Defer enrichment enqueue: collect (key, hash) pairs and bulk
+                # insert after the loop instead of 3 queries per issue.
+                enrichment_inbox.append((issue.issue_key, new_hash))
 
-                # Commit in small batches for crash safety on huge imports.
-                if (stats.inserted + stats.updated) % 50 == 0:
+                # Commit in batches for crash safety on huge imports.
+                if (stats.inserted + stats.updated) % COMMIT_BATCH == 0:
                     await db.commit()
 
             await db.commit()
+
+            # ── Bulk enrichment enqueue.  ON CONFLICT keeps idempotency.
+            if enrichment_inbox:
+                try:
+                    await _bulk_enqueue_jira(db, enrichment_inbox)
+                except Exception as exc:
+                    logger.warning("bulk enrichment enqueue failed: %s", exc)
+
             stats.bytes_processed = file_path.stat().st_size
             stats.project_keys = sorted(project_keys_seen)
 
-        # Embed full-note + chunks for every touched issue AFTER the ingest
-        # connection is closed.  Each call opens its own short-lived
-        # connection, so we avoid nested transactions.
-        for note_path, markdown in embed_queue:
-            await _embed_jira_note(note_path, markdown, db_path)
+        # ── Post-processing: embeddings + graph projection + Smart Connect.
+        # On large imports (10k+ issues) this dwarfs the SQLite ingest, so
+        # the HTTP route can opt into background execution to keep the
+        # request snappy. Tests still call run_import() directly without
+        # the flag and get the synchronous behaviour they expect.
+        touched_paths = [p for p, _ in embed_queue]
 
-        # Project imported issues into the knowledge graph (step 22b)
-        if stats.inserted > 0 or stats.updated > 0:
-            try:
-                from services.graph_service.builder import load_graph, _save_and_cache
-                from services.graph_service.jira_projection import project_jira
-                from services.graph_service.models import Graph
-
-                graph = load_graph(workspace) or Graph()
-                project_jira(workspace, graph)
-                _save_and_cache(graph, workspace)
-                logger.info("Jira graph projection completed for %d issues", stats.issue_count)
-            except Exception as exc:
-                logger.warning("Jira graph projection failed (non-fatal): %s", exc)
+        if defer_post_processing and (stats.inserted > 0 or stats.updated > 0):
+            logger.info(
+                "Scheduling deferred post-import: %d touched, %d inserted, %d updated",
+                len(touched_paths), stats.inserted, stats.updated,
+            )
+            task = asyncio.create_task(
+                _run_post_import(
+                    workspace, db_path, embed_queue, touched_paths, stats,
+                    enable_smart_connect=True,
+                )
+            )
+            # Keep a strong reference so the task isn't GC'd mid-run.
+            _BACKGROUND_TASKS.add(task)
+            task.add_done_callback(_BACKGROUND_TASKS.discard)
+        else:
+            await _run_post_import(
+                workspace, db_path, embed_queue, touched_paths, stats,
+                enable_smart_connect=False,
+            )
 
     except Exception as exc:
         error_message = f"{type(exc).__name__}: {exc}"
