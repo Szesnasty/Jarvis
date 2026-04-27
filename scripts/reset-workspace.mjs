@@ -69,6 +69,12 @@ const TARGETS = {
     label:       'Cache',
     description: 'Retrieval cache',
   },
+  preferences: {
+    paths:       [join(workspace, 'app', 'preferences.json')],
+    label:       'Preferences',
+    description: 'User preferences (Sharpen toggle, battery, etc.)',
+    isFile:      true,
+  },
 };
 
 async function exists(p) {

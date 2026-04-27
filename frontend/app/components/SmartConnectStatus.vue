@@ -1,13 +1,16 @@
 <template>
-  <span class="sc-status" :class="stateClass">
+  <span
+    class="sc-status"
+    :class="stateClass"
+    @mouseenter="onWrapperEnter"
+    @mouseleave="onWrapperLeave"
+  >
     <button
       type="button"
       class="sc-status__btn"
       :class="{ 'sc-status__btn--just-finished': justFinished }"
       :aria-label="ariaLabel"
       @click.stop="onClick"
-      @mouseenter="hoverOpen = true"
-      @mouseleave="hoverOpen = false"
       @focus="hoverOpen = true"
       @blur="hoverOpen = false"
     >
@@ -28,7 +31,7 @@
       </span>
       <span v-if="!activeJob && coverage" class="sc-status__breakdown">
         <span class="sc-status__chip sc-status__chip--ok">
-          {{ coverage.sections_with_suggestions }} connected
+          {{ connectedCount }} connected
         </span>
         <span v-if="coverage.sections_no_match > 0" class="sc-status__chip sc-status__chip--muted">
           {{ coverage.sections_no_match }} standalone
@@ -37,7 +40,15 @@
           {{ unprocessedCount }} pending
         </span>
       </span>
-      <span v-if="needsBackfill" class="sc-status__action">
+      <span v-if="needsBackfill && !activeJob" class="sc-status__action">
+        <button
+          type="button"
+          class="sc-status__run"
+          :disabled="isResuming"
+          @click.stop="runNow"
+        >
+          {{ isResuming ? 'Starting…' : 'Run Smart Connect now' }}
+        </button>
         <NuxtLink to="/settings#smart-connect" class="sc-status__link">
           Open Settings → Smart Connect
         </NuxtLink>
@@ -60,6 +71,8 @@ interface Coverage {
   notes_total: number
   notes_with_suggestions: number
   notes_pending: number
+  notes_unprocessed?: number
+  notes_no_match?: number
   sections_total: number
   sections_with_suggestions: number
   sections_pending: number
@@ -84,8 +97,18 @@ const coverage = ref<Coverage | null>(null)
 let timer: ReturnType<typeof setInterval> | null = null
 let autoOpenTimer: ReturnType<typeof setTimeout> | null = null
 let pulseTimer: ReturnType<typeof setTimeout> | null = null
+let hoverCloseTimer: ReturnType<typeof setTimeout> | null = null
 
 const popoverOpen = computed(() => hoverOpen.value || autoOpen.value)
+
+function onWrapperEnter() {
+  if (hoverCloseTimer) { clearTimeout(hoverCloseTimer); hoverCloseTimer = null }
+  hoverOpen.value = true
+}
+function onWrapperLeave() {
+  // Small delay so mouse can travel from button into the tooltip without it vanishing.
+  hoverCloseTimer = setTimeout(() => { hoverOpen.value = false }, 150)
+}
 
 // Re-show completion popover only once per "completion event" — keyed by
 // the timestamp of when SC last finished. Stored in sessionStorage so a
@@ -165,6 +188,7 @@ onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
   if (autoOpenTimer) clearTimeout(autoOpenTimer)
   if (pulseTimer) clearTimeout(pulseTimer)
+  if (hoverCloseTimer) clearTimeout(hoverCloseTimer)
 })
 
 const activeJob = computed<ActiveJob | null>(() => {
@@ -197,12 +221,26 @@ const unprocessedCount = computed(() => {
   if (!c) return 0
   return c.sections_unprocessed ?? c.sections_pending
 })
+
+// Show notes_with_suggestions when there are no split-document sections
+// (e.g. Jira-only workspace). Falls back to sections_with_suggestions so
+// PDF/URL imports still show section-level counts.
+const connectedCount = computed(() => {
+  const c = coverage.value
+  if (!c) return 0
+  return (c.sections_total ?? 0) > 0
+    ? c.sections_with_suggestions
+    : (c.notes_with_suggestions ?? 0)
+})
 // Amber warning only when SC hasn't processed some sections yet (needs backfill).
 // sections_no_match = SC ran and found nothing → green, that's a final state.
 const needsBackfill = computed(() => {
   const c = coverage.value
   if (!c) return false
-  return unprocessedCount.value > 0 || c.notes_pending > 0
+  // Only count notes that SC has NEVER run on. Notes where SC ran but found
+  // no candidates (notes_no_match) are a final 'standalone' state, not pending.
+  const notesUnprocessed = c.notes_unprocessed ?? c.notes_pending
+  return unprocessedCount.value > 0 || notesUnprocessed > 0
 })
 const stateClass = computed(() => {
   if (activeJob.value) return 'sc-status--active'
@@ -220,6 +258,8 @@ const summaryShort = computed(() => {
     return progressLabel.value ? `Processing ${progressLabel.value}` : 'Processing…'
   }
   if (unprocessedCount.value > 0) return `${unprocessedCount.value} pending`
+  const notesUnprocessed = c.notes_unprocessed ?? c.notes_pending ?? 0
+  if (notesUnprocessed > 0) return `${notesUnprocessed} pending`
   if (justFinished.value) return '✓ Just finished'
   return '✓ Up to date'
 })
@@ -241,7 +281,7 @@ const summaryFull = computed(() => {
     return `${unprocessed} sections in ${docs} ${docWord} haven't been processed yet. Run Backfill in Settings → Smart Connect to connect them.`
   }
   if (justFinished.value) {
-    const connected = c.sections_with_suggestions
+    const connected = connectedCount.value
     const standalone = noMatch
     if (standalone > 0) {
       return `Connected ${connected} sections. ${standalone} had no link candidates — normal for niche or standalone content.`
@@ -252,12 +292,37 @@ const summaryFull = computed(() => {
     return `Smart Connect is up to date. ${noMatch} section${noMatch === 1 ? '' : 's'} had no link candidates — this is normal for niche or standalone content.`
   }
   if (c.notes_pending > 0) {
-    return `${c.notes_pending} notes have no suggestions yet. Run Backfill once to connect them.`
+    const standalone = c.notes_no_match ?? 0
+    const unprocessed = c.notes_unprocessed ?? c.notes_pending
+    if (unprocessed > 0) {
+      return `${unprocessed} notes have no suggestions yet. Run Backfill once to connect them.`
+    }
+    if (standalone > 0) {
+      return `Smart Connect is up to date. ${standalone} note${standalone === 1 ? '' : 's'} had no link candidates — normal for niche or standalone content.`
+    }
   }
   return `All ${c.notes_total} notes are connected — Smart Connect is up to date.`
 })
 
+const isResuming = ref(false)
+async function runNow() {
+  if (isResuming.value) return
+  isResuming.value = true
+  try {
+    const res = await fetch('/api/connections/resume-pending', { method: 'POST' })
+    if (res.ok) {
+      // Refresh immediately so the badge flips to "Processing N/M".
+      await fetchCoverage()
+    }
+  } catch {
+    // Silent — surfacing fetch errors here would distract from the badge UX.
+  } finally {
+    isResuming.value = false
+  }
+}
+
 function onClick() {
+  if (hoverCloseTimer) { clearTimeout(hoverCloseTimer); hoverCloseTimer = null }
   // Toggle: if either auto or hover-open, close everything. Otherwise open.
   if (popoverOpen.value) {
     hoverOpen.value = false
@@ -365,7 +430,9 @@ function onClick() {
   font-size: 0.72rem;
 }
 .sc-status__action {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
   margin-top: 0.3rem;
   padding-top: 0.4rem;
   border-top: 1px solid var(--neon-cyan-15, rgba(120, 220, 255, 0.18));
@@ -377,6 +444,27 @@ function onClick() {
 }
 .sc-status__link:hover {
   text-decoration: underline;
+}
+.sc-status__run {
+  display: inline-block;
+  margin-bottom: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--neon-cyan-50, rgba(120, 220, 255, 0.5));
+  border-radius: 6px;
+  background: var(--neon-cyan-10, rgba(120, 220, 255, 0.12));
+  color: var(--neon-cyan, #78dcff);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.sc-status__run:hover:not(:disabled) {
+  background: var(--neon-cyan-20, rgba(120, 220, 255, 0.22));
+  border-color: var(--neon-cyan, #78dcff);
+}
+.sc-status__run:disabled {
+  opacity: 0.6;
+  cursor: progress;
 }
 
 /* Progress bar shown in tooltip while a section_connect job is active. */

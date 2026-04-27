@@ -45,6 +45,7 @@ export function useSharpen() {
   const allowOnBattery = ref(false)
   const onBattery = ref<boolean | null>(null)
   const enrichmentModelId = ref('')
+  const enabled = ref(false)
   let pollTimer: ReturnType<typeof setInterval> | null = null
 
   const done = computed((): number => {
@@ -163,7 +164,10 @@ export function useSharpen() {
       const resp = await $fetch<{ removed: number }>('/api/enrichment/queue', { method: 'DELETE' })
       await refreshQueue()
       active.value = false
-      saveState()
+      total.value = 0
+      completedAtStart.value = 0
+      lastResult.value = null
+      clearState()
       stopPolling()
       return resp.removed
     } catch {
@@ -176,10 +180,12 @@ export function useSharpen() {
   async function loadEnrichmentSettings() {
     try {
       const resp = await $fetch<{
+        enabled?: boolean
         allow_on_battery: boolean
         on_battery: boolean
         model_id: string
       }>('/api/settings/enrichment')
+      enabled.value = Boolean(resp.enabled)
       allowOnBattery.value = resp.allow_on_battery
       onBattery.value = resp.on_battery
       enrichmentModelId.value = resp.model_id
@@ -221,6 +227,18 @@ export function useSharpen() {
     }
     await refreshQueue()
     await loadEnrichmentSettings()
+    // Reconcile stale localStorage with backend truth. The Sharpen worker is
+    // gated on `enrichment_enabled` server-side; if it's off, no processing
+    // is happening regardless of what localStorage from a previous session
+    // claims. Clear stale progress so the UI doesn't lie about being active.
+    if (!enabled.value) {
+      total.value = 0
+      completedAtStart.value = 0
+      active.value = false
+      lastResult.value = null
+      clearState()
+      return
+    }
     if (total.value > 0 && queue.value && (queue.value.pending > 0 || queue.value.processing > 0)) {
       active.value = true
       startPolling()
@@ -234,7 +252,7 @@ export function useSharpen() {
 
   return {
     queue, running, lastResult, total, active, cancelling,
-    allowOnBattery, onBattery, enrichmentModelId,
+    allowOnBattery, onBattery, enrichmentModelId, enabled,
     done, progress,
     init, run, cancel,
     refreshQueue, changeEnrichmentModel, updateBatterySetting,
