@@ -63,6 +63,32 @@ def _validate_path(note_path: str, base: Optional[Path] = None) -> None:
         raise ValueError("Invalid path: absolute paths not allowed")
 
 
+# Explicit allowlist regex for note paths. CodeQL recognises this as a
+# string-level sanitizer (the regex bound makes the value no longer
+# "user-controlled" for downstream filesystem operations). Allowed:
+# lowercase/uppercase letters, digits, ``.``, ``_``, ``-`` and ``/`` as
+# separator. Must end in ``.md``. No leading slash, no ``..`` segments.
+_SAFE_NOTE_PATH_RE = re.compile(r"^(?!/)(?!.*\.\.)(?:[A-Za-z0-9._\-]+/)*[A-Za-z0-9._\-]+\.md$")
+
+
+def _safe_join(base: Path, note_path: str) -> Path:
+    """Join ``note_path`` to ``base`` after an explicit allowlist check.
+
+    Returns the resolved absolute path. Raises ``ValueError`` if the
+    user-supplied component does not pass the allowlist or escapes
+    ``base`` after resolution.
+    """
+    if not isinstance(note_path, str) or not _SAFE_NOTE_PATH_RE.match(note_path):
+        raise ValueError("Invalid note path")
+    base_resolved = base.resolve()
+    candidate = (base_resolved / note_path).resolve()
+    try:
+        candidate.relative_to(base_resolved)
+    except ValueError as exc:
+        raise ValueError("Invalid note path") from exc
+    return candidate
+
+
 async def create_note(
     note_path: str,
     content: str,
@@ -283,12 +309,7 @@ async def update_note_ownership(
     mem = _memory_path(workspace_path)
     _validate_path(note_path, mem)
     db_p = _db_path(workspace_path)
-    mem_root = mem.resolve()
-    file_path = (mem_root / note_path).resolve()
-    try:
-        file_path.relative_to(mem_root)
-    except ValueError as e:
-        raise ValueError("Invalid note path") from e
+    file_path = _safe_join(mem, note_path)
 
     if not file_path.exists():
         raise NoteNotFoundError(f"Note not found: {note_path}")
@@ -322,12 +343,7 @@ async def delete_note(
     mem = _memory_path(workspace_path)
     _validate_path(note_path, mem)
     db_p = _db_path(workspace_path)
-    mem_root = mem.resolve()
-    file_path = (mem_root / note_path).resolve()
-    try:
-        file_path.relative_to(mem_root)
-    except ValueError as e:
-        raise ValueError("Invalid note path") from e
+    file_path = _safe_join(mem, note_path)
 
     file_exists = file_path.exists()
 
@@ -344,12 +360,9 @@ async def delete_note(
     # Move file to trash if it exists on disk
     if file_exists:
         trash = _trash_path(workspace_path)
-        trash_root = trash.resolve()
-        dest = (trash_root / note_path).resolve()
-        try:
-            dest.relative_to(trash_root)
-        except ValueError as e:
-            raise ValueError("Invalid note path") from e
+        dest = _safe_join(trash, note_path) if note_path.endswith(".md") else None
+        if dest is None:
+            raise ValueError("Invalid note path")
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(file_path), str(dest))
 
