@@ -48,15 +48,41 @@ def test_compaction_noop_with_single_tool_result():
     assert out[-1]["content"][0]["content"] == "X" * 5000
 
 
-def test_compaction_collapses_older_tool_results_but_keeps_last():
+def test_compaction_keeps_last_two_intact():
+    # Step 30e: multi-tool chains commonly reference results from 1–2 hops
+    # back. We keep the last two tool_results intact; only earlier ones get
+    # compacted.
     messages = (
         [{"role": "user", "content": "Start"}]
-        + _msg("t1", "OLD" * 2000)  # long old result
-        + _msg("t2", "NEW" * 2000)  # long new result — should stay intact
+        + _msg("t1", "OLD" * 2000)  # oldest — should be compacted
+        + _msg("t2", "MID" * 2000)  # second-to-last — kept intact
+        + _msg("t3", "NEW" * 2000)  # latest — kept intact
     )
     out = _compact_stale_tool_results(messages)
 
-    # Find tool_results in order
+    tool_results = [
+        block
+        for msg in out
+        if msg.get("role") == "user" and isinstance(msg.get("content"), list)
+        for block in msg["content"]
+        if isinstance(block, dict) and block.get("type") == "tool_result"
+    ]
+    assert len(tool_results) == 3
+    # Older compacted
+    assert len(tool_results[0]["content"]) <= _STALE_TOOL_RESULT_CAP + 100
+    # Last two intact
+    assert tool_results[1]["content"] == "MID" * 2000
+    assert tool_results[2]["content"] == "NEW" * 2000
+
+
+def test_compaction_two_results_both_kept():
+    # With only two tool_results, both are within the "keep last 2" window.
+    messages = (
+        [{"role": "user", "content": "Start"}]
+        + _msg("t1", "OLD" * 2000)
+        + _msg("t2", "NEW" * 2000)
+    )
+    out = _compact_stale_tool_results(messages)
     tool_results = [
         block
         for msg in out
@@ -65,7 +91,5 @@ def test_compaction_collapses_older_tool_results_but_keeps_last():
         if isinstance(block, dict) and block.get("type") == "tool_result"
     ]
     assert len(tool_results) == 2
-    # Older compacted
-    assert len(tool_results[0]["content"]) <= _STALE_TOOL_RESULT_CAP + 100
-    # Newer intact
+    assert tool_results[0]["content"] == "OLD" * 2000
     assert tool_results[1]["content"] == "NEW" * 2000

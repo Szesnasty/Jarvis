@@ -174,54 +174,57 @@ class TestSoftCapSavings:
 # ---------------------------------------------------------------------------
 
 class TestMultiRoundCompaction:
-    """Simulate realistic 3-round tool cascade and measure savings."""
+    """Simulate realistic multi-round tool cascade and measure savings.
 
-    def _build_3_round_cascade(self, use_compaction: bool) -> list[dict]:
-        """Build a 3-round tool cascade (search → read → search again).
+    Step 30e: cap=2000, keep-last-2. Cascades need at least 4 rounds for
+    stale compaction to kick in on round 1 (rounds 2 & 3 stay protected
+    by keep-last-2 until round 4 is built).
+    """
 
-        Round 1: search_jira → big result
-        Round 2: read_note → medium result (model reads search + note)
-        Round 3: search_jira again → big result (model has all prior context)
+    def _build_cascade(self, use_compaction: bool, n_rounds: int = 4) -> list[dict]:
+        """Build an n-round tool cascade.
+
+        Real flow: each tool round calls _compact_stale_tool_results before
+        building the next tool message. After the final round there is no
+        further compaction (model responds with text). Tests therefore
+        need n_rounds ≥ 4 to see round 1 compacted under keep-last-2.
         """
-        messages = [{"role": "user", "content": "Jaki jest największy risk w sprincie? Wymień top 5 blokerów"}]
-
-        # Round 1: search jira
-        e1 = _make_tool_event("t1", "search_jira", {"query": "sprint blockers"})
-        messages = _build_tool_messages(messages, e1, JIRA_SEARCH_RESULT)
-
-        # Round 2: read a note for context
-        if use_compaction:
-            messages = _compact_stale_tool_results(messages)
-        e2 = _make_tool_event("t2", "read_note", {"path": "architecture.md"})
-        messages = _build_tool_messages(messages, e2, NOTE_READ_RESULT)
-
-        # Round 3: another search
-        if use_compaction:
-            messages = _compact_stale_tool_results(messages)
-        e3 = _make_tool_event("t3", "search_jira", {"query": "security vulnerabilities"})
-        messages = _build_tool_messages(messages, e3, SECOND_SEARCH_RESULT)
-
+        payloads = [
+            ("search_jira", JIRA_SEARCH_RESULT),
+            ("read_note", NOTE_READ_RESULT),
+            ("search_jira", SECOND_SEARCH_RESULT),
+            ("query_graph", GRAPH_QUERY_RESULT),
+        ]
+        messages = [{"role": "user", "content": "Jaki jest największy risk w sprincie?"}]
+        for i in range(n_rounds):
+            if use_compaction and i > 0:
+                messages = _compact_stale_tool_results(messages)
+            name, payload = payloads[i % len(payloads)]
+            event = _make_tool_event(f"t{i+1}", name, {"query": f"round {i+1}"})
+            messages = _build_tool_messages(messages, event, payload)
         return messages
 
-    def test_3_round_cascade_savings(self):
-        """3-round cascade: compaction should save >30% input tokens."""
-        baseline = self._build_3_round_cascade(use_compaction=False)
-        optimized = self._build_3_round_cascade(use_compaction=True)
+    def test_4_round_cascade_savings(self):
+        """4-round cascade: keep-last-2 protects rounds 3 & 4; round 1 (and
+        possibly 2) gets compacted by the pre-round-4 pass. Savings should
+        be visible.
+        """
+        baseline = self._build_cascade(use_compaction=False, n_rounds=4)
+        optimized = self._build_cascade(use_compaction=True, n_rounds=4)
 
         baseline_chars = _chars_in_messages(baseline)
         opt_chars = _chars_in_messages(optimized)
         savings_pct = (1 - opt_chars / baseline_chars) * 100
 
-        assert savings_pct > 30, (
-            f"3-round cascade expected >30% savings, got {savings_pct:.1f}% "
+        assert savings_pct > 10, (
+            f"4-round cascade expected >10% savings, got {savings_pct:.1f}% "
             f"(baseline={baseline_chars}, optimized={opt_chars})"
         )
 
     def test_latest_result_stays_intact_after_compaction(self):
         """The most recent tool_result must not be compacted — model needs it."""
-        optimized = self._build_3_round_cascade(use_compaction=True)
+        optimized = self._build_cascade(use_compaction=True, n_rounds=4)
 
-        # Find all tool_results
         tool_results = []
         for msg in optimized:
             if msg.get("role") == "user" and isinstance(msg.get("content"), list):
@@ -229,19 +232,18 @@ class TestMultiRoundCompaction:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         tool_results.append(block)
 
-        # Last result should be full (soft-capped only, not stale-compacted)
+        # Last result was soft-capped by _build_tool_messages but not stale-compacted.
         last = tool_results[-1]["content"]
-        # It got soft-capped by _build_tool_messages but not stale-compacted further
-        assert len(last) >= min(len(SECOND_SEARCH_RESULT), _TOOL_RESULT_SOFT_CAP * 0.9)
+        assert len(last) >= min(len(GRAPH_QUERY_RESULT), _TOOL_RESULT_SOFT_CAP * 0.9)
 
     def test_stale_results_heavily_compacted(self):
-        """Earlier results from stale rounds should be compacted.
+        """Round 1 should be stale-compacted once the cascade reaches round 4.
 
-        In a 3-round cascade, compaction happens before rounds 2 and 3.
-        After round 3 is built (final state), round 1 has been stale-compacted,
-        but round 2 was the 'latest' during the last compaction so it stayed intact.
+        With keep-last-2: pre-round-4 pass compacts everything older than
+        the last 2 tool_results → round 1 (and round 2) get squeezed to
+        ≤ _STALE_TOOL_RESULT_CAP, while rounds 3 & 4 stay intact.
         """
-        optimized = self._build_3_round_cascade(use_compaction=True)
+        optimized = self._build_cascade(use_compaction=True, n_rounds=4)
 
         tool_results = []
         for msg in optimized:
@@ -250,19 +252,19 @@ class TestMultiRoundCompaction:
                     if isinstance(block, dict) and block.get("type") == "tool_result":
                         tool_results.append(block)
 
-        assert len(tool_results) == 3
-        # Round 1 should be heavily compacted (it was stale before round 3)
+        assert len(tool_results) == 4
+        # Round 1 is outside the keep-last-2 window → compacted.
         assert len(tool_results[0]["content"]) <= _STALE_TOOL_RESULT_CAP + 100, (
             f"Round 1 should be compacted to ≤{_STALE_TOOL_RESULT_CAP}+margin, "
             f"got {len(tool_results[0]['content'])}"
         )
-        # Round 3 (last) should be intact (soft-capped only)
-        assert len(tool_results[2]["content"]) >= min(len(SECOND_SEARCH_RESULT), _TOOL_RESULT_SOFT_CAP * 0.9)
+        # Round 4 (last) intact (soft-capped only).
+        assert len(tool_results[3]["content"]) >= min(len(GRAPH_QUERY_RESULT), _TOOL_RESULT_SOFT_CAP * 0.9)
 
     def test_message_count_preserved(self):
         """Compaction doesn't lose messages — it only shrinks content."""
-        baseline = self._build_3_round_cascade(use_compaction=False)
-        optimized = self._build_3_round_cascade(use_compaction=True)
+        baseline = self._build_cascade(use_compaction=False, n_rounds=4)
+        optimized = self._build_cascade(use_compaction=True, n_rounds=4)
         assert len(baseline) == len(optimized)
 
 
@@ -292,7 +294,13 @@ class TestDeepCascadeSavings:
         return messages
 
     def test_5_round_cascade_savings_over_50_pct(self):
-        """5-round cascade: compaction saves >50% because stale rounds accumulate."""
+        """5-round cascade: compaction still saves significantly.
+
+        Step 30e: with keep-last-2 + cap=2000, 5-round cascade now saves
+        ~30% (vs ~50% under old keep-last-1 + cap=600). The trade-off is
+        intentional — prior config caused hallucinations because the model
+        lost middle sections of read_note results 2 hops back.
+        """
         baseline = self._build_n_rounds(5, use_compaction=False)
         optimized = self._build_n_rounds(5, use_compaction=True)
 
@@ -300,15 +308,17 @@ class TestDeepCascadeSavings:
         opt_chars = _chars_in_messages(optimized)
         savings_pct = (1 - opt_chars / baseline_chars) * 100
 
-        assert savings_pct > 50, (
-            f"5-round cascade expected >50% savings, got {savings_pct:.1f}% "
+        assert savings_pct > 25, (
+            f"5-round cascade expected >25% savings, got {savings_pct:.1f}% "
             f"(baseline={baseline_chars:,}, optimized={opt_chars:,})"
         )
 
     def test_5_round_token_estimate(self):
         """Estimate actual token impact of 5-round cascade.
 
-        Rule of thumb: 4 chars ≈ 1 token.
+        Rule of thumb: 4 chars ≈ 1 token. Step 30e: lowered from 4k to 2k
+        threshold; the bumped cap intentionally keeps more context for
+        quality.
         """
         baseline = self._build_n_rounds(5, use_compaction=False)
         optimized = self._build_n_rounds(5, use_compaction=True)
@@ -317,9 +327,8 @@ class TestDeepCascadeSavings:
         opt_tokens = _chars_in_messages(optimized) // 4
         saved_tokens = baseline_tokens - opt_tokens
 
-        # Should save at least 4000 tokens in a 5-round cascade
-        assert saved_tokens > 4000, f"Expected >4k tokens saved, got {saved_tokens}"
-
+        # Should save at least 2000 tokens in a 5-round cascade.
+        assert saved_tokens > 2000, f"Expected >2k tokens saved, got {saved_tokens}"
     def test_savings_scale_with_depth(self):
         """More rounds → bigger savings percentage."""
         savings = []

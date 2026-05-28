@@ -71,10 +71,16 @@ export function useChat() {
     }
 
     if (event.type === 'session_history') {
-      // Restore chat history after reconnect/refresh (only if UI is empty)
-      if (messages.value.length === 0 && Array.isArray(event.messages)) {
-        messages.value = event.messages
-      }
+      // Step 30c: merge restored history with anything already shown locally
+      // (e.g. user typed before history arrived on reconnect). Dedup by
+      // role+timestamp+content-prefix to avoid duplicates after a reconnect
+      // storm.
+      if (!Array.isArray(event.messages)) return
+      const keyOf = (m: { role: string; timestamp?: string; content?: string }) =>
+        `${m.role}|${m.timestamp ?? ''}|${(m.content ?? '').slice(0, 60)}`
+      const serverKeys = new Set(event.messages.map(keyOf))
+      const localExtras = messages.value.filter(m => !serverKeys.has(keyOf(m)))
+      messages.value = [...event.messages, ...localExtras]
       return
     }
 

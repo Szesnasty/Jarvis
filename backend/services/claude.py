@@ -2,7 +2,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 import anthropic
 
@@ -293,6 +293,7 @@ async def build_system_prompt(
     user_message: str,
     workspace_path=None,
     graph_scope: Optional[str] = None,
+    recent_user_messages: Optional[List[str]] = None,
 ) -> str:
     """Build system prompt with optional context and active specialist.
 
@@ -300,7 +301,10 @@ async def build_system_prompt(
     neighborhood instead of full-text retrieval.
     """
     prompt, _stats = await build_system_prompt_with_stats(
-        user_message, workspace_path=workspace_path, graph_scope=graph_scope,
+        user_message,
+        workspace_path=workspace_path,
+        graph_scope=graph_scope,
+        recent_user_messages=recent_user_messages,
     )
     return prompt
 
@@ -309,6 +313,7 @@ async def build_system_prompt_with_stats(
     user_message: str,
     workspace_path=None,
     graph_scope: Optional[str] = None,
+    recent_user_messages: Optional[List[str]] = None,
 ) -> tuple[str, dict]:
     """Build the system prompt and return token-attribution stats.
 
@@ -360,7 +365,12 @@ async def build_system_prompt_with_stats(
     # Detect user message language and append a final reminder AFTER any retrieved
     # context. Small models have recency bias — the last instruction before the
     # assistant token wins over instructions buried at the top of a long prompt.
-    lang_reminder = _language_reminder(user_message)
+    # Step 30a: pass recent user messages so short follow-ups ("a teraz?")
+    # inherit the established conversation language instead of defaulting
+    # to English.
+    lang_reminder = _language_reminder(
+        user_message, recent=recent_user_messages or ()
+    )
 
     if not context:
         prompt = base + "\n\n" + lang_reminder
@@ -384,39 +394,120 @@ async def build_system_prompt_with_stats(
     return prompt, stats
 
 
-def _language_reminder(user_message: str) -> str:
-    """Return a language instruction banner based on simple script detection.
+# Step 30a — diacritic-free stop-word allowlists. Polish users often type
+# without ąęśćż ("co tam", "powiedz mi wiecej") and the old script-only
+# detector misclassified them as English. These short, frequent tokens
+# disambiguate diacritic-free Latin-script messages.
+_POLISH_STOP = frozenset({
+    "co", "czy", "jak", "dlaczego", "kiedy", "gdzie", "kto", "dla",
+    "ale", "tez", "tak", "nie", "mam", "masz", "mial", "miala",
+    "bylo", "byla", "byl", "bedzie", "bede", "juz", "przez", "bez",
+    "nad", "pod", "przed", "mnie", "tobie", "jego", "jej", "nasz",
+    "wasz", "moze", "musze", "chce", "wiem", "mysle", "widze",
+    "ktory", "ktora", "ktore", "taki", "taka", "takie", "jest",
+    "sa", "byc", "miec", "robic", "powiedz", "napisz", "pokaz",
+    "daj", "dodaj", "usun", "zrob", "sprawdz", "wiecej",
+})
+_GERMAN_STOP = frozenset({
+    "und", "oder", "aber", "nicht", "mit", "auch", "dass", "weil",
+    "ich", "du", "er", "sie", "wir", "ihr", "ist", "sind", "war",
+    "haben", "sein", "werden", "hier", "dort", "jetzt", "heute",
+    "morgen", "gestern", "sehr", "mehr", "noch", "schon", "nur",
+})
+_SPANISH_STOP = frozenset({
+    "que", "pero", "como", "cuando", "donde", "porque", "tambien",
+    "yo", "tu", "el", "ella", "nosotros", "vosotros", "ellos",
+    "esta", "este", "estos", "estas", "para", "por", "con", "sin",
+    "mas", "menos", "muy", "mucho", "todo", "nada", "algo", "hola",
+})
+_FRENCH_STOP = frozenset({
+    "que", "qui", "quand", "comment", "pourquoi", "parce", "mais",
+    "aussi", "avec", "sans", "pour", "sur", "sous", "dans", "plus",
+    "moins", "tres", "bien", "merci", "bonjour", "salut",
+})
 
-    Placed at the END of the system prompt so small models (recency-biased)
-    see it immediately before they start generating.
+
+def _detect_language(msg: str) -> Optional[str]:
+    """Detect language of ``msg``. Returns canonical name or ``None``
+    when the signal is too weak (very short, no diacritics, no stop-word
+    match) — caller should fall back to the conversation's sticky language.
     """
-    # Detect script by codepoint ranges — no external dependencies
     polish_chars = set("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ")
     cyrillic_range = (0x0400, 0x04FF)
     chinese_range = (0x4E00, 0x9FFF)
     arabic_range = (0x0600, 0x06FF)
     german_chars = set("äöüßÄÖÜ")
-    french_chars = set("àâäéèêëîïôùûüÿçœæÀÂÄÉÈÊËÎÏÔÙÛÜŸÇ")
+    french_chars = set("àâéèêëîïôùûüÿçœæ")
+    spanish_chars = set("áéíóúñ¿¡üÁÉÍÓÚÑÜ")
 
-    msg = user_message.strip()
-    if not msg:
+    msg_stripped = msg.strip()
+    if not msg_stripped:
+        return None
+
+    # Non-Latin scripts first — unambiguous.
+    codepoints = [ord(c) for c in msg_stripped]
+    if any(cyrillic_range[0] <= cp <= cyrillic_range[1] for cp in codepoints):
+        return "Russian (or the same Cyrillic-script language as the user)"
+    if any(chinese_range[0] <= cp <= chinese_range[1] for cp in codepoints):
+        return "Chinese"
+    if any(arabic_range[0] <= cp <= arabic_range[1] for cp in codepoints):
+        return "Arabic"
+
+    # Diacritics — strong signal.
+    if any(c in polish_chars for c in msg_stripped):
+        return "Polish"
+    if any(c in spanish_chars for c in msg_stripped):
+        return "Spanish"
+    if any(c in german_chars for c in msg_stripped):
+        return "German"
+    if any(c in french_chars for c in msg_stripped):
+        return "French"
+
+    # Stop-word allowlists for diacritic-free Latin-script messages.
+    tokens = {t.strip(".,!?:;()[]\"'").lower() for t in msg_stripped.split()}
+    tokens.discard("")
+    if tokens & _POLISH_STOP:
+        return "Polish"
+    if tokens & _GERMAN_STOP:
+        return "German"
+    if tokens & _SPANISH_STOP:
+        return "Spanish"
+    if tokens & _FRENCH_STOP:
+        return "French"
+
+    # Too short to fall back to English with confidence — let the caller
+    # inherit the sticky language from earlier turns.
+    if len(tokens) < 3:
+        return None
+
+    return "English"
+
+
+def _language_reminder(
+    user_message: str,
+    recent: "tuple[str, ...] | list[str]" = (),
+) -> str:
+    """Return a language instruction banner.
+
+    Placed at the END of the system prompt so small models (recency-biased)
+    see it immediately before they start generating.
+
+    Step 30a: short / ambiguous follow-ups inherit the sticky language
+    from the most recent user messages. This prevents PL → EN drift when
+    the user types "a teraz?" after a long Polish conversation.
+    """
+    if not user_message.strip():
         return "FINAL REMINDER: Reply in the same language as the user's message."
 
-    # Check for non-latin scripts first
-    codepoints = [ord(c) for c in msg]
-    if any(cyrillic_range[0] <= cp <= cyrillic_range[1] for cp in codepoints):
-        lang = "Russian (or the same Cyrillic-script language as the user)"
-    elif any(chinese_range[0] <= cp <= chinese_range[1] for cp in codepoints):
-        lang = "Chinese"
-    elif any(arabic_range[0] <= cp <= arabic_range[1] for cp in codepoints):
-        lang = "Arabic"
-    elif any(c in polish_chars for c in msg):
-        lang = "Polish"
-    elif any(c in german_chars for c in msg):
-        lang = "German"
-    elif any(c in french_chars for c in msg):
-        lang = "French"
-    else:
+    lang = _detect_language(user_message)
+    if lang is None:
+        # Fall back to the most recent confidently-detected language.
+        for prior in reversed(list(recent)[-3:]):
+            prior_lang = _detect_language(prior or "")
+            if prior_lang is not None:
+                lang = prior_lang
+                break
+    if lang is None:
         lang = "English"
 
     return (

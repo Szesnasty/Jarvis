@@ -15,6 +15,12 @@ from services.workspace_service import get_api_key
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_for_log(value: object) -> str:
+    """Return a log-safe single-line string representation."""
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
@@ -69,6 +75,83 @@ def _schedule_session_save(session_id: str) -> None:
     _pending_saves[session_id] = asyncio.ensure_future(_save_session_bg(session_id))
 
 
+# Step 30b — rolling summary folds. One in-flight per session.
+_pending_summaries: dict[str, asyncio.Task] = {}
+
+
+async def _fold_summary_bg(
+    session_id: str,
+    *,
+    provider: str,
+    model: str,
+    api_key: str,
+    base_url: Optional[str],
+) -> None:
+    """Background task: fold older messages into the rolling summary.
+
+    Runs after the assistant reply is already streamed so it never adds
+    latency to the visible response. Any failure (timeout, provider
+    error) is logged and the previous summary is kept.
+    """
+    try:
+        from services.conversation_summary import (
+            FOLD_BATCH,
+            RECENT_WINDOW,
+            fold_messages_into_summary,
+        )
+        batch = session_service.pending_summary_batch(
+            session_id, window=RECENT_WINDOW, batch=FOLD_BATCH,
+        )
+        if not batch:
+            return
+        existing = session_service.get_summary(session_id)
+        new_summary = await fold_messages_into_summary(
+            existing,
+            batch,
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            use_llm=(provider != "ollama" and bool(api_key)),
+        )
+        session_service.apply_summary_update(session_id, new_summary, advanced_by=len(batch))
+    except asyncio.CancelledError:
+        pass
+    except Exception:
+        logger.warning(
+            "Summary fold failed for session %s",
+            _sanitize_for_log(session_id),
+            exc_info=True,
+        )
+    finally:
+        _pending_summaries.pop(session_id, None)
+
+
+def _schedule_summary_fold(
+    session_id: str,
+    *,
+    provider: str,
+    model: str,
+    api_key: str,
+    base_url: Optional[str],
+) -> None:
+    """Schedule a background summary fold. Cancels any pending fold for
+    the same session so only the most recent batch runs.
+    """
+    old = _pending_summaries.pop(session_id, None)
+    if old and not old.done():
+        old.cancel()
+    _pending_summaries[session_id] = asyncio.ensure_future(
+        _fold_summary_bg(
+            session_id,
+            provider=provider,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+        )
+    )
+
+
 async def _emit_memory_changed(ws: WebSocket, tool_name: str, tool_input: dict) -> None:
     """Emit memory_changed event for tools that modify notes."""
     if tool_name in _MEMORY_MUTATING_TOOLS:
@@ -83,7 +166,14 @@ _TOOL_RESULT_SOFT_CAP = 8000  # chars (~2000 tokens)
 # When tool rounds cascade (model calls another tool after seeing a result),
 # old tool_results in prior rounds are compacted more aggressively — the model
 # already "read" them, so we only keep a short reminder of the payload.
-_STALE_TOOL_RESULT_CAP = 600  # chars (~150 tokens)
+# Step 30e: bumped 600 → 2000 (≈500 tokens). 600 chars was too aggressive —
+# read_note results are 2–5 KB; head+tail-to-600 lost middle sections,
+# which the model then hallucinated to fill the gap. Do not lower without
+# re-running the eval set.
+_STALE_TOOL_RESULT_CAP = 2000  # chars (~500 tokens)
+# Step 30e: keep the last N tool_results intact (not just the very last).
+# Multi-tool chains commonly reference results from 1–2 hops back.
+_STALE_TOOL_RESULT_KEEP_LAST = 2
 
 
 def _truncate_tool_result(text: str, cap: int) -> str:
@@ -125,11 +215,11 @@ def _compact_stale_tool_results(messages: list[dict]) -> list[dict]:
                 tool_result_indices.append(i)
                 break
 
-    if len(tool_result_indices) <= 1:
+    if len(tool_result_indices) <= _STALE_TOOL_RESULT_KEEP_LAST:
         return messages  # nothing stale to compact
 
-    # Keep last one intact; compact everything earlier
-    stale_indices = set(tool_result_indices[:-1])
+    # Keep the last N intact; compact everything earlier.
+    stale_indices = set(tool_result_indices[:-_STALE_TOOL_RESULT_KEEP_LAST])
     compacted: list[dict] = []
     for i, msg in enumerate(messages):
         if i not in stale_indices:
@@ -300,8 +390,25 @@ async def _handle_message(
         return
 
     session_service.add_message(session_id, "user", content)
-    messages = session_service.get_messages(session_id)
-    system_prompt, prompt_stats = await build_system_prompt_with_stats(content, graph_scope=graph_scope)
+    # Step 30b: only send the recent window to the LLM. Everything older
+    # lives in the rolling summary which is prepended to the system prompt.
+    from services.conversation_summary import RECENT_WINDOW
+    messages = session_service.get_recent_window(session_id, RECENT_WINDOW)
+    summary_text = session_service.get_summary(session_id)
+    # Step 30a: pass recent user messages to language detector so short
+    # follow-ups inherit the conversation's sticky language.
+    recent_user = [m["content"] for m in messages if m.get("role") == "user" and isinstance(m.get("content"), str)][-4:-1]
+    system_prompt, prompt_stats = await build_system_prompt_with_stats(
+        content, graph_scope=graph_scope, recent_user_messages=recent_user,
+    )
+    if summary_text:
+        # Prepend rolling summary so the model has continuity across the
+        # turns that fell out of the recent window.
+        system_prompt = (
+            "## Conversation so far (older turns, summarised)\n"
+            f"{summary_text}\n\n"
+            + system_prompt
+        )
     active_specs = specialist_service.get_active_specialists()
     tools = specialist_service.filter_tools(TOOLS, specialists=active_specs)
     # Check token budget before calling Claude
@@ -431,6 +538,16 @@ async def _handle_message(
     # First save happens after the first exchange; subsequent saves update the
     # same note (dedup by session_id in frontmatter).
     _schedule_session_save(session_id)
+
+    # Step 30b: roll the summary forward off the request path. Failures are
+    # swallowed inside fold_messages_into_summary.
+    _schedule_summary_fold(
+        session_id,
+        provider=provider or "anthropic",
+        model=model or "",
+        api_key=api_key or "",
+        base_url=base_url,
+    )
 
 
 def _parse_message(raw: str) -> tuple:
@@ -634,6 +751,11 @@ async def chat_ws(websocket: WebSocket) -> None:
         old_task = _pending_saves.pop(session_id, None)
         if old_task and not old_task.done():
             old_task.cancel()
+        # Cancel any pending summary fold — disconnect means user is gone,
+        # next reconnect will trigger a fresh fold if needed.
+        old_summary = _pending_summaries.pop(session_id, None)
+        if old_summary and not old_summary.done():
+            old_summary.cancel()
 
         session_service.save_session(session_id)
         try:
