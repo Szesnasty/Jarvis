@@ -913,9 +913,9 @@ async def _apply_extra_frontmatter(
     rel_path = result.get("path")
     if not rel_path or not isinstance(rel_path, str):
         return
-    # Reject unsafe/unexpected shapes before any filesystem access (CodeQL).
-    rel = Path(rel_path)
-    if rel.is_absolute() or ".." in rel.parts or rel.suffix.lower() != ".md":
+    # Explicit allowlist regex — recognised by CodeQL as a string-level
+    # sanitizer for path injection. Same shape as memory_service notes.
+    if not re.match(r"^(?!/)(?!.*\.\.)(?:[A-Za-z0-9._\-]+/)*[A-Za-z0-9._\-]+\.md$", rel_path):
         return
 
     from utils.markdown import parse_frontmatter, add_frontmatter
@@ -923,7 +923,7 @@ async def _apply_extra_frontmatter(
 
     mem = _memory_dir(workspace_path)
     mem_resolved = mem.resolve()
-    full = (mem_resolved / rel).resolve()
+    full = (mem_resolved / rel_path).resolve()
     try:
         full.relative_to(mem_resolved)
     except ValueError:
