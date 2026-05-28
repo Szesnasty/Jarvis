@@ -43,6 +43,17 @@ export function useApi() {
   const deleteNote = (path: string) =>
     _api<void>(`/api/memory/notes/${encodeURIComponent(path)}`, { method: 'DELETE' })
 
+  // Step 29 — set ``specialists`` and/or ``visibility`` frontmatter on a
+  // note. Pass ``[]`` to ``specialists`` to clear ownership.
+  const updateNoteOwnership = (
+    path: string,
+    body: { specialists?: string[]; visibility?: 'shared' | 'private' },
+  ) =>
+    _api<NoteMetadata>(
+      `/api/memory/notes/${encodeURIComponent(path)}/ownership`,
+      { method: 'PATCH', body },
+    )
+
   const fetchSessions = (limit = 20) =>
     _api<SessionMetadata[]>('/api/sessions', { params: { limit } })
 
@@ -186,5 +197,5 @@ export function useApi() {
       pending_note_paths: string[]     // relative paths in memory/ with suggested_related awaiting review
     }>('/api/connections/coverage')
 
-  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile, fetchJarvisConfig, updateJarvisConfig, fetchSemanticOrphans, rerunConnect, dismissSuggestion, promoteSuggestion, promoteBulk, fetchConnectionsCoverage }
+  return { fetchHealth, fetchWorkspaceStatus, initWorkspace, fetchNotes, semanticSearchNotes, fetchNote, deleteNote, updateNoteOwnership, fetchSessions, fetchSession, resumeSession, deleteSession, fetchPreferences, setPreference, fetchGraph, fetchGraphStats, fetchGraphNeighbors, rebuildGraph, fetchNodeDetail, fetchOrphans, createEdge, fetchSpecialists, fetchSpecialist, createSpecialist, updateSpecialist, deleteSpecialist, activateSpecialist, deactivateSpecialist, fetchActiveSpecialist, ingestUrl, fetchSpecialistFiles, uploadSpecialistFile, ingestSpecialistUrl, deleteSpecialistFile, fetchJarvisConfig, updateJarvisConfig, fetchSemanticOrphans, rerunConnect, dismissSuggestion, promoteSuggestion, promoteBulk, fetchConnectionsCoverage }
 }

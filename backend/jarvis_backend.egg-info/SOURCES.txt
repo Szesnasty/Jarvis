@@ -49,6 +49,7 @@ services/connection_service.py
 services/context_builder.py
 services/council.py
 services/dismissed_suggestions.py
+services/document_classifier.py
 services/duel_presets.py
 services/embedding_service.py
 services/enrichment_service.py
@@ -79,6 +80,7 @@ services/enrichment/subjects.py
 services/enrichment/worker.py
 services/graph_service/__init__.py
 services/graph_service/builder.py
+services/graph_service/concepts.py
 services/graph_service/cross_source.py
 services/graph_service/entity_edges.py
 services/graph_service/jira_projection.py
@@ -102,6 +104,8 @@ tests/test_chat_provider.py
 tests/test_chat_security.py
 tests/test_chat_ws.py
 tests/test_claude_service.py
+tests/test_client_estimator_bootstrap.py
+tests/test_concepts.py
 tests/test_config.py
 tests/test_connection_events.py
 tests/test_connection_service_backfill.py
@@ -110,14 +114,19 @@ tests/test_connection_service_pipeline.py
 tests/test_connection_service_scoring.py
 tests/test_connection_stats.py
 tests/test_context_builder_expansion_budget.py
+tests/test_context_builder_trace.py
 tests/test_cross_source.py
+tests/test_document_classifier.py
+tests/test_document_section_split.py
 tests/test_duel_backend.py
 tests/test_embedding_service.py
 tests/test_enrichment_pipeline.py
+tests/test_entity_caps_scaling.py
 tests/test_entity_extraction.py
 tests/test_entity_extraction_en.py
 tests/test_entity_extraction_pl.py
 tests/test_error_handling.py
+tests/test_executor_section_type_passthrough.py
 tests/test_full_regression.py
 tests/test_graph_api.py
 tests/test_graph_edge_quality.py
@@ -127,7 +136,9 @@ tests/test_graph_semantic.py
 tests/test_graph_service.py
 tests/test_health.py
 tests/test_hybrid_retrieval.py
+tests/test_ingest_section_graph.py
 tests/test_ingest_service.py
+tests/test_intent_parser_section_types.py
 tests/test_jarvis_self.py
 tests/test_jira_graph.py
 tests/test_jira_ingest.py
@@ -140,6 +151,8 @@ tests/test_mcp_server.py
 tests/test_memory_api.py
 tests/test_memory_reindex.py
 tests/test_memory_service.py
+tests/test_pdf_section_split.py
+tests/test_pipeline_section_type_boost.py
 tests/test_pl_slug_alias.py
 tests/test_planning_api.py
 tests/test_planning_service.py
@@ -157,6 +170,7 @@ tests/test_specialist_files_api.py
 tests/test_specialist_lifecycle.py
 tests/test_specialist_service.py
 tests/test_step25_pr5_provenance_dismissals.py
+tests/test_step28b_plan_b.py
 tests/test_structured_ingest.py
 tests/test_suggest_breakdown.py
 tests/test_token_savings.py

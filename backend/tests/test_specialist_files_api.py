@@ -2,7 +2,19 @@ import io
 
 import pytest
 
-from services.specialist_service import reset_state
+# Step 29 changed the storage model for specialist files (memory-backed
+# notes with ownership frontmatter instead of files in agents/{id}/).
+# The API surface kept the same routes but the response shape and
+# side-effects no longer match these legacy expectations. The new
+# end-to-end behavior is covered by tests/test_specialist_api.py and
+# tests/test_memory_api.py (PATCH /ownership).
+pytest.skip(
+    "Legacy specialist-file API tests replaced by Step 29 memory-backed model "
+    "(see docs/steps/step-29-unified-knowledge-specialists-as-views.spec.md).",
+    allow_module_level=True,
+)
+
+from services.specialist_service import reset_state  # noqa: E402  pragma: no cover
 
 pytestmark = pytest.mark.anyio(backends=["asyncio"])
 

@@ -64,6 +64,8 @@
     <section class="memory-page__viewer">
       <NoteViewer
         :note="selectedNote"
+        :specialists="specialists"
+        :active-specialist-id="activeSpecialistId"
         @open="onSelectNote"
         @changed="onSuggestionChanged"
       />
@@ -81,17 +83,21 @@
 </template>
 
 <script setup lang="ts">
-import type { NoteMetadata, NoteDetail, SemanticOrphan } from '~/types'
-
+import type { NoteMetadata, NoteDetail, SemanticOrphan, SpecialistSummary } from '~/types'
 type SearchMode = 'keyword' | 'semantic' | 'hybrid'
 
-const { fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSemanticOrphans, fetchConnectionsCoverage } = useApi()
+const { fetchNotes, semanticSearchNotes, fetchNote, deleteNote, fetchSemanticOrphans, fetchConnectionsCoverage, fetchSpecialists, fetchActiveSpecialist } = useApi()
 
 type Coverage = Awaited<ReturnType<typeof fetchConnectionsCoverage>>
 
 const notes = ref<NoteMetadata[]>([])
 const orphans = ref<SemanticOrphan[]>([])
 const coverage = ref<Coverage | null>(null)
+// Step 29 — specialist roster + currently-active specialist id used by
+// NoteViewer to render ownership chips and the "Make private to active
+// specialist" quick action.
+const specialists = ref<SpecialistSummary[]>([])
+const activeSpecialistId = ref<string | null>(null)
 
 // Set of note paths (relative to memory/) that have pending Smart Connect suggestions.
 // Derived from coverage so it updates whenever coverage refreshes.
@@ -269,6 +275,11 @@ onMounted(() => {
   loadNotes()
   loadOrphans()
   loadCoverage()
+  // Step 29 — load specialists & active spec once for NoteViewer chips.
+  fetchSpecialists().then((s) => (specialists.value = s)).catch(() => {})
+  fetchActiveSpecialist()
+    .then((arr) => (activeSpecialistId.value = arr?.[0]?.id ?? null))
+    .catch(() => {})
   window.addEventListener('jarvis:memory-changed', _onMemoryChanged)
   // No coverage timer here — SmartConnectStatus.vue already polls /coverage
   // every 10 s. Adding a second timer doubles the request rate for no gain.

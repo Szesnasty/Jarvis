@@ -46,6 +46,15 @@ class NoteMetadataResponse(BaseModel):
     parent: Optional[str] = None
     section_index: Optional[int] = None
     section_type: Optional[str] = None
+    # Step 29 — ownership metadata from frontmatter
+    specialists: list[str] = []
+    visibility: str = "shared"
+
+
+class NoteOwnershipRequest(BaseModel):
+    """Step 29 — payload for PATCH /api/memory/notes/{path}/ownership."""
+    specialists: Optional[list[str]] = None
+    visibility: Optional[str] = None
 
 
 class NoteDetailResponse(BaseModel):

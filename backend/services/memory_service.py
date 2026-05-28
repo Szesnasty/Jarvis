@@ -224,6 +224,12 @@ async def list_notes(
                 "parent": fm.get("parent"),
                 "section_index": section_index,
                 "section_type": fm.get("section_type"),
+                # Step 29 — ownership lives in frontmatter; surface it so
+                # the UI can render badges and filter by specialist.
+                "specialists": (
+                    fm.get("specialists") if isinstance(fm.get("specialists"), list) else []
+                ),
+                "visibility": fm.get("visibility") or "shared",
             }
             # Include BM25 score for downstream retrieval scoring
             if search:
@@ -257,6 +263,51 @@ async def append_note(
     await _index_note(note_path, full_content, fm, new_body, db_p)
 
     return _note_metadata(note_path, fm, new_body)
+
+
+async def update_note_ownership(
+    note_path: str,
+    specialists: Optional[List[str]] = None,
+    visibility: Optional[str] = None,
+    workspace_path: Optional[Path] = None,
+) -> Dict:
+    """Step 29 — set the `specialists` / `visibility` frontmatter fields.
+
+    Either or both may be provided. Passing ``[]`` for ``specialists``
+    clears ownership; passing ``None`` leaves it unchanged. ``visibility``
+    must be ``"shared"`` or ``"private"`` when provided.
+    """
+    if visibility is not None and visibility not in ("shared", "private"):
+        raise ValueError("visibility must be 'shared' or 'private'")
+
+    mem = _memory_path(workspace_path)
+    _validate_path(note_path, mem)
+    db_p = _db_path(workspace_path)
+    file_path = mem / note_path
+
+    if not file_path.exists():
+        raise NoteNotFoundError(f"Note not found: {note_path}")
+
+    content = file_path.read_text(encoding="utf-8")
+    fm, body = parse_frontmatter(content)
+
+    if specialists is not None:
+        # Dedupe + preserve order
+        seen: set[str] = set()
+        clean: list[str] = []
+        for s in specialists:
+            if isinstance(s, str) and s and s not in seen:
+                clean.append(s)
+                seen.add(s)
+        fm["specialists"] = clean
+    if visibility is not None:
+        fm["visibility"] = visibility
+
+    fm["updated_at"] = datetime.now(timezone.utc).isoformat()
+    full_content = add_frontmatter(body, fm)
+    file_path.write_text(full_content, encoding="utf-8")
+    await _index_note(note_path, full_content, fm, body, db_p)
+    return _note_metadata(note_path, fm, body)
 
 
 async def delete_note(
@@ -469,4 +520,10 @@ def _note_metadata(note_path: str, fm: Dict, body: str) -> Dict:
         "tags": fm.get("tags", []),
         "updated_at": fm.get("updated_at", ""),
         "word_count": len(body.split()),
+        # Step 29 — ownership metadata surfaced everywhere _note_metadata
+        # is returned (create, append, update_ownership).
+        "specialists": (
+            fm.get("specialists") if isinstance(fm.get("specialists"), list) else []
+        ),
+        "visibility": fm.get("visibility") or "shared",
     }

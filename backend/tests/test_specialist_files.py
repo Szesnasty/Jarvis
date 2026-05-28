@@ -3,7 +3,19 @@ from pathlib import Path
 
 import pytest
 
-from services.specialist_service import (
+# Step 29 superseded the disk-backed ``agents/{id}/*`` file model with
+# memory-backed notes carrying ownership frontmatter. The full suite of
+# specialist-file scenarios is now exercised via memory_service /
+# context_builder tests and the specialists API tests. We keep this
+# module loadable (with a single skip) so historical test runs that
+# enumerate it still complete cleanly.
+pytest.skip(
+    "Legacy disk-backed specialist files replaced by Step 29 memory-backed model "
+    "(see docs/steps/step-29-unified-knowledge-specialists-as-views.spec.md).",
+    allow_module_level=True,
+)
+
+from services.specialist_service import (  # noqa: E402  pragma: no cover
     SpecialistNotFoundError,
     copy_file_to_specialist,
     count_specialist_files,

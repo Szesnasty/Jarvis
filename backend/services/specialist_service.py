@@ -61,10 +61,26 @@ def create_specialist(data: Dict, workspace_path: Optional[Path] = None) -> Dict
     if filepath.exists():
         raise ValueError(f"A specialist with id '{spec_id}' already exists")
 
+    # Step 29: knowledge ownership is expressed via per-note frontmatter
+    # (`specialists`, `visibility`). The specialist JSON only carries a
+    # selector (`scope`) plus its behavior profile. The legacy `sources`
+    # field is still accepted on input for back-compat and is folded into
+    # `scope.folders` on the fly.
+    scope = dict(data.get("scope") or {})
+    legacy_sources = data.get("sources")
+    if legacy_sources and not scope.get("folders"):
+        scope["folders"] = list(legacy_sources)
+    scope.setdefault("folders", [])
+    scope.setdefault("tags", [])
+    scope.setdefault("include_owned", True)
+
     specialist = {
         "id": spec_id,
         "name": name,
-        "role": data.get("role", ""),        "system_prompt": data.get("system_prompt", ""),        "sources": data.get("sources", []),
+        "role": data.get("role", ""),
+        "system_prompt": data.get("system_prompt", ""),
+        "sources": list(scope.get("folders") or []),  # legacy mirror
+        "scope": scope,
         "style": data.get("style", {}),
         "rules": data.get("rules", []),
         "tools": data.get("tools", []),
@@ -79,12 +95,36 @@ def create_specialist(data: Dict, workspace_path: Optional[Path] = None) -> Dict
     return specialist
 
 
+def _normalize_scope(data: Dict) -> Dict:
+    """Back-compat shim: ensure ``data['scope']`` exists and absorbs the
+    legacy ``sources`` field (Step 29).
+
+    Old specialist JSONs only had ``sources: List[str]``. New code reads
+    ``scope.folders`` / ``scope.tags`` / ``scope.include_owned``. This
+    function rewrites the dict in place so the rest of the codebase only
+    needs to look at ``scope``.
+    """
+    scope = dict(data.get("scope") or {})
+    if not scope.get("folders"):
+        legacy = data.get("sources") or []
+        if legacy:
+            scope["folders"] = list(legacy)
+    scope.setdefault("folders", [])
+    scope.setdefault("tags", [])
+    scope.setdefault("include_owned", True)
+    data["scope"] = scope
+    # Keep ``sources`` as a mirror so older readers (and the UI source_count)
+    # still work without a forced migration.
+    data["sources"] = list(scope.get("folders") or [])
+    return data
+
+
 def get_specialist(spec_id: str, workspace_path: Optional[Path] = None) -> Dict:
     _validate_spec_id(spec_id)
     filepath = _agents_dir(workspace_path) / f"{spec_id}.json"
     if not filepath.exists():
         raise SpecialistNotFoundError(f"Specialist not found: {spec_id}")
-    return json.loads(filepath.read_text(encoding="utf-8"))
+    return _normalize_scope(json.loads(filepath.read_text(encoding="utf-8")))
 
 
 def list_specialists(workspace_path: Optional[Path] = None) -> List[Dict]:
@@ -95,12 +135,16 @@ def list_specialists(workspace_path: Optional[Path] = None) -> List[Dict]:
             data = json.loads(f.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
+        _normalize_scope(data)
         result.append({
             "id": data["id"],
             "name": data["name"],
             "icon": data.get("icon", "🤖"),
-            "source_count": len(data.get("sources", [])),
+            "source_count": len(data["scope"].get("folders") or []),
             "rule_count": len(data.get("rules", [])),
+            # Step 29: file_count now reflects memory notes that carry this
+            # specialist in their frontmatter (owned knowledge), not files
+            # in a private agents/<id>/ directory.
             "file_count": count_specialist_files(data["id"], workspace_path),
             "default_model": data.get("default_model"),
             "builtin": bool(data.get("builtin", False)),
@@ -115,9 +159,10 @@ def update_specialist(spec_id: str, data: Dict, workspace_path: Optional[Path] =
             "Use PUT /api/specialists/jarvis/config instead.",
         )
     existing = get_specialist(spec_id, workspace_path)
-    for key in ("name", "role", "system_prompt", "behavior_extension", "sources", "style", "rules", "tools", "examples", "icon", "default_model"):
+    for key in ("name", "role", "system_prompt", "behavior_extension", "sources", "scope", "style", "rules", "tools", "examples", "icon", "default_model"):
         if key in data:
             existing[key] = data[key]
+    _normalize_scope(existing)
     existing["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     filepath = _agents_dir(workspace_path) / f"{spec_id}.json"
@@ -387,96 +432,169 @@ def _validate_filename(filename: str) -> None:
 
 
 def list_specialist_files(spec_id: str, workspace_path: Optional[Path] = None) -> List[Dict]:
-    """List all knowledge files for a specialist."""
-    # Verify specialist exists
+    """List all notes owned by a specialist (Step 29).
+
+    Ownership lives in note frontmatter: ``specialists: [<id>]``. The
+    response keeps the shape of the legacy ``agents/{id}/*`` listing
+    (filename / title / size / created_at) so existing UI keeps working,
+    plus the canonical memory ``path`` and the note's ``visibility``.
+    """
     get_specialist(spec_id, workspace_path)
-    files_dir = _agents_dir(workspace_path) / spec_id
-    if not files_dir.exists():
-        return []
-    result = []
-    for f in sorted(files_dir.iterdir()):
-        if f.is_file() and f.suffix.lower() in _ALLOWED_EXTENSIONS:
-            stat = f.stat()
-            result.append({
-                "filename": f.name,
-                "path": f.name,
-                "title": f.stem.replace("-", " ").replace("_", " "),
-                "size": stat.st_size,
-                "created_at": datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(),
-            })
+    notes = _list_specialist_owned_notes(spec_id, workspace_path)
+    result: List[Dict] = []
+    for n in notes:
+        path = n["path"]
+        leaf = path.rsplit("/", 1)[-1]
+        result.append({
+            "filename": leaf,
+            "path": path,
+            "title": n.get("title") or leaf,
+            "size": n.get("size", 0),
+            "created_at": n.get("updated_at", ""),
+            "visibility": n.get("visibility", "private"),
+        })
     return result
 
 
 def save_specialist_file(spec_id: str, filename: str, content: bytes, workspace_path: Optional[Path] = None) -> Dict:
-    """Save an uploaded file to a specialist's knowledge directory."""
+    """Persist an uploaded file as a first-class memory note (Step 29).
+
+    Sync wrapper. Routes (async) should call
+    :func:`save_specialist_file_async` directly.
+    """
+    import asyncio
+    return asyncio.run(save_specialist_file_async(spec_id, filename, content, workspace_path))
+
+
+async def save_specialist_file_async(
+    spec_id: str,
+    filename: str,
+    content: bytes,
+    workspace_path: Optional[Path] = None,
+) -> Dict:
+    """Save an uploaded file as a first-class memory note (Step 29).
+
+    Routes the bytes through the standard fast_ingest pipeline so the
+    file is chunked / embedded / graph-linked exactly like any other
+    memory import, and tags it with the owning specialist via injected
+    frontmatter (``specialists: [spec_id], visibility: private``).
+    """
     get_specialist(spec_id, workspace_path)
-    # Sanitize first so users can upload files with Polish/Unicode/parens etc.
-    # without hitting a 422; the stored name is always safe.
     filename = _sanitize_filename(filename)
-    files_dir = _files_dir(spec_id, workspace_path)
-    target = files_dir / filename
 
-    # Avoid overwriting — append number if exists
-    if target.exists():
-        stem = target.stem
-        suffix = target.suffix
-        i = 1
-        while target.exists():
-            target = files_dir / f"{stem}-{i}{suffix}"
-            i += 1
+    import asyncio
+    import os as _os
+    import tempfile
+    from services.ingest import fast_ingest, IngestError
 
-    target.write_bytes(content)
-    stat = target.stat()
+    suffix = Path(filename).suffix
+    fd, tmp_name = tempfile.mkstemp(suffix=suffix)
+    tmp_path = Path(tmp_name)
+    try:
+        await asyncio.to_thread(tmp_path.write_bytes, content)
+        try:
+            result = await fast_ingest(
+                tmp_path,
+                target_folder=f"knowledge/{spec_id}",
+                workspace_path=workspace_path,
+                original_name=filename,
+                extra_frontmatter={"specialists": [spec_id], "visibility": "private"},
+            )
+        except IngestError as exc:
+            raise ValueError(str(exc)) from exc
+    finally:
+        try:
+            _os.close(fd)
+        except OSError:
+            pass
+        tmp_path.unlink(missing_ok=True)
+
     return {
-        "filename": target.name,
-        "path": target.name,
-        "title": target.stem.replace("-", " ").replace("_", " "),
-        "size": stat.st_size,
-        "created_at": datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(),
+        "filename": filename,
+        "path": result["path"],
+        "title": result.get("title", filename),
+        "size": result.get("size", len(content)),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "visibility": "private",
     }
 
 
 def delete_specialist_file(spec_id: str, filename: str, workspace_path: Optional[Path] = None) -> None:
-    """Delete a file from a specialist's knowledge directory."""
+    """Delete a specialist-owned note (Step 29). Sync wrapper."""
+    import asyncio
+    asyncio.run(delete_specialist_file_async(spec_id, filename, workspace_path))
+
+
+async def delete_specialist_file_async(
+    spec_id: str, filename: str, workspace_path: Optional[Path] = None,
+) -> None:
     get_specialist(spec_id, workspace_path)
-    _validate_filename(filename)
-    files_dir = _agents_dir(workspace_path) / spec_id
-    target = files_dir / filename
-    if not target.exists() or not target.is_file():
+    from services.memory_service import delete_note, NoteNotFoundError
+
+    target_path: Optional[str] = None
+    for n in _list_specialist_owned_notes(spec_id, workspace_path):
+        if n["path"] == filename or n["path"].rsplit("/", 1)[-1] == filename:
+            target_path = n["path"]
+            break
+    if not target_path:
         raise FileNotFoundError(f"File not found: {filename}")
-    target.unlink()
+    try:
+        await delete_note(target_path, workspace_path=workspace_path)
+    except NoteNotFoundError as exc:
+        raise FileNotFoundError(str(exc)) from exc
 
 
 def copy_file_to_specialist(spec_id: str, source_path: Path, title: str = "", workspace_path: Optional[Path] = None) -> Dict:
-    """Copy an existing file into a specialist's knowledge directory."""
-    get_specialist(spec_id, workspace_path)
-    files_dir = _files_dir(spec_id, workspace_path)
-    dest = files_dir / source_path.name
-    # Avoid overwriting
-    if dest.exists():
-        stem = dest.stem
-        suffix = dest.suffix
-        i = 1
-        while dest.exists():
-            dest = files_dir / f"{stem}-{i}{suffix}"
-            i += 1
-    shutil.copy2(str(source_path), str(dest))
-    stat = dest.stat()
-    return {
-        "filename": dest.name,
-        "path": dest.name,
-        "title": title or dest.stem.replace("-", " ").replace("_", " "),
-        "size": stat.st_size,
-        "created_at": datetime.fromtimestamp(stat.st_ctime, tz=timezone.utc).isoformat(),
-    }
+    """Compatibility shim used by the specialist URL-ingest endpoint."""
+    content = source_path.read_bytes()
+    return save_specialist_file(spec_id, source_path.name, content, workspace_path)
+
+
+def _list_specialist_owned_notes(spec_id: str, workspace_path: Optional[Path] = None) -> List[Dict]:
+    """Return memory notes whose frontmatter `specialists` contains ``spec_id``.
+
+    Direct SQLite read so the sync helpers stay sync. The truth source is
+    still the markdown frontmatter; SQLite is the index (CLAUDE.md §1a).
+    """
+    import sqlite3
+    from services.memory_service import _db_path
+
+    db_p = _db_path(workspace_path)
+    if not db_p.exists():
+        return []
+    rows: List[Dict] = []
+    try:
+        with sqlite3.connect(str(db_p)) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(
+                "SELECT path, title, frontmatter, updated_at, word_count FROM notes"
+            )
+            for r in cursor.fetchall():
+                try:
+                    fm = json.loads(r["frontmatter"] or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    fm = {}
+                owners = fm.get("specialists") or []
+                if isinstance(owners, list) and spec_id in owners:
+                    rows.append({
+                        "path": r["path"],
+                        "title": r["title"] or fm.get("title") or r["path"],
+                        "updated_at": r["updated_at"],
+                        "size": r["word_count"] or 0,
+                        "visibility": fm.get("visibility", "private"),
+                    })
+    except sqlite3.Error:
+        return []
+    rows.sort(key=lambda x: x["path"])
+    return rows
 
 
 def count_specialist_files(spec_id: str, workspace_path: Optional[Path] = None) -> int:
-    """Count knowledge files for a specialist."""
-    files_dir = _agents_dir(workspace_path) / spec_id
-    if not files_dir.exists():
+    """Count notes owned by a specialist (Step 29)."""
+    try:
+        return len(_list_specialist_owned_notes(spec_id, workspace_path))
+    except Exception:
         return 0
-    return sum(1 for f in files_dir.iterdir() if f.is_file() and f.suffix.lower() in _ALLOWED_EXTENSIONS)
 
 
 def reset_state() -> None:

@@ -672,8 +672,33 @@ async def fast_ingest(
     workspace_path: Optional[Path] = None,
     original_name: Optional[str] = None,
     job_id: Optional[str] = None,
+    extra_frontmatter: Optional[Dict] = None,
 ) -> Dict:
-    """Import a file into memory without AI."""
+    """Import a file into memory without AI.
+
+    ``extra_frontmatter`` (Step 29) is merged into every frontmatter the
+    pipeline emits — the single note, the index of a split document, and
+    every section. Used by specialist uploads to inject ownership fields
+    (``specialists``, ``visibility``) without forking the pipeline.
+    """
+    result = await _fast_ingest_impl(
+        file_path,
+        target_folder=target_folder,
+        workspace_path=workspace_path,
+        original_name=original_name,
+        job_id=job_id,
+    )
+    await _apply_extra_frontmatter(result, extra_frontmatter, workspace_path)
+    return result
+
+
+async def _fast_ingest_impl(
+    file_path: Path,
+    target_folder: str = "knowledge",
+    workspace_path: Optional[Path] = None,
+    original_name: Optional[str] = None,
+    job_id: Optional[str] = None,
+) -> Dict:
     from services import ingest_jobs
 
     def _stage(name: str) -> None:
@@ -868,6 +893,114 @@ async def fast_ingest(
         "size": target_size,
         "connections": connections_payload,
     }
+
+
+async def _apply_extra_frontmatter(
+    result: Dict,
+    extras: Optional[Dict],
+    workspace_path: Optional[Path],
+) -> None:
+    """Step 29 — merge ``extras`` into the frontmatter of every file produced
+    by :func:`fast_ingest`.
+
+    For split documents we walk all sibling ``*.md`` files in the index's
+    directory so each section also carries the ownership fields. SQLite is
+    refreshed via :func:`memory_service.index_note_file` so retrieval sees
+    the new frontmatter immediately.
+    """
+    if not extras:
+        return
+    rel_path = result.get("path")
+    if not rel_path:
+        return
+    from utils.markdown import parse_frontmatter, add_frontmatter
+    from services.memory_service import index_note_file
+
+    mem = _memory_dir(workspace_path)
+    full = (mem / rel_path).resolve()
+    try:
+        full.relative_to(mem.resolve())
+    except ValueError:
+        return  # defensive: refuse to touch anything outside memory/
+
+    targets: List[Path]
+    if full.name == "index.md" and full.parent != mem:
+        targets = sorted(p for p in full.parent.glob("*.md") if p.is_file())
+    else:
+        targets = [full]
+
+    for fp in targets:
+        if not fp.exists():
+            continue
+        try:
+            content = await asyncio.to_thread(fp.read_text, encoding="utf-8")
+        except OSError:
+            continue
+        fm, body = parse_frontmatter(content)
+        for k, v in extras.items():
+            fm[k] = v
+        new_content = add_frontmatter(body, fm)
+        await asyncio.to_thread(fp.write_text, new_content, encoding="utf-8")
+        try:
+            await index_note_file(
+                fp.relative_to(mem).as_posix(), workspace_path=workspace_path,
+            )
+        except Exception as exc:
+            logger.warning("reindex after extra_frontmatter failed for %s: %s", fp, exc)
+
+
+async def _apply_extra_frontmatter(
+    result: Dict,
+    extras: Optional[Dict],
+    workspace_path: Optional[Path],
+) -> None:
+    """Step 29 — merge ``extras`` into the frontmatter of every file produced
+    by :func:`fast_ingest`.
+
+    For split documents we walk all sibling ``*.md`` files in the index's
+    directory so each section also carries the ownership fields. SQLite is
+    refreshed via :func:`memory_service.index_note_file` so retrieval sees
+    the new frontmatter immediately.
+    """
+    if not extras:
+        return
+    rel_path = result.get("path")
+    if not rel_path:
+        return
+    from utils.markdown import parse_frontmatter, add_frontmatter
+    from services.memory_service import index_note_file
+
+    mem = _memory_dir(workspace_path)
+    full = (mem / rel_path).resolve()
+    try:
+        full.relative_to(mem.resolve())
+    except ValueError:
+        return  # defensive: refuse to touch anything outside memory/
+
+    targets: List[Path]
+    if full.name == "index.md" and full.parent != mem:
+        targets = sorted(p for p in full.parent.glob("*.md") if p.is_file())
+    else:
+        targets = [full]
+
+    for fp in targets:
+        if not fp.exists():
+            continue
+        try:
+            content = await asyncio.to_thread(fp.read_text, encoding="utf-8")
+        except OSError:
+            continue
+        fm, body = parse_frontmatter(content)
+        for k, v in extras.items():
+            fm[k] = v
+        new_content = add_frontmatter(body, fm)
+        await asyncio.to_thread(fp.write_text, new_content, encoding="utf-8")
+        try:
+            await index_note_file(
+                fp.relative_to(mem).as_posix(), workspace_path=workspace_path,
+            )
+        except Exception as exc:
+            logger.warning("reindex after extra_frontmatter failed for %s: %s", fp, exc)
 
 
 async def smart_enrich(

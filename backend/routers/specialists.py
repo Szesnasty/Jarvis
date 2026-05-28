@@ -164,17 +164,22 @@ async def upload_file(spec_id: str, file: UploadFile = File(...)):
                 )
             buffers.append(chunk)
         content = b"".join(buffers)
-        return specialist_service.save_specialist_file(spec_id, file.filename, content)
+        # Step 29 — async path so we don't try to nest event loops.
+        return await specialist_service.save_specialist_file_async(
+            spec_id, file.filename, content,
+        )
     except specialist_service.SpecialistNotFoundError:
         raise HTTPException(status_code=404, detail="Specialist not found")
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
 
-@router.delete("/{spec_id}/files/{filename}")
+@router.delete("/{spec_id}/files/{filename:path}")
 async def delete_file(spec_id: str, filename: str):
     try:
-        specialist_service.delete_specialist_file(spec_id, filename)
+        # Step 29 — async path; ``filename`` can be a bare leaf (legacy UI)
+        # or a full memory path (new code paths).
+        await specialist_service.delete_specialist_file_async(spec_id, filename)
         return {"status": "deleted"}
     except specialist_service.SpecialistNotFoundError:
         raise HTTPException(status_code=404, detail="Specialist not found")
@@ -200,16 +205,24 @@ async def ingest_specialist_url(spec_id: str, data: dict):
     from config import get_settings
 
     try:
-        result = await _ingest_url(url, folder="knowledge", summarize=data.get("summarize", False))
-
-        # Copy the ingested file into the specialist's knowledge dir
-        workspace = get_settings().workspace_path
-        source_path = workspace / "memory" / result["path"]
-        if not source_path.exists():
-            raise HTTPException(status_code=500, detail="Ingested file not found")
-
-        return specialist_service.copy_file_to_specialist(
-            spec_id, source_path, title=result.get("title", ""),
+        # Step 29: URL ingest now writes straight into memory/ and tags the
+        # resulting note with this specialist's ownership. We pass the URL
+        # through the regular ingest pipeline, then patch frontmatter via
+        # update_note_ownership instead of duplicating the file.
+        result = await _ingest_url(url, folder=f"knowledge/{spec_id}", summarize=data.get("summarize", False))
+        from services.memory_service import update_note_ownership
+        await update_note_ownership(
+            result["path"],
+            specialists=[spec_id],
+            visibility="private",
         )
+        return {
+            "filename": result["path"].rsplit("/", 1)[-1],
+            "path": result["path"],
+            "title": result.get("title", ""),
+            "size": result.get("size", 0),
+            "created_at": "",
+            "visibility": "private",
+        }
     except IngestError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
