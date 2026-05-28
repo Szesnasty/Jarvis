@@ -15,6 +15,12 @@ from services.workspace_service import get_api_key
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_for_log(value: object) -> str:
+    """Return a log-safe single-line string representation."""
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
@@ -112,7 +118,11 @@ async def _fold_summary_bg(
     except asyncio.CancelledError:
         pass
     except Exception:
-        logger.warning("Summary fold failed for session %s", session_id, exc_info=True)
+        logger.warning(
+            "Summary fold failed for session %s",
+            _sanitize_for_log(session_id),
+            exc_info=True,
+        )
     finally:
         _pending_summaries.pop(session_id, None)
 

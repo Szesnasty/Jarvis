@@ -47,6 +47,7 @@ services/claude.py
 services/connection_events.py
 services/connection_service.py
 services/context_builder.py
+services/conversation_summary.py
 services/council.py
 services/dismissed_suggestions.py
 services/document_classifier.py
@@ -115,6 +116,7 @@ tests/test_connection_service_scoring.py
 tests/test_connection_stats.py
 tests/test_context_builder_expansion_budget.py
 tests/test_context_builder_trace.py
+tests/test_conversation_summary.py
 tests/test_cross_source.py
 tests/test_document_classifier.py
 tests/test_document_section_split.py
@@ -144,6 +146,7 @@ tests/test_jira_graph.py
 tests/test_jira_ingest.py
 tests/test_jira_retrieval.py
 tests/test_jira_strategist.py
+tests/test_language_detection.py
 tests/test_llm_service.py
 tests/test_local_models.py
 tests/test_local_models_integration.py
