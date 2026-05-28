@@ -283,7 +283,12 @@ async def update_note_ownership(
     mem = _memory_path(workspace_path)
     _validate_path(note_path, mem)
     db_p = _db_path(workspace_path)
-    file_path = mem / note_path
+    mem_root = mem.resolve()
+    file_path = (mem_root / note_path).resolve()
+    try:
+        file_path.relative_to(mem_root)
+    except ValueError as e:
+        raise ValueError("Invalid note path") from e
 
     if not file_path.exists():
         raise NoteNotFoundError(f"Note not found: {note_path}")
@@ -317,7 +322,12 @@ async def delete_note(
     mem = _memory_path(workspace_path)
     _validate_path(note_path, mem)
     db_p = _db_path(workspace_path)
-    file_path = mem / note_path
+    mem_root = mem.resolve()
+    file_path = (mem_root / note_path).resolve()
+    try:
+        file_path.relative_to(mem_root)
+    except ValueError as e:
+        raise ValueError("Invalid note path") from e
 
     file_exists = file_path.exists()
 
@@ -334,7 +344,12 @@ async def delete_note(
     # Move file to trash if it exists on disk
     if file_exists:
         trash = _trash_path(workspace_path)
-        dest = trash / note_path
+        trash_root = trash.resolve()
+        dest = (trash_root / note_path).resolve()
+        try:
+            dest.relative_to(trash_root)
+        except ValueError as e:
+            raise ValueError("Invalid note path") from e
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(file_path), str(dest))
 
