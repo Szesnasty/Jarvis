@@ -911,20 +911,30 @@ async def _apply_extra_frontmatter(
     if not extras:
         return
     rel_path = result.get("path")
-    if not rel_path:
+    if not rel_path or not isinstance(rel_path, str):
         return
+    # Reject unsafe/unexpected shapes before any filesystem access (CodeQL).
+    rel = Path(rel_path)
+    if rel.is_absolute() or ".." in rel.parts or rel.suffix.lower() != ".md":
+        return
+
     from utils.markdown import parse_frontmatter, add_frontmatter
     from services.memory_service import index_note_file
 
     mem = _memory_dir(workspace_path)
-    full = (mem / rel_path).resolve()
+    mem_resolved = mem.resolve()
+    full = (mem_resolved / rel).resolve()
     try:
-        full.relative_to(mem.resolve())
+        full.relative_to(mem_resolved)
     except ValueError:
         return  # defensive: refuse to touch anything outside memory/
 
     targets: List[Path]
-    if full.name == "index.md" and full.parent != mem:
+    if full.name == "index.md" and full.parent != mem_resolved:
+        try:
+            full.parent.relative_to(mem_resolved)
+        except ValueError:
+            return
         targets = sorted(p for p in full.parent.glob("*.md") if p.is_file())
     else:
         targets = [full]
@@ -943,64 +953,15 @@ async def _apply_extra_frontmatter(
         await asyncio.to_thread(fp.write_text, new_content, encoding="utf-8")
         try:
             await index_note_file(
-                fp.relative_to(mem).as_posix(), workspace_path=workspace_path,
+                fp.relative_to(mem_resolved).as_posix(), workspace_path=workspace_path,
             )
         except Exception as exc:
-            logger.warning("reindex after extra_frontmatter failed for %s: %s", fp, exc)
-
-
-async def _apply_extra_frontmatter(
-    result: Dict,
-    extras: Optional[Dict],
-    workspace_path: Optional[Path],
-) -> None:
-    """Step 29 — merge ``extras`` into the frontmatter of every file produced
-    by :func:`fast_ingest`.
-
-    For split documents we walk all sibling ``*.md`` files in the index's
-    directory so each section also carries the ownership fields. SQLite is
-    refreshed via :func:`memory_service.index_note_file` so retrieval sees
-    the new frontmatter immediately.
-    """
-    if not extras:
-        return
-    rel_path = result.get("path")
-    if not rel_path:
-        return
-    from utils.markdown import parse_frontmatter, add_frontmatter
-    from services.memory_service import index_note_file
-
-    mem = _memory_dir(workspace_path)
-    full = (mem / rel_path).resolve()
-    try:
-        full.relative_to(mem.resolve())
-    except ValueError:
-        return  # defensive: refuse to touch anything outside memory/
-
-    targets: List[Path]
-    if full.name == "index.md" and full.parent != mem:
-        targets = sorted(p for p in full.parent.glob("*.md") if p.is_file())
-    else:
-        targets = [full]
-
-    for fp in targets:
-        if not fp.exists():
-            continue
-        try:
-            content = await asyncio.to_thread(fp.read_text, encoding="utf-8")
-        except OSError:
-            continue
-        fm, body = parse_frontmatter(content)
-        for k, v in extras.items():
-            fm[k] = v
-        new_content = add_frontmatter(body, fm)
-        await asyncio.to_thread(fp.write_text, new_content, encoding="utf-8")
-        try:
-            await index_note_file(
-                fp.relative_to(mem).as_posix(), workspace_path=workspace_path,
+            # Sanitize user-derived values before logging (CodeQL log-injection).
+            safe_fp = str(fp).replace("\r", "\\r").replace("\n", "\\n")
+            safe_exc = str(exc).replace("\r", "\\r").replace("\n", "\\n")
+            logger.warning(
+                "reindex after extra_frontmatter failed for %s: %s", safe_fp, safe_exc,
             )
-        except Exception as exc:
-            logger.warning("reindex after extra_frontmatter failed for %s: %s", fp, exc)
 
 
 async def smart_enrich(
