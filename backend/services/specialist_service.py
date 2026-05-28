@@ -305,7 +305,15 @@ def build_multi_specialist_prompt(specialists: List[Dict], base_prompt: str) -> 
 
         examples = specialist.get("examples", [])
         for ex in examples[:2]:
-            sections.append(f"\nExample ({specialist['name']}):\nUser: {ex['user']}\nAssistant: {ex['assistant']}")
+            # Step 30f: examples are style hints, not language anchors.
+            # Without this marker, English-language examples in a specialist
+            # bias the model toward English replies even when the user writes
+            # in Polish (or any other language).
+            sections.append(
+                f"\n## Example output for {specialist['name']} "
+                f"(STYLE REFERENCE ONLY — adapt language and content to the current user message)\n"
+                f"User: {ex['user']}\nAssistant: {ex['assistant']}"
+            )
 
     return "\n".join(sections)
 

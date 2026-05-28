@@ -11,7 +11,10 @@ from config import get_settings
 logger = logging.getLogger(__name__)
 
 
-MAX_HISTORY_MESSAGES = 20
+MAX_HISTORY_MESSAGES = 200  # Step 30b: was 20. Hard cap was the
+# single biggest cause of "Jarvis forgot what we discussed" complaints.
+# Older turns now survive in-memory and on disk; what reaches the LLM
+# is governed by RECENT_WINDOW + rolling summary (see conversation_summary).
 MAX_IN_MEMORY_SESSIONS = 10
 MAX_SESSION_FILES = 200
 
@@ -67,6 +70,9 @@ def create_session() -> str:
         "messages": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
         "tools_used": set(),
+        # Step 30b — rolling summary state.
+        "summary": "",
+        "summary_covers_up_to": 0,
     }
     return session_id
 
@@ -114,6 +120,84 @@ def get_messages(session_id: str) -> list[dict]:
     if not session:
         return []
     return list(session["messages"])
+
+
+def get_messages_for_api(session_id: str) -> list[dict]:
+    """Return messages stripped to ``{role, content}`` only.
+
+    Step 30d: stored messages include UI metadata (timestamp, model,
+    provider) which the LLM neither needs nor expects. OpenAI strict
+    mode rejects unknown keys; LiteLLM warns; Anthropic silently
+    accepts. Always wasted input tokens. Use this when building the
+    payload for an LLM call.
+    """
+    session = _sessions.get(session_id)
+    if not session:
+        return []
+    return [
+        {"role": m["role"], "content": m["content"]}
+        for m in session["messages"]
+        if isinstance(m, dict) and "role" in m and "content" in m
+    ]
+
+
+# ── Step 30b — rolling-summary window helpers ────────────────────────────────
+
+
+def get_recent_window(session_id: str, window: int) -> list[dict]:
+    """Return the last ``window`` messages stripped to ``{role, content}``.
+
+    Step 30b: this is what the chat router sends to the LLM. Everything
+    older lives in the rolling summary (see ``get_summary``).
+    """
+    msgs = get_messages_for_api(session_id)
+    if window <= 0 or len(msgs) <= window:
+        return msgs
+    return msgs[-window:]
+
+
+def get_summary(session_id: str) -> str:
+    """Return the current rolling-summary text for the session."""
+    session = _sessions.get(session_id)
+    if not session:
+        return ""
+    return session.get("summary", "") or ""
+
+
+def pending_summary_batch(session_id: str, window: int, batch: int) -> list[dict]:
+    """Return the next batch of messages that should be folded into the summary.
+
+    Returns ``[]`` when the message count still fits inside the recent
+    window (no fold needed yet).
+    """
+    session = _sessions.get(session_id)
+    if not session:
+        return []
+    msgs = session["messages"]
+    covered = int(session.get("summary_covers_up_to", 0) or 0)
+    total = len(msgs)
+    # The "live" region we keep verbatim is the last ``window`` messages.
+    # Everything before ``total - window`` belongs in the summary. We fold
+    # in batches so the summariser stays cheap per turn.
+    summarisable_end = max(0, total - window)
+    if covered >= summarisable_end:
+        return []
+    end = min(summarisable_end, covered + batch)
+    out = []
+    for m in msgs[covered:end]:
+        if not isinstance(m, dict):
+            continue
+        out.append({"role": m.get("role", "user"), "content": m.get("content", "")})
+    return out
+
+
+def apply_summary_update(session_id: str, new_summary: str, advanced_by: int) -> None:
+    """Persist the updated summary + bump the covered cursor."""
+    session = _sessions.get(session_id)
+    if not session:
+        return
+    session["summary"] = new_summary or ""
+    session["summary_covers_up_to"] = int(session.get("summary_covers_up_to", 0) or 0) + max(0, advanced_by)
 
 
 def delete_session(session_id: str) -> None:
@@ -170,6 +254,9 @@ def save_session(session_id: str, workspace_path: Optional[Path] = None) -> None
         "messages": messages,
         "tools_used": sorted(session.get("tools_used", set())),
         "notes_accessed": sorted(session.get("notes_accessed", set())),
+        # Step 30b — persist rolling summary so it survives reload.
+        "summary": session.get("summary", ""),
+        "summary_covers_up_to": session.get("summary_covers_up_to", 0),
     }
 
     filepath = sessions_dir / f"{session_id}.json"
@@ -252,6 +339,9 @@ def resume_session(session_id: str, workspace_path: Optional[Path] = None) -> st
         "created_at": data.get("created_at", datetime.now(timezone.utc).isoformat()),
         "tools_used": set(data.get("tools_used", [])),
         "notes_accessed": set(data.get("notes_accessed", [])),
+        # Step 30b — restore rolling summary if present (backward compatible).
+        "summary": data.get("summary", ""),
+        "summary_covers_up_to": data.get("summary_covers_up_to", 0),
     }
     return session_id
 
