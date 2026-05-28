@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.16.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.15.1...backend-v0.16.0) (2026-05-28)
+
+
+### ✨ Features
+
+* step-29 unified knowledge + specialist note ownership UI ([9f0d640](https://github.com/Szesnasty/Jarvis/commit/9f0d640f5939c0da97b6d186d0f4c49d87dc38c8))
+
+
+### 🐛 Bug Fixes
+
+* **security:** address CodeQL alerts + npm audit vulnerabilities ([86e48a3](https://github.com/Szesnasty/Jarvis/commit/86e48a3507c0570f9365ed82a4f24d850150497d))
+* **security:** use explicit regex allowlist for CodeQL + regen lockfile ([746441b](https://github.com/Szesnasty/Jarvis/commit/746441bc593e88657a7173569689e49728ba10f6))
+
 ## [0.15.1](https://github.com/Szesnasty/Jarvis/compare/backend-v0.15.0...backend-v0.15.1) (2026-04-27)
 
 
