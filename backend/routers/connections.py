@@ -650,6 +650,7 @@ async def connection_coverage() -> dict:
     from utils.markdown import parse_frontmatter
     from services.memory_service import _db_path
     from services.ingest_jobs import snapshot as jobs_snapshot
+    from services.dismissed_suggestions import list_dismissed_for
 
     ws = _workspace()
     db_p = _db_path(ws)
@@ -703,15 +704,33 @@ async def connection_coverage() -> dict:
                 else:
                     notes_unprocessed += 1
 
+            # Only count suggestions that ``promote-bulk`` would actually
+            # promote — i.e. exclude pairs the user already dismissed and
+            # pairs already present in ``related``. Otherwise stale
+            # strong-confidence entries keep the BulkPromoteBanner alive
+            # forever, even though "Link all" has nothing left to do.
+            related_set = {r for r in (fm.get("related") or []) if isinstance(r, str)}
+            dismissed_set: set[str] | None = None
             for s in suggestions:
-                if isinstance(s, dict):
-                    try:
-                        c = float(s.get("confidence") or 0)
-                    except (TypeError, ValueError):
-                        c = 0.0
-                    if c >= STRONG_THRESHOLD:
-                        pending_strong_suggestions += 1
-                        pending_strong_notes.add(note_path)
+                if not isinstance(s, dict):
+                    continue
+                try:
+                    c = float(s.get("confidence") or 0)
+                except (TypeError, ValueError):
+                    c = 0.0
+                if c < STRONG_THRESHOLD:
+                    continue
+                target = s.get("path")
+                if not isinstance(target, str) or not target:
+                    continue
+                if target in related_set:
+                    continue
+                if dismissed_set is None:
+                    dismissed_set = list_dismissed_for(db_p, note_path)
+                if target in dismissed_set:
+                    continue
+                pending_strong_suggestions += 1
+                pending_strong_notes.add(note_path)
 
             parent = fm.get("parent")
             if parent and not is_jira:

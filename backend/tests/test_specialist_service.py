@@ -140,16 +140,16 @@ def test_deactivate_returns_to_base(ws):
 
 
 def test_scoped_search(ws):
-    """filter_tools + source scoping tested via _scope_results in context_builder."""
-    from services.context_builder import _scope_results
+    """Step 29 — visibility filter respects ``scope.folders``."""
+    from services.context_builder import _visible_to_specialists
 
+    spec = {"id": "health", "scope": {"folders": ["memory/knowledge/health/", "memory/daily/"]}}
     results = [
-        {"path": "knowledge/health/symptoms.md"},
-        {"path": "daily/2026-01-01.md"},
-        {"path": "projects/jarvis.md"},
+        {"path": "knowledge/health/symptoms.md", "_frontmatter": {}},
+        {"path": "daily/2026-01-01.md", "_frontmatter": {}},
+        {"path": "projects/jarvis.md", "_frontmatter": {}},
     ]
-    sources = ["memory/knowledge/health/", "memory/daily/"]
-    scoped = _scope_results(results, sources)
+    scoped = [r for r in results if _visible_to_specialists(r, [spec])]
     assert len(scoped) == 2
     paths = [r["path"] for r in scoped]
     assert "knowledge/health/symptoms.md" in paths
@@ -157,14 +157,14 @@ def test_scoped_search(ws):
 
 
 def test_scoped_search_no_leakage(ws):
-    from services.context_builder import _scope_results
+    from services.context_builder import _visible_to_specialists
 
+    spec = {"id": "health", "scope": {"folders": ["memory/knowledge/health/"]}}
     results = [
-        {"path": "projects/secret.md"},
-        {"path": "inbox/random.md"},
+        {"path": "projects/secret.md", "_frontmatter": {}},
+        {"path": "inbox/random.md", "_frontmatter": {}},
     ]
-    sources = ["memory/knowledge/health/"]
-    scoped = _scope_results(results, sources)
+    scoped = [r for r in results if _visible_to_specialists(r, [spec])]
     assert len(scoped) == 0
 
 

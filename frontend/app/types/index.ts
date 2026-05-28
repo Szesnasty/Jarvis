@@ -32,6 +32,12 @@ export interface NoteMetadata {
   document_type?: string | null
   parent?: string | null
   section_index?: number | null
+  // Step 29 — ownership metadata. `specialists` is the list of specialist
+  // ids that own this note (empty == shared with everyone). `visibility`
+  // is "shared" (default) or "private" (only visible to listed
+  // specialists).
+  specialists?: string[]
+  visibility?: 'shared' | 'private'
 }
 
 // Step 28b — Memory sidebar tree node. Documents collapse into one

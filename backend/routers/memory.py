@@ -11,6 +11,7 @@ from models.schemas import (
     NoteAppendRequest,
     NoteDetailResponse,
     NoteMetadataResponse,
+    NoteOwnershipRequest,
     ReindexResponse,
     UrlIngestRequest,
 )
@@ -23,6 +24,7 @@ from services.memory_service import (
     get_note,
     list_notes,
     reindex_all,
+    update_note_ownership,
 )
 
 router = APIRouter(prefix="/api/memory", tags=["memory"])
@@ -52,6 +54,28 @@ async def create_note_endpoint(note_path: str, body: NoteContentRequest):
         return await create_note(note_path, body.content)
     except NoteExistsError:
         raise HTTPException(status_code=409, detail="Note already exists")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# Step 29 — must be declared BEFORE the generic PATCH below, otherwise
+# `{note_path:path}` would greedily swallow `/ownership` as part of the path.
+@router.patch(
+    "/notes/{note_path:path}/ownership",
+    response_model=NoteMetadataResponse,
+)
+async def update_ownership_endpoint(note_path: str, body: NoteOwnershipRequest):
+    """Set the ``specialists`` and/or ``visibility`` frontmatter fields on
+    a note. Passing ``[]`` to ``specialists`` clears ownership.
+    """
+    try:
+        return await update_note_ownership(
+            note_path,
+            specialists=body.specialists,
+            visibility=body.visibility,
+        )
+    except NoteNotFoundError:
+        raise HTTPException(status_code=404, detail="Note not found")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

@@ -1,6 +1,6 @@
 <template>
   <div class="know-panel">
-    <!-- Header bar -->
+    <!-- Header bar with tab switcher -->
     <div class="know-panel__header">
       <div class="know-panel__header-label">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -10,106 +10,179 @@
         <span>Knowledge Base</span>
         <span class="know-panel__count">{{ files.length }}</span>
       </div>
-    </div>
-
-    <!-- Drop zone -->
-    <div
-      class="know-panel__dropzone"
-      :class="{
-        'know-panel__dropzone--dragover': isDragOver,
-        'know-panel__dropzone--uploading': uploading,
-      }"
-      @dragover.prevent="isDragOver = true"
-      @dragleave.prevent="isDragOver = false"
-      @drop.prevent="handleDrop"
-    >
-      <div v-if="uploading" class="know-panel__upload-progress">
-        <div class="know-panel__spinner" />
-        <span>Processing...</span>
-      </div>
-      <div v-else class="know-panel__drop-content">
-        <div class="know-panel__drop-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-        </div>
-        <span class="know-panel__drop-text">Drop files here</span>
-        <button class="know-panel__browse-btn" @click="triggerFileInput">or browse</button>
-        <input
-          ref="fileInputRef"
-          type="file"
-          accept=".md,.txt,.pdf,.csv,.xml,.json"
-          multiple
-          class="know-panel__file-input"
-          @change="handleFileSelect"
-        />
-      </div>
-    </div>
-
-    <!-- URL ingest bar -->
-    <div class="know-panel__url-bar">
-      <svg class="know-panel__url-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-      </svg>
-      <input
-        v-model="urlInput"
-        class="know-panel__url-input"
-        placeholder="Paste URL to ingest..."
-        @keydown.enter="handleUrlIngest"
-      />
-      <button
-        class="know-panel__url-go"
-        :disabled="!urlInput.trim() || urlIngesting"
-        @click="handleUrlIngest"
-      >
-        <span v-if="urlIngesting" class="know-panel__spinner know-panel__spinner--small" />
-        <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="5" y1="12" x2="19" y2="12"/>
-          <polyline points="12 5 19 12 12 19"/>
-        </svg>
-      </button>
-    </div>
-
-    <!-- File list -->
-    <div v-if="isLoading" class="know-panel__loading">
-      <div class="know-panel__spinner" />
-      <span>Loading files...</span>
-    </div>
-
-    <TransitionGroup v-else-if="files.length" name="file-list" tag="div" class="know-panel__files">
-      <div
-        v-for="file in files"
-        :key="file.filename"
-        class="know-panel__file"
-      >
-        <div class="know-panel__file-icon">
-          {{ fileIcon(file.filename) }}
-        </div>
-        <div class="know-panel__file-info">
-          <span class="know-panel__file-title">{{ file.title || file.filename }}</span>
-          <span class="know-panel__file-meta">{{ formatSize(file.size) }}</span>
-        </div>
+      <div class="know-panel__tabs">
         <button
-          class="know-panel__file-delete"
-          title="Remove file"
-          @click="handleDeleteFile(file.filename)"
+          class="know-panel__tab"
+          :class="{ 'is-active': activeTab === 'upload' }"
+          @click="activeTab = 'upload'"
+        >Upload</button>
+        <button
+          class="know-panel__tab"
+          :class="{ 'is-active': activeTab === 'assign' }"
+          @click="switchToAssign"
+        >Assign from memory</button>
+      </div>
+    </div>
+
+    <!-- ── UPLOAD TAB ── -->
+    <template v-if="activeTab === 'upload'">
+      <!-- Drop zone -->
+      <div
+        class="know-panel__dropzone"
+        :class="{
+          'know-panel__dropzone--dragover': isDragOver,
+          'know-panel__dropzone--uploading': uploading,
+        }"
+        @dragover.prevent="isDragOver = true"
+        @dragleave.prevent="isDragOver = false"
+        @drop.prevent="handleDrop"
+      >
+        <div v-if="uploading" class="know-panel__upload-progress">
+          <div class="know-panel__spinner" />
+          <span>Processing...</span>
+        </div>
+        <div v-else class="know-panel__drop-content">
+          <div class="know-panel__drop-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <span class="know-panel__drop-text">Drop files here</span>
+          <button class="know-panel__browse-btn" @click="triggerFileInput">or browse</button>
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept=".md,.txt,.pdf,.csv,.xml,.json"
+            multiple
+            class="know-panel__file-input"
+            @change="handleFileSelect"
+          />
+        </div>
+      </div>
+
+      <!-- URL ingest bar -->
+      <div class="know-panel__url-bar">
+        <svg class="know-panel__url-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+        <input
+          v-model="urlInput"
+          class="know-panel__url-input"
+          placeholder="Paste URL to ingest..."
+          @keydown.enter="handleUrlIngest"
+        />
+        <button
+          class="know-panel__url-go"
+          :disabled="!urlInput.trim() || urlIngesting"
+          @click="handleUrlIngest"
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
+          <span v-if="urlIngesting" class="know-panel__spinner know-panel__spinner--small" />
+          <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="12 5 19 12 12 19"/>
           </svg>
         </button>
       </div>
-    </TransitionGroup>
 
-    <div v-else-if="!isLoading" class="know-panel__empty">
-      No files yet — drop files or paste a URL above
-    </div>
+      <!-- File list -->
+      <div v-if="isLoading" class="know-panel__loading">
+        <div class="know-panel__spinner" />
+        <span>Loading files...</span>
+      </div>
 
-    <!-- Error display -->
+      <TransitionGroup v-else-if="files.length" name="file-list" tag="div" class="know-panel__files">
+        <div
+          v-for="file in files"
+          :key="file.filename"
+          class="know-panel__file"
+        >
+          <div class="know-panel__file-icon">
+            {{ fileIcon(file.filename) }}
+          </div>
+          <div class="know-panel__file-info">
+            <span class="know-panel__file-title">{{ file.title || file.filename }}</span>
+            <span class="know-panel__file-meta">{{ formatSize(file.size) }}</span>
+          </div>
+          <button
+            class="know-panel__file-delete"
+            title="Remove file"
+            @click="handleDeleteFile(file.filename)"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </TransitionGroup>
+
+      <div v-else-if="!isLoading" class="know-panel__empty">
+        No files yet — drop files or paste a URL above
+      </div>
+    </template>
+
+    <!-- ── ASSIGN TAB ── -->
+    <template v-else>
+      <div class="know-panel__assign">
+        <div class="know-panel__assign-search-wrap">
+          <svg class="know-panel__assign-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            v-model="assignSearch"
+            class="know-panel__assign-search"
+            placeholder="Search by name or folder..."
+            autofocus
+          />
+          <button v-if="assignSearch" class="know-panel__assign-search-clear" @click="assignSearch = ''">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+          <span v-if="!assignLoading" class="know-panel__assign-count">{{ filteredAssignNotes.length }}/{{ assignNotes.length }}</span>
+        </div>
+
+        <div v-if="assignLoading" class="know-panel__loading">
+          <div class="know-panel__spinner" />
+          <span>Loading notes...</span>
+        </div>
+
+        <div v-else-if="!filteredAssignNotes.length" class="know-panel__empty">
+          No notes found
+        </div>
+
+        <div v-else class="know-panel__assign-list">
+          <div
+            v-for="note in filteredAssignNotes"
+            :key="note.path"
+            class="know-panel__assign-note"
+            :class="{ 'is-owned': isOwnedByThis(note) }"
+          >
+            <div class="know-panel__assign-note-info">
+              <span class="know-panel__assign-note-title">{{ note.title }}</span>
+              <span class="know-panel__assign-note-folder">{{ note.folder }}</span>
+            </div>
+            <button
+              v-if="!isOwnedByThis(note)"
+              class="know-panel__assign-btn is-add"
+              :disabled="assignSaving === note.path"
+              @click="assignNote(note)"
+            >+ Assign</button>
+            <button
+              v-else
+              class="know-panel__assign-btn is-remove"
+              :disabled="assignSaving === note.path"
+              @click="unassignNote(note)"
+            >✓ Assigned ×</button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Error display (shared) -->
     <Transition name="fade">
       <div v-if="errorMsg" class="know-panel__error" @click="errorMsg = ''">
         {{ errorMsg }}
@@ -120,24 +193,104 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import type { SpecialistFileInfo } from '~/types'
+import type { SpecialistFileInfo, NoteMetadata } from '~/types'
 import { useSpecialists } from '~/composables/useSpecialists'
+import { useApi } from '~/composables/useApi'
 
 const props = defineProps<{
   specialistId: string
 }>()
 
 const { files: allFiles, filesLoading, uploadFile, ingestUrl, removeFile } = useSpecialists()
+const { fetchNotes, updateNoteOwnership } = useApi()
 
 const files = computed<SpecialistFileInfo[]>(() => allFiles.value[props.specialistId] || [])
 const isLoading = computed(() => filesLoading.value[props.specialistId] || false)
 
+// ── tab state ──
+const activeTab = ref<'upload' | 'assign'>('upload')
+
+// ── upload tab state ──
 const isDragOver = ref(false)
 const uploading = ref(false)
 const urlInput = ref('')
 const urlIngesting = ref(false)
 const errorMsg = ref('')
 const fileInputRef = ref<HTMLInputElement | null>(null)
+
+// ── assign tab state ──
+const assignNotes = ref<NoteMetadata[]>([])
+const assignLoading = ref(false)
+const assignSearch = ref('')
+const assignSaving = ref<string | null>(null)
+
+async function switchToAssign() {
+  activeTab.value = 'assign'
+  if (assignNotes.value.length) return
+  assignLoading.value = true
+  try {
+    assignNotes.value = await fetchNotes()
+  } catch {
+    errorMsg.value = 'Failed to load notes'
+  } finally {
+    assignLoading.value = false
+  }
+}
+
+const filteredAssignNotes = computed(() => {
+  const q = assignSearch.value.trim().toLowerCase()
+  const filtered = assignNotes.value.filter((n) =>
+    !q ||
+    n.title.toLowerCase().includes(q) ||
+    n.folder.toLowerCase().includes(q) ||
+    n.path.toLowerCase().includes(q)
+  )
+  // owned by this specialist first, then alphabetical by title
+  return [...filtered].sort((a, b) => {
+    const aOwned = isOwnedByThis(a) ? 0 : 1
+    const bOwned = isOwnedByThis(b) ? 0 : 1
+    if (aOwned !== bOwned) return aOwned - bOwned
+    return a.title.localeCompare(b.title)
+  })
+})
+
+function isOwnedByThis(note: NoteMetadata): boolean {
+  return (note.specialists ?? []).includes(props.specialistId)
+}
+
+async function assignNote(note: NoteMetadata) {
+  assignSaving.value = note.path
+  try {
+    const current = note.specialists ?? []
+    await updateNoteOwnership(note.path, {
+      specialists: [...new Set([...current, props.specialistId])],
+      visibility: 'private',
+    })
+    note.specialists = [...new Set([...(note.specialists ?? []), props.specialistId])]
+    note.visibility = 'private'
+  } catch (err: unknown) {
+    errorMsg.value = err instanceof Error ? err.message : 'Failed to assign'
+  } finally {
+    assignSaving.value = null
+  }
+}
+
+async function unassignNote(note: NoteMetadata) {
+  assignSaving.value = note.path
+  try {
+    const newOwners = (note.specialists ?? []).filter((id) => id !== props.specialistId)
+    await updateNoteOwnership(note.path, {
+      specialists: newOwners,
+      visibility: newOwners.length ? (note.visibility ?? 'private') : 'shared',
+    })
+    note.specialists = newOwners
+    note.visibility = newOwners.length ? (note.visibility ?? 'private') : 'shared'
+  } catch (err: unknown) {
+    errorMsg.value = err instanceof Error ? err.message : 'Failed to unassign'
+  } finally {
+    assignSaving.value = null
+  }
+}
 
 const ALLOWED_EXTS = new Set(['md', 'txt', 'pdf', 'csv', 'xml', 'json'])
 const MAX_FILE_BYTES = 500 * 1024 * 1024 // 500 MB (supports large Jira CSV/XML exports)
@@ -257,8 +410,8 @@ function formatSize(bytes: number): string {
 /* --- Header --- */
 .know-panel__header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .know-panel__header-label {
@@ -270,6 +423,165 @@ function formatSize(bytes: number): string {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-secondary);
+}
+
+/* tab switcher */
+.know-panel__tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.know-panel__tab {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+.know-panel__tab:hover { color: var(--text-secondary); }
+.know-panel__tab.is-active {
+  color: var(--neon-cyan);
+  border-bottom-color: var(--neon-cyan);
+}
+
+/* assign tab */
+.know-panel__assign {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.know-panel__assign-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.know-panel__assign-search-icon {
+  position: absolute;
+  left: 0.5rem;
+  color: var(--text-muted);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.know-panel__assign-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.35rem 3.5rem 0.35rem 1.85rem;
+  font-size: 0.82rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  outline: none;
+}
+.know-panel__assign-search:focus { border-color: var(--neon-cyan); }
+
+.know-panel__assign-search-clear {
+  position: absolute;
+  right: 2.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-raised);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+.know-panel__assign-search-clear:hover { color: var(--text-primary); }
+
+.know-panel__assign-count {
+  position: absolute;
+  right: 0.5rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.know-panel__assign-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.know-panel__assign-note {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  background: var(--bg-surface);
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+.know-panel__assign-note:hover { border-color: var(--border-default); }
+.know-panel__assign-note.is-owned {
+  border-color: var(--neon-cyan-30, rgba(0,255,255,0.3));
+  background: var(--neon-cyan-08);
+}
+
+.know-panel__assign-note-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.know-panel__assign-note-title {
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.know-panel__assign-note-folder {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.know-panel__assign-btn {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.know-panel__assign-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.know-panel__assign-btn.is-add {
+  background: transparent;
+  border: 1px dashed var(--border-default);
+  color: var(--text-muted);
+}
+.know-panel__assign-btn.is-add:hover:not(:disabled) {
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+}
+.know-panel__assign-btn.is-remove {
+  background: var(--neon-cyan-08);
+  border: 1px solid var(--neon-cyan);
+  color: var(--neon-cyan);
+}
+.know-panel__assign-btn.is-remove:hover:not(:disabled) {
+  background: var(--neon-pink-08, rgba(255,64,128,0.1));
+  border-color: var(--neon-pink, #ff4080);
+  color: var(--neon-pink, #ff4080);
 }
 
 .know-panel__count {
