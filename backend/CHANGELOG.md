@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.16.0...backend-v0.17.0) (2026-05-28)
+
+
+### ✨ Features
+
+* **chat:** Step 30 — long-conversation memory & language stability ([#51](https://github.com/Szesnasty/Jarvis/issues/51)) ([f3a51c5](https://github.com/Szesnasty/Jarvis/commit/f3a51c56e4f3ca942056d7b433969b3dc5442161))
+
 ## [0.16.0](https://github.com/Szesnasty/Jarvis/compare/backend-v0.15.1...backend-v0.16.0) (2026-05-28)
 
 
