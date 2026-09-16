@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.19.1](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.19.0...frontend-v0.19.1) (2026-09-16)
+
+
+### 🐛 Bug Fixes
+
+* **deps:** bump nuxt to 4.5.2 and dompurify to 3.4.15 to clear npm audit ([#53](https://github.com/Szesnasty/Jarvis/issues/53)) ([f93f036](https://github.com/Szesnasty/Jarvis/commit/f93f036badfe3aefc26564d9e355fd42b1539ee0))
+
 ## [0.19.0](https://github.com/Szesnasty/Jarvis/compare/frontend-v0.18.0...frontend-v0.19.0) (2026-05-28)
 
 
